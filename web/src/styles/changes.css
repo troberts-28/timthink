@@ -1,0 +1,215 @@
+::highlight(tt-diff-insert) {
+  background-color: var(--diff-insert);
+}
+
+.highlight-fallback-tt-diff-insert {
+  background: var(--diff-insert);
+}
+
+.diff-bar {
+  position: absolute;
+  width: 3px;
+  border-radius: 999px;
+  animation: fade-in 150ms ease-out;
+}
+
+.diff-bar-changed {
+  background: var(--accent);
+}
+
+.diff-bar-added {
+  background: var(--diff-bar-added);
+}
+
+.diff-deletion {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--bad);
+  pointer-events: auto;
+}
+
+.diff-deletion::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bad);
+}
+
+.diff-deletion-hit {
+  position: absolute;
+  inset: -4px -6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+}
+
+.diff-deletion-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: -10px;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 360px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.diff-deletion:hover .diff-deletion-tip,
+.diff-deletion:focus-within .diff-deletion-tip {
+  display: flex;
+  animation: pop-in 120ms ease-out;
+}
+
+.diff-deletion-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bad-ink);
+}
+
+.diff-deletion-tip del {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--diff-delete);
+  text-decoration-color: var(--bad);
+}
+
+.plan-body .diff-ghost {
+  position: relative;
+  margin: 0 0 18px;
+  border-radius: 10px;
+  background: var(--diff-delete);
+  user-select: none;
+  animation: fade-in 150ms ease-out;
+}
+
+.plan-body .diff-ghost::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--bad);
+}
+
+.diff-ghost-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.plan-body .diff-ghost-body {
+  margin: 0;
+  padding: 2px 12px 10px 34px;
+  max-height: 320px;
+  overflow: auto;
+  background: transparent;
+  font-family: var(--font-mono-stack);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-64);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--bad) 60%, transparent);
+}
+
+.rawdiff {
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  font-family: var(--font-mono-stack);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.rawdiff-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.rawdiff-sign {
+  color: var(--ink-32);
+  text-align: center;
+  user-select: none;
+}
+
+.rawdiff-text {
+  padding-right: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rawdiff-removed {
+  background: color-mix(in srgb, var(--diff-delete) 70%, transparent);
+}
+
+.rawdiff-removed .rawdiff-sign {
+  color: var(--bad-ink);
+}
+
+.rawdiff-added {
+  background: color-mix(in srgb, var(--diff-insert) 70%, transparent);
+}
+
+.rawdiff-added .rawdiff-sign {
+  color: var(--ok-ink);
+}
+
+.rawdiff-word {
+  border-radius: 2px;
+  color: inherit;
+}
+
+.rawdiff-word-removed {
+  background: color-mix(in srgb, var(--bad) 26%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: var(--bad-ink);
+}
+
+.rawdiff-word-added {
+  background: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.rawdiff-skip {
+  padding: 3px 12px 3px 28px;
+  border-block: 1px solid var(--line-soft);
+  background: var(--bg-sunken);
+  font-family: var(--font-body-stack);
+  font-size: 12px;
+  color: var(--ink-32);
+}
+
+.rawdiff-skip:first-child {
+  border-top: 0;
+}

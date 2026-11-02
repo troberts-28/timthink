@@ -1,0 +1,8 @@
+packages:
+  - server
+  - web
+  - cli
+onlyBuiltDependencies:
+  - esbuild
+  - "@biomejs/biome"
+  - "@tailwindcss/oxide"

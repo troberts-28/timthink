@@ -1,0 +1,95 @@
+#!/bin/sh
+# Runs node without needing it on PATH: launchd agents and Claude Code hooks get a minimal PATH,
+# and nvm only sets PATH in interactive shells. Sourcing nvm.sh is avoided because it costs ~200ms.
+
+is_node() {
+  [ -n "$1" ] && [ -f "$1" ] && [ -x "$1" ]
+}
+
+version_number() {
+  rest=${1#v}
+  major=${rest%%.*}
+  rest=${rest#"$major"}
+  rest=${rest#.}
+  minor=${rest%%.*}
+  rest=${rest#"$minor"}
+  rest=${rest#.}
+  patch=${rest%%[!0-9]*}
+  case "$major$minor$patch" in
+    '' | *[!0-9]*) number=0 ;;
+    *) number=$((major * 1000000 + minor * 1000 + patch)) ;;
+  esac
+}
+
+highest_installed() {
+  best=''
+  best_number=-1
+  for candidate in "$@"; do
+    is_node "$candidate/bin/node" || continue
+    version_number "${candidate##*/}"
+    if [ "$number" -gt "$best_number" ]; then
+      best=$candidate
+      best_number=$number
+    fi
+  done
+  [ -n "$best" ] && echo "$best/bin/node"
+}
+
+nvm_alias_target() {
+  alias_name=$1
+  hops=0
+  while [ -f "$nvm_dir/alias/$alias_name" ] && [ "$hops" -lt 5 ]; do
+    IFS= read -r alias_name <"$nvm_dir/alias/$alias_name" || [ -n "$alias_name" ] || return 1
+    hops=$((hops + 1))
+  done
+  echo "$alias_name"
+}
+
+nvm_default_node() {
+  nvm_dir=${NVM_DIR:-$HOME/.nvm}
+  versions=$nvm_dir/versions/node
+  [ -d "$versions" ] || return 1
+  target=$(nvm_alias_target default)
+  prefix=${target#v}
+  case "$prefix" in
+    [0-9]*)
+      case "$prefix" in *[!0-9.]*) prefix='' ;; esac
+      ;;
+    *) prefix='' ;;
+  esac
+  if [ -n "$prefix" ]; then
+    highest_installed "$versions/v$prefix" "$versions/v$prefix".* && return 0
+  fi
+  highest_installed "$versions"/v*
+}
+
+recorded_node() {
+  if [ -n "${TIMTHINK_CONFIG:-}" ]; then
+    record=${TIMTHINK_CONFIG%/*}/node-path
+  else
+    record=$HOME/.config/timthink/node-path
+  fi
+  [ -f "$record" ] || return 1
+  IFS= read -r recorded <"$record" || [ -n "$recorded" ]
+  is_node "$recorded" && echo "$recorded"
+}
+
+resolve_node() {
+  if is_node "${TIMTHINK_NODE:-}"; then
+    echo "$TIMTHINK_NODE"
+    return 0
+  fi
+  recorded_node && return 0
+  on_path=$(command -v node 2>/dev/null) && is_node "$on_path" && echo "$on_path" && return 0
+  nvm_default_node && return 0
+  for fallback in /opt/homebrew/bin/node /usr/local/bin/node; do
+    is_node "$fallback" && echo "$fallback" && return 0
+  done
+  return 1
+}
+
+if node=$(resolve_node); then
+  exec "$node" "$@"
+fi
+echo "timthink: could not find node. Set TIMTHINK_NODE to its path, or install Node 22+ (nvm, Homebrew or nodejs.org)." >&2
+exit 127
