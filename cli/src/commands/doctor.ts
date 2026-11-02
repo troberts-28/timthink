@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import { access, lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { BIND_HOST, type TimthinkConfig } from "@timthink/server";
 import { SettingsParseError, timthinkHookState } from "./claudeHooks.js";
@@ -128,6 +129,15 @@ const PORT_DETAIL: Record<PortStatus, string> = {
   free: "not responding",
 };
 
+const MAC_PROTECTED_FOLDERS = ["Documents", "Desktop", "Downloads"];
+
+function isMacProtectedFolder(folder: string): boolean {
+  return MAC_PROTECTED_FOLDERS.some((name) => {
+    const relative = path.relative(path.join(homedir(), name), folder);
+    return !relative.startsWith("..") && !path.isAbsolute(relative);
+  });
+}
+
 async function serverCheck(config: TimthinkConfig, paths: InstallPaths, deps: DoctorDeps): Promise<DoctorCheck> {
   const plist = plistPath(paths);
   const [plistExists, loaded, port] = await Promise.all([
@@ -142,6 +152,13 @@ async function serverCheck(config: TimthinkConfig, paths: InstallPaths, deps: Do
   if (port === "timthink" && loaded) return pass("server", detail);
   if (port === "occupied") return fail("server", detail, `free port ${config.port} or set "port" in the config`);
   if (!plistExists || !loaded) return fail("server", detail, INSTALL_HINT);
+  if (isMacProtectedFolder(config.docsRoot)) {
+    return fail(
+      "server",
+      detail,
+      `macOS may be waiting for permission to read ${config.docsRoot}: allow "node" in System Settings → Privacy & Security → Files & Folders, then check ${path.join(paths.logsDir, "err.log")}`,
+    );
+  }
   return fail("server", detail, `check ${path.join(paths.logsDir, "err.log")}`);
 }
 

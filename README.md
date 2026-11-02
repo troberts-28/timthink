@@ -44,6 +44,8 @@ timthink doctor
 
 launchd agents and Claude Code hooks don't see the PATH your shell sets up (nvm, for example), so everything runs node through `bin/timthink-node`. It tries `$TIMTHINK_NODE`, the recorded node path, `node` on PATH, your nvm default alias, then Homebrew. Hook commands end in `|| true`, so a missing node or a moved checkout never breaks Claude Code.
 
+If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS asks once whether `node` may read it, because the server runs from launchd rather than your terminal. Until you click Allow (or enable it in System Settings → Privacy & Security → Files & Folders), the server waits silently. The permission belongs to the node binary, so a node upgrade can ask again.
+
 `timthink doctor` checks each component and prints a fix for anything missing. `timthink uninstall [--apply]` removes everything except your config, logs and review data.
 
 ## Writing plans
