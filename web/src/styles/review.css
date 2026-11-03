@@ -260,11 +260,17 @@
 
 .verdict-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
   color: var(--ink);
+}
+
+.verdict-title svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 .verdict-approve .verdict-title svg {

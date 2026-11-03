@@ -89,7 +89,7 @@ function useEscape(open: boolean, close: () => void): void {
 export function SubmitReviewDialog() {
   const { review, docPath, submitOpen, setSubmitOpen, requestedVerdict, actions } = useRequiredReview();
   const toast = useToast();
-  const [verdict, setVerdict] = useState<Verdict>("comment");
+  const [verdict, setVerdict] = useState<Verdict>("approve");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [chosenTarget, setChosenTarget] = useState<string | null>(null);
@@ -102,10 +102,9 @@ export function SubmitReviewDialog() {
     setChosenTarget(null);
   };
   useEscape(submitOpen, close);
-  const hasDrafts = pendingCounts(review).total > 0;
   useEffect(() => {
-    if (submitOpen) setVerdict(requestedVerdict ?? (hasDrafts ? "comment" : "approve"));
-  }, [submitOpen, hasDrafts, requestedVerdict]);
+    if (submitOpen) setVerdict(requestedVerdict ?? "approve");
+  }, [submitOpen, requestedVerdict]);
   if (!submitOpen) return null;
   const counts = pendingCounts(review);
 
@@ -117,7 +116,7 @@ export function SubmitReviewDialog() {
     const session = sessions.find((candidate) => candidate.id === target) ?? null;
     close();
     setBody("");
-    setVerdict("comment");
+    setVerdict("approve");
     if (result.statusUpdate.status === "failed") {
       toast(`Review submitted, but the status wasn't changed: ${result.statusUpdate.message}`, "bad");
     }
