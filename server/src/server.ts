@@ -5,6 +5,7 @@ import { ArchiveService } from "./archive/archiveService.js";
 import { ArchiveStore, repoForArchiveFile } from "./archive/archiveStore.js";
 import { CodeService } from "./code/codeService.js";
 import { createZedOpener, type OpenInEditor } from "./code/editor.js";
+import { WorktreeIndex } from "./code/worktrees.js";
 import { prLinkHostFor, type TimthinkConfig } from "./config.js";
 import { DocsStore } from "./docs/store.js";
 import type { DocsIndex, GithubRepo } from "./docs/types.js";
@@ -327,6 +328,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     prs,
+    worktrees: new WorktreeIndex(config),
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     preferences,
     onPreferencesChange: publishPreferencesChange,
