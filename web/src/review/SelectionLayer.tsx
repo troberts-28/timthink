@@ -163,7 +163,6 @@ export function SelectionLayer({ body, containerRef, ranges, layoutVersion }: Se
           <button type="button" className="toolbar-button" onClick={() => startThread("comment", toolbar)}>
             <MessageSquarePlus className="size-3.5" aria-hidden />
             Comment
-            <kbd className="kbd ml-0.5">C</kbd>
           </button>
           <span className="h-4 w-px bg-line-soft" aria-hidden />
           <button type="button" className="toolbar-button" onClick={() => startThread("suggestion", toolbar)}>

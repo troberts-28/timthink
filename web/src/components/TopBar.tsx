@@ -1,5 +1,5 @@
 import type { DocsIndex } from "@timthink/server";
-import { Inbox, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Inbox, Keyboard, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Fragment } from "react";
 import { Link, NavLink } from "react-router";
 import { useInbox } from "../api/queries";
@@ -54,7 +54,7 @@ function InboxLink() {
 
 function SidebarToggle() {
   const [collapsed, setCollapsed] = useSidebarCollapsed();
-  const label = `${collapsed ? "Show" : "Hide"} sidebar ([)`;
+  const label = `${collapsed ? "Show" : "Hide"} sidebar`;
   return (
     <button
       type="button"
@@ -73,7 +73,7 @@ function SidebarToggle() {
   );
 }
 
-export function TopBar({ index }: { index: DocsIndex | undefined }) {
+export function TopBar({ index, onShowShortcuts }: { index: DocsIndex | undefined; onShowShortcuts: () => void }) {
   const crumbs = useCrumbs(index);
   const [sidebarCollapsed] = useSidebarCollapsed();
   return (
@@ -125,11 +125,17 @@ export function TopBar({ index }: { index: DocsIndex | undefined }) {
             })}
           </ol>
         </nav>
-        <span className="hidden text-meta text-ink-32 2xl:inline">
-          <kbd className="font-sans">j</kbd> / <kbd className="font-sans">k</kbd> to move between plans
-        </span>
         <div id={TOP_BAR_SLOT_ID} className="flex items-center gap-2" />
         <InboxLink />
+        <button
+          type="button"
+          onClick={onShowShortcuts}
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts"
+          className="grid size-8 flex-none place-items-center rounded-button text-ink-64 transition-colors duration-150 hover:bg-surface hover:text-ink"
+        >
+          <Keyboard className="size-4" strokeWidth={1.75} aria-hidden />
+        </button>
         <ThemeToggle />
       </div>
     </header>

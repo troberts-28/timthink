@@ -1,18 +1,30 @@
-import { Check, Copy, FolderOpen } from "lucide-react";
+import { Archive, Check, Copy, FolderOpen, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { revealInFinder } from "../api/client";
 import { useToast } from "../lib/toast";
+import type { PlanArchive } from "./usePlanArchive";
 
 const COPIED_FEEDBACK_MS = 1500;
 
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+function IconButton({
+  label,
+  onClick,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className="grid size-8 place-items-center rounded-button border border-line-soft text-ink-64 transition-colors duration-150 hover:border-line hover:text-ink"
+      className="grid size-8 place-items-center rounded-button border border-line-soft text-ink-64 transition-colors duration-150 hover:border-line hover:text-ink disabled:opacity-50"
     >
       {children}
     </button>
@@ -56,5 +68,18 @@ export function PlanFileActions({ docPath, raw }: { docPath: string; raw: string
         <FolderOpen className="size-4" strokeWidth={1.75} aria-hidden />
       </IconButton>
     </>
+  );
+}
+
+export function ArchiveButton({ plan }: { plan: PlanArchive }) {
+  const label = plan.archived ? "Restore plan" : "Archive plan";
+  return (
+    <IconButton label={label} disabled={plan.pending} onClick={plan.archived ? plan.restorePlan : plan.archivePlan}>
+      {plan.archived ? (
+        <RotateCcw className="size-4" strokeWidth={1.75} aria-hidden />
+      ) : (
+        <Archive className="size-4" strokeWidth={1.75} aria-hidden />
+      )}
+    </IconButton>
   );
 }

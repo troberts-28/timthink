@@ -122,10 +122,6 @@ export function Composer({ request, position }: ComposerProps) {
         />
       )}
       <div className="flex items-center gap-2">
-        <span className="text-meta text-ink-32">
-          <kbd className="kbd">⌘</kbd>
-          <kbd className="kbd">↵</kbd> to add
-        </span>
         <div className="ml-auto flex gap-1.5">
           <Button tone="ghost" onClick={closeComposer}>
             Cancel

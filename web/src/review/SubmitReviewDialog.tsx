@@ -56,7 +56,7 @@ function handOffMessage(outcome: HandOffOutcome): ReactNode {
   if (outcome.kind === "focused") {
     return (
       <>
-        Jumped to the Claude tab. Paste (⌘V) and press Enter to send <CommandCode command={outcome.command} />
+        Jumped to the Claude tab. Paste and press Enter to send <CommandCode command={outcome.command} />
       </>
     );
   }
@@ -102,6 +102,10 @@ export function SubmitReviewDialog() {
     setChosenTarget(null);
   };
   useEscape(submitOpen, close);
+  const hasDrafts = pendingCounts(review).total > 0;
+  useEffect(() => {
+    if (submitOpen) setVerdict(hasDrafts ? "comment" : "approve");
+  }, [submitOpen, hasDrafts]);
   if (!submitOpen) return null;
   const counts = pendingCounts(review);
 
