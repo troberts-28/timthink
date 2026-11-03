@@ -1,11 +1,19 @@
 import { execFile } from "node:child_process";
 import { access, constants } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
 
 export type GraphqlRunner = (query: string) => Promise<unknown>;
 
 export class GhUnavailableError extends Error {}
 
-const GH_CANDIDATES = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"];
+const GH_CANDIDATES = [
+  "/opt/homebrew/bin/gh",
+  "/usr/local/bin/gh",
+  path.join(homedir(), "homebrew", "bin", "gh"),
+  path.join(homedir(), ".local", "bin", "gh"),
+  "/usr/bin/gh",
+];
 const TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 32 * 1024 * 1024;
 

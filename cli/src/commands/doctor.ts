@@ -196,14 +196,16 @@ async function zedCheck(deps: DoctorDeps): Promise<DoctorCheck> {
 
 async function ghCheck(config: TimthinkConfig, deps: DoctorDeps): Promise<DoctorCheck> {
   if (!config.prs.enabled) return pass("gh", "PR status is turned off (prs.enabled)");
-  const gh = await findGh(config.prs.ghPath);
-  const result = await deps
-    .run(gh, ["auth", "status"], { HOME: homedir(), PATH: LAUNCHD_LIKE_PATH })
-    .catch(() => ({ code: 127, stdout: "", stderr: "not found" }));
+  const found = await findGh(config.prs.ghPath);
+  const gh = path.isAbsolute(found) ? found : await findOnPath(found, LAUNCHD_LIKE_PATH);
+  if (!gh) {
+    const detail = "not found where the server looks (Homebrew paths, ~/.local/bin, launchd's PATH)";
+    const fix = `install the GitHub CLI, or set "prs.ghPath" to \`which gh\` in ${config.configPath}`;
+    return { ...fail("gh", `${detail}; PR status is unavailable`, fix), optional: true };
+  }
+  const result = await deps.run(gh, ["auth", "status"], { HOME: homedir(), PATH: LAUNCHD_LIKE_PATH });
   if (result.code === 0) return pass("gh", `${gh} (logged in; PR status and stacks work)`);
-  const reason = result.code === 127 ? "not installed" : "not logged in";
-  const fix = result.code === 127 ? 'install the GitHub CLI, or set "prs.ghPath"' : "run `gh auth login`";
-  return { ...fail("gh", `${gh} ${reason}; PR status is unavailable`, fix), optional: true };
+  return { ...fail("gh", `${gh} isn't logged in; PR status is unavailable`, "run `gh auth login`"), optional: true };
 }
 
 export async function doctorChecks(
