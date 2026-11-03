@@ -1,6 +1,5 @@
 import { X } from "lucide-react";
 import { useEffect, useId } from "react";
-import { isTypingTarget } from "../lib/useKeyboardNav";
 
 interface Shortcut {
   keys: string[];
@@ -16,17 +15,33 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "Getting around",
     shortcuts: [
+      { keys: ["⌘", "K"], action: "Jump to any plan or repo" },
       { keys: ["j"], action: "Next plan" },
       { keys: ["k"], action: "Previous plan" },
+      { keys: ["u"], action: "Up a level" },
+      { keys: ["i"], action: "Go to the inbox" },
       { keys: ["["], action: "Show or hide the sidebar" },
       { keys: ["?"], action: "Show these shortcuts" },
     ],
   },
   {
-    title: "On a plan",
+    title: "Reviewing a plan",
     shortcuts: [
       { keys: ["c"], action: "Comment on the selected text" },
-      { keys: ["e"], action: "Archive or restore the plan" },
+      { keys: ["s"], action: "Suggest an edit to the selected text" },
+      { keys: ["n"], action: "Next open thread" },
+      { keys: ["p"], action: "Previous open thread" },
+      { keys: ["r"], action: "Submit review" },
+      { keys: ["a"], action: "Submit review, with Approve selected" },
+    ],
+  },
+  {
+    title: "On a plan",
+    shortcuts: [
+      { keys: ["w"], action: "Jump to its Claude session in Warp" },
+      { keys: ["d"], action: "Show or hide changes since you last looked" },
+      { keys: ["y"], action: "Copy the markdown" },
+      { keys: ["e"], action: "Archive or restore" },
     ],
   },
   {
@@ -37,18 +52,6 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     ],
   },
 ];
-
-export function useShortcutsKey(onOpen: () => void): void {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "?" || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
-      event.preventDefault();
-      onOpen();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onOpen]);
-}
 
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const titleId = useId();

@@ -1,5 +1,6 @@
 import type { Thread } from "@timthink/server";
 import { type MouseEvent, type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import { useKeyShortcut } from "../lib/shortcuts";
 import { PendingReviewBar } from "./PendingReviewBar";
 import { useRequiredReview } from "./ReviewContext";
 import { highlightSpan } from "./reviewModel";
@@ -26,6 +27,22 @@ function threadAtPoint(ranges: ReadonlyMap<string, Range>, node: Node, offset: n
   return best?.id ?? null;
 }
 
+export function steppedThreadId(
+  threads: readonly Thread[],
+  ranges: ReadonlyMap<string, Range>,
+  activeId: string | null,
+  step: 1 | -1,
+): string | null {
+  const order = threads
+    .filter((thread) => thread.status === "open" && ranges.has(thread.id))
+    .sort((a, b) => a.anchor.start - b.anchor.start)
+    .map((thread) => thread.id);
+  if (order.length === 0) return null;
+  const current = activeId ? order.indexOf(activeId) : -1;
+  if (current === -1) return (step === 1 ? order[0] : order.at(-1)) ?? null;
+  return order[(current + step + order.length) % order.length] ?? null;
+}
+
 function scrollToRange(range: Range | undefined): void {
   const target = range?.startContainer.parentElement;
   target?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -44,7 +61,7 @@ interface ReviewWorkspaceProps {
 }
 
 export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: ReviewWorkspaceProps) {
-  const { review, raw, setActiveThreadId, anchorsCurrent } = useRequiredReview();
+  const { review, raw, activeThreadId, setActiveThreadId, anchorsCurrent, openSubmit } = useRequiredReview();
   useClaudeActivityToasts(review);
   const wide = useMediaQuery(WIDE_LAYOUT_QUERY);
   const [body, setBody] = useState<HTMLDivElement | null>(null);
@@ -79,6 +96,17 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
     },
     [setActiveThreadId, marginVisible, ranges],
   );
+
+  const stepThread = (step: 1 | -1) => {
+    const id = steppedThreadId(review?.threads ?? [], ranges, activeThreadId, step);
+    if (!id) return;
+    setActiveThreadId(id);
+    scrollToRange(ranges.get(id));
+  };
+  useKeyShortcut("n", () => stepThread(1));
+  useKeyShortcut("p", () => stepThread(-1));
+  useKeyShortcut("r", () => openSubmit());
+  useKeyShortcut("a", () => openSubmit("approve"));
 
   const onBodyClick = (event: MouseEvent) => {
     if (!window.getSelection()?.isCollapsed) return;

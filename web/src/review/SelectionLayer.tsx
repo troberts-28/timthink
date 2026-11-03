@@ -122,11 +122,11 @@ export function SelectionLayer({ body, containerRef, ranges, layoutVersion }: Se
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
-      if (event.key === "c") {
+      if (event.key === "c" || event.key === "s") {
         const state = toolbar ?? measure();
         if (state) {
           event.preventDefault();
-          startThread("comment", state);
+          startThread(event.key === "c" ? "comment" : "suggestion", state);
         }
       }
       if (event.key === "Escape") {

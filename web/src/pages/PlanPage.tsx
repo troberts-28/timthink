@@ -22,6 +22,7 @@ import { ArchiveBanner } from "../plan/ArchiveBanner";
 import { ContentsMenu } from "../plan/ContentsMenu";
 import { ArchiveButton, PlanFileActions } from "../plan/PlanFileActions";
 import { PlanMeta } from "../plan/PlanMeta";
+import { PlanShortcuts } from "../plan/PlanShortcuts";
 import { SessionsPanel } from "../plan/SessionsPanel";
 import { useActiveHeading } from "../plan/useActiveHeading";
 import { useArchiveShortcut } from "../plan/useArchiveShortcut";
@@ -153,6 +154,7 @@ function PlanPaper({
     <PlanContext.Provider value={{ repo: doc.summary.repo, docPath: doc.summary.path }}>
       <ReviewProvider docPath={doc.summary.path} raw={doc.raw} docHash={doc.hash}>
         <ChangesProvider doc={doc}>
+          <PlanShortcuts docPath={doc.summary.path} raw={doc.raw} />
           <TopBarSlot>
             <ContentsMenu toc={toc} activeId={activeId} />
           </TopBarSlot>

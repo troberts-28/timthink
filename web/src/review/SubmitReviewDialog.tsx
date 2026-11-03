@@ -87,7 +87,7 @@ function useEscape(open: boolean, close: () => void): void {
 }
 
 export function SubmitReviewDialog() {
-  const { review, docPath, submitOpen, setSubmitOpen, actions } = useRequiredReview();
+  const { review, docPath, submitOpen, setSubmitOpen, requestedVerdict, actions } = useRequiredReview();
   const toast = useToast();
   const [verdict, setVerdict] = useState<Verdict>("comment");
   const [body, setBody] = useState("");
@@ -104,8 +104,8 @@ export function SubmitReviewDialog() {
   useEscape(submitOpen, close);
   const hasDrafts = pendingCounts(review).total > 0;
   useEffect(() => {
-    if (submitOpen) setVerdict(hasDrafts ? "comment" : "approve");
-  }, [submitOpen, hasDrafts]);
+    if (submitOpen) setVerdict(requestedVerdict ?? (hasDrafts ? "comment" : "approve"));
+  }, [submitOpen, hasDrafts, requestedVerdict]);
   if (!submitOpen) return null;
   const counts = pendingCounts(review);
 
