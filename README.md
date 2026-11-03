@@ -103,6 +103,7 @@ Nothing leaves your machine.
 | `port`                   | `7420`                    | Port on `127.0.0.1` (`TIMTHINK_PORT` overrides)                                             |
 | `stateDir`               | `~/.local/state/timthink` | Hook logs and caches (`TIMTHINK_STATE_DIR` overrides)                                       |
 | `claudeProjectsDir`      | `~/.claude/projects`      | Transcripts to backfill sessions from                                                       |
+| `claudeSessionsDir`      | `~/.claude/sessions`      | Claude Code's running-session records, used to find live sessions and their Warp tabs   |
 | `warpTabConfigDir`       | `~/.warp/tab_configs`     | Where **Resume in Warp** writes its tab config                                              |
 | `userName`               | `git config user.name`    | Your name on review comments                                                                |
 | `launchdLabel`           | `dev.timthink.server`     | Label of the launchd agent                                                                  |
