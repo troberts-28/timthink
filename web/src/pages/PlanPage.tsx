@@ -20,6 +20,7 @@ import { MarkdownBody } from "../markdown/Markdown";
 import { PlanContext } from "../markdown/PlanContext";
 import { ArchiveBanner } from "../plan/ArchiveBanner";
 import { ContentsMenu } from "../plan/ContentsMenu";
+import { PlanFileActions } from "../plan/PlanFileActions";
 import { PlanMeta } from "../plan/PlanMeta";
 import { PlanOverflowMenu } from "../plan/PlanOverflowMenu";
 import { SessionsPanel } from "../plan/SessionsPanel";
@@ -161,6 +162,7 @@ function PlanPaper({
               <>
                 <HistoryMenu currentHash={doc.hash} />
                 <ReviewButton />
+                <PlanFileActions docPath={doc.summary.path} raw={doc.raw} />
                 <PlanOverflowMenu plan={archive} />
               </>
             }

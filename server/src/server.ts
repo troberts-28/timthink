@@ -13,6 +13,7 @@ import { EventHub, type HubEvent } from "./events.js";
 import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
+import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
 import { allowedOrigins, createSessionToken } from "./security.js";
@@ -31,6 +32,7 @@ export interface StartOptions {
   extraOrigins?: readonly string[];
   openInEditor?: OpenInEditor;
   openUrl?: OpenUrl;
+  revealInFinder?: RevealInFinder;
   watch?: boolean;
   scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   log?: (message: string) => void;
@@ -275,6 +277,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     archive,
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     openUrl: options.openUrl ?? createMacOpener(),
+    revealInFinder: options.revealInFinder ?? createFinderRevealer(),
     getIndex,
     token,
     origins: allowedOrigins(config.port, options.extraOrigins),

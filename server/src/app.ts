@@ -18,6 +18,7 @@ import type { HistoryService } from "./history/historyService.js";
 import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
 import { mimeTypeFor } from "./mime.js";
+import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
 import { reviewRoutes } from "./reviews/routes.js";
@@ -52,6 +53,7 @@ export interface AppDeps {
   archive: ArchiveService;
   onArchiveChange: (docPath: string) => void;
   openUrl: OpenUrl;
+  revealInFinder: RevealInFinder;
   getIndex: () => DocsIndex;
   token: string;
   origins: ReadonlySet<string>;
@@ -88,6 +90,7 @@ const repoQuery = z.object({ repo: z.string().min(1) });
 
 const sessionParams = z.object({ id: z.string().min(1).max(64) });
 const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional() });
+const revealBody = z.object({ path: z.string().min(1).max(1024) });
 
 const RECENT_SESSIONS_LIMIT = 50;
 
@@ -264,6 +267,18 @@ export function createApp(deps: AppDeps) {
       const { repo, ref, docPath } = c.req.valid("query");
       const resolution = await code.resolve({ repo, ref, ...checkoutContext(repo, docPath) });
       return c.json(toResolveResponse(resolution));
+    })
+    .post("/api/reveal", zValidator("json", revealBody), async (c) => {
+      const { path: docPath } = c.req.valid("json");
+      if (!store.getDoc(docPath)) return c.json({ status: "not-found" as const }, 404);
+      const absolute = await resolveInsideRoot(config.docsRoot, docPath).catch(() => null);
+      if (!absolute) return c.json({ status: "not-found" as const }, 404);
+      try {
+        await deps.revealInFinder(absolute);
+        return c.json({ status: "revealed" as const });
+      } catch (error) {
+        return c.json({ status: "error" as const, message: errorMessage(error, "Couldn't open Finder") });
+      }
     })
     .post("/api/open-code", zValidator("json", openCodeBody), async (c) => {
       const { repo, ref, docPath } = c.req.valid("json");

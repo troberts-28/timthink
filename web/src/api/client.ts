@@ -106,3 +106,11 @@ export async function resumeSession(id: string, reviewDoc?: string): Promise<Ses
   );
   return sessionActionResult(response);
 }
+
+export async function revealInFinder(path: string): Promise<boolean> {
+  const token = await sessionToken();
+  const response = await client.api.reveal.$post({ json: { path } }, { headers: { [TOKEN_HEADER]: token } });
+  if (!response.ok) return false;
+  const result = await response.json();
+  return result.status === "revealed";
+}

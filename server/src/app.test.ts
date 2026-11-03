@@ -180,6 +180,7 @@ describe("sessions API", () => {
   let warpTabConfigDir: string;
   let codeRoot: string;
   const openUrl = vi.fn<OpenUrl>(async () => {});
+  const revealInFinder = vi.fn(async (_absPath: string) => {});
   const events: HubEvent[] = [];
 
   const post = (url: string, body: unknown = {}) =>
@@ -209,6 +210,7 @@ describe("sessions API", () => {
       }),
       webDist: null,
       openUrl,
+      revealInFinder,
     });
     runtime.hub.subscribe((event) => events.push(event));
     await runtime.sessions.runBackfill();
@@ -284,6 +286,14 @@ describe("sessions API", () => {
     const response = await post(`/api/sessions/${SESSION_B}/focus`);
     expect(await json<SessionActionResponse>(response)).toMatchObject({ status: "unavailable" });
     expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("reveals a known plan in Finder and refuses anything else", async () => {
+    const response = await post("/api/reveal", { path: RATE_LIMITER });
+    expect(await response.json()).toEqual({ status: "revealed" });
+    expect(revealInFinder).toHaveBeenCalledWith(path.join(await realpath(runtime.store.docsRoot), RATE_LIMITER));
+    expect((await post("/api/reveal", { path: "../../etc/passwd" })).status).toBe(404);
+    expect(revealInFinder).toHaveBeenCalledTimes(1);
   });
 
   it("resumes a session in a new Warp tab at its directory", async () => {
