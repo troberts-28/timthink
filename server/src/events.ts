@@ -5,7 +5,8 @@ export type HubEvent =
   | { type: "review-changed"; path: string; version: number }
   | { type: "sessions-changed"; sessionIds: string[]; docPaths: string[]; version: number }
   | { type: "history-changed"; path: string; version: number }
-  | { type: "seen-changed"; path: string; version: number };
+  | { type: "seen-changed"; path: string; version: number }
+  | { type: "archive-changed"; paths: string[]; version: number };
 
 type Listener = (event: HubEvent) => void;
 

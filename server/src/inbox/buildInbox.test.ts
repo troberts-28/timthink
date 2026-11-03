@@ -68,6 +68,7 @@ function thread(id: string, reviewId: string, messages: Message[]): Thread {
 function doc(path: string, overrides: Partial<InboxDocInput> = {}): InboxDocInput {
   return {
     summary: summary(path),
+    archived: false,
     hash: "current",
     questions: [],
     review: null,
@@ -178,6 +179,19 @@ describe("buildInbox", () => {
     expect(inbox([doc("acme/a.md", { review: file })], { "acme/a.md#t-1": "2026-11-02T09:31:00.000Z" }).items).toEqual(
       [],
     );
+  });
+
+  it("hides archived docs unless Claude replied or addressed a review", () => {
+    const replied: ReviewFile = {
+      ...emptyReviewFile("acme/a.md"),
+      reviews: [review("r-1", "addressed", "2026-11-01T08:00:00.000Z", "2026-11-01T09:00:00.000Z")],
+      threads: [thread("t-1", "r-1", [message("claude", "2026-11-02T09:30:00.000Z", "Reply", null)])],
+    };
+    const items = inbox([
+      doc("acme/a.md", { review: replied, archived: true, hash: "after" }),
+      doc("acme/b.md", { archived: true, questions: [question], hash: "after" }),
+    ]).items;
+    expect(items.map((item) => [item.reason, item.doc.path])).toEqual([["claude-replied", "acme/a.md"]]);
   });
 
   it("drops answered questions and questions in settled plans", () => {

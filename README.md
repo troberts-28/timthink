@@ -10,6 +10,8 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks, then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
 - **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
+- **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
+- **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
 - **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one.
 
 Inspired by [Plannotator](https://github.com/backnotprop/plannotator) and [Kacper-Lubisz/pages](https://github.com/Kacper-Lubisz/pages).
@@ -67,6 +69,7 @@ Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` an
 | ------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------- |
 | `<docsRoot>/**`                                        | read       | Your plans and attachments                                                                        |
 | `<docsRoot>/<repo>/.timthink/reviews/`, `history/`     | read/write | Review threads, and snapshots for "changes since you last looked"                                 |
+| `<docsRoot>/<repo>/.timthink/archive.json`             | read/write | Plans you archived or kept active by hand, keyed by repo-relative path                            |
 | `<docsRoot>/**/*.md`                                   | write      | Only the `status:` line when you submit a verdict, and the text when you accept a suggestion      |
 | `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, a transcript backfill cache  |
 | `~/.claude/projects/*/*.jsonl`                         | read       | Claude Code transcripts, scanned for plan writes and session titles                               |
@@ -107,6 +110,25 @@ Nothing leaves your machine.
 | `repos.<repo>.worktrees` | none                      | Glob for extra worktrees (`~/code/my-repo-*`), used to match sessions to the repo           |
 | `repos.<repo>.prLinks`   | `graphite`                | Where PR references link: `graphite` or `github`                                            |
 | `repos.<repo>.aliases`   | none                      | Other checkout names that `timthink docs-dir` maps to this docs folder                      |
+| `groups`                 | none                      | Sidebar and inbox groups, in order (see below). Without it, repos aren't grouped            |
+| `archive.auto`           | `true`                    | Archive plans automatically by the rule below                                               |
+| `archive.staleAfterDays` | `21`                      | Auto-archive plans whose file hasn't changed for longer than this                          |
+| `archive.finishedAfterDays` | `3`                    | Auto-archive `done` or `abandoned` plans that haven't changed for longer than this         |
+| `readOnly`               | `false`                   | Never write under `docsRoot` (no snapshots, reviews or archive changes); `TIMTHINK_READONLY=1` also sets it |
+
+```json
+{
+  "groups": [
+    { "name": "Work", "owners": ["acme-corp"], "repos": ["side-project"] },
+    { "name": "Personal", "default": true }
+  ],
+  "archive": { "auto": true, "staleAfterDays": 21, "finishedAfterDays": 3 }
+}
+```
+
+A repo joins the first group that lists it in `repos`, otherwise the first group whose `owners` includes the GitHub owner of its checkout's `origin`, otherwise the `default` group (or "Other"). Repos are sorted by most recent activity within each group.
+
+A plan is archived when you archive it, or automatically when its file hasn't changed for `staleAfterDays` (or `finishedAfterDays` once it's `done` or `abandoned`). Plans in `review` or `in-progress`, and plans with a submitted review Claude hasn't addressed, an unread Claude reply in an open thread, or unsent drafts, are never auto-archived. Editing a file brings it back unless you archived it by hand; **Restore** keeps a plan active for good. Archived plans leave the sidebar lists, inbox and recent plans, except when Claude replies or addresses your review.
 
 ## CLI
 
@@ -117,6 +139,8 @@ Nothing leaves your machine.
 | `timthink docs-dir [--cwd dir]`                 | Print the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links          |
 | `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
+| `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active whatever the auto rule says (`--clear` forgets either) |
+| `timthink archive --list \| --dry-run-auto [--repo name]` | List archived plans, or preview what the auto rule archives and why     |
 | `timthink doctor`                               | Check every installed component                                                   |
 | `timthink install \| uninstall [--apply]`       | Set up or remove the components above                                             |
 

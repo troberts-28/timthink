@@ -112,6 +112,11 @@
     scrollbar-color: var(--line) transparent;
   }
 
+  /* Reserves the scrollbar's space up front so expanding a long list never narrows the column. */
+  .scroll-stable {
+    scrollbar-gutter: stable;
+  }
+
   .chip {
     display: inline-flex;
     align-items: center;

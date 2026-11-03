@@ -19,6 +19,7 @@ export interface InboxServiceDeps {
   seen: SeenStore;
   history: HistoryService;
   sessions: SessionStore;
+  isArchived?: (summary: DocSummary) => boolean;
   now?: () => Date;
 }
 
@@ -49,6 +50,7 @@ export class InboxService {
       : null;
     return {
       summary,
+      archived: this.deps.isArchived?.(summary) ?? false,
       hash: content.hash,
       questions: content.questions,
       review,

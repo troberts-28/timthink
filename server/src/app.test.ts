@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { SessionActionResponse } from "./app.js";
@@ -384,5 +384,94 @@ describe("reviews API", () => {
     expect((await call("/api/review/submit", { path: DOC, version: 1, verdict: "maybe", body: "" })).status).toBe(400);
     const outside = await call("/api/review/submit", { path: "../x.md", version: 0, verdict: "comment", body: "" });
     expect(outside.status).toBe(404);
+  });
+});
+
+describe("archive API", () => {
+  const DOC = "acme-api/2026-09-15-auth-refresh-notes.md";
+  let runtime: Runtime;
+  let docsRoot: string;
+  const events: HubEvent[] = [];
+  const auth = { origin: ORIGIN, [TOKEN_HEADER]: "" };
+
+  const call = (body: unknown, headers: Record<string, string> = auth) =>
+    runtime.app.request(`${BASE}/api/archive`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "content-type": "application/json", ...headers },
+    });
+
+  const archiveOf = async (docPath: string) => {
+    const index = await json<DocsIndex>(await runtime.app.request(`${BASE}/api/index`));
+    const repo = index.repos.find((entry) => entry.name === docPath.split("/")[0]);
+    return [...(repo?.ungrouped ?? []), ...(repo?.projects.flatMap((project) => project.docs) ?? [])].find(
+      (doc) => doc.path === docPath,
+    )?.archive;
+  };
+
+  beforeAll(async () => {
+    docsRoot = await copyFixtureDocs();
+    runtime = await createRuntime({
+      config: testConfig({ docsRoot, groups: [{ name: "Work", owners: [], repos: ["acme-api"], default: false }] }),
+      webDist: null,
+    });
+    auth[TOKEN_HEADER] = runtime.token;
+    runtime.hub.subscribe((event) => events.push(event));
+  });
+
+  it("exposes archive state and groups on the index", async () => {
+    const index = await json<DocsIndex>(await runtime.app.request(`${BASE}/api/index`));
+    expect(index.groups).toEqual(["Work", "Other"]);
+    expect(index.repos.find((repo) => repo.name === "acme-api")?.group).toBe("Work");
+    expect(index.repos.find((repo) => repo.name === "garden-app")?.group).toBe("Other");
+    expect(await archiveOf("acme-api/untitled-scratch.md")).toMatchObject({ state: "auto" });
+    expect(await archiveOf(DOC)).toEqual({ state: "active" });
+  });
+
+  it("archives and restores a doc, persisting to the repo and publishing a change", async () => {
+    const archived = await call({ path: DOC, action: "archive" });
+    expect(archived.status).toBe(200);
+    expect(await json<{ archive: { state: string } }>(archived)).toMatchObject({ archive: { state: "manual" } });
+    expect(await archiveOf(DOC)).toMatchObject({ state: "manual" });
+    expect(events.some((event) => event.type === "archive-changed" && event.paths.includes(DOC))).toBe(true);
+    const onDisk = JSON.parse(await readFile(path.join(docsRoot, "acme-api/.timthink/archive.json"), "utf8"));
+    expect(Object.keys(onDisk.archived)).toEqual(["2026-09-15-auth-refresh-notes.md"]);
+
+    expect((await call({ path: DOC, action: "keep-active" })).status).toBe(200);
+    expect(await archiveOf(DOC)).toEqual({ state: "active" });
+  });
+
+  it("guards the archive endpoint and validates its body", async () => {
+    expect((await call({ path: DOC, action: "archive" }, {})).status).toBe(403);
+    expect((await call({ path: DOC, action: "bury" })).status).toBe(400);
+    expect((await call({ path: "acme-api/missing.md", action: "archive" })).status).toBe(404);
+  });
+});
+
+describe("read-only mode", () => {
+  it("refuses archive and review writes and never snapshots under docsRoot", async () => {
+    const docsRoot = await copyFixtureDocs();
+    const runtime = await createRuntime({
+      config: testConfig({ docsRoot, readOnly: true, stateDir: await makeTempDir() }),
+      webDist: null,
+    });
+    const headers = { "content-type": "application/json", origin: ORIGIN, [TOKEN_HEADER]: runtime.token };
+    const archive = await runtime.app.request(`${BASE}/api/archive`, {
+      method: "POST",
+      body: JSON.stringify({ path: "acme-api/2026-09-15-auth-refresh-notes.md", action: "archive" }),
+      headers,
+    });
+    expect(archive.status).toBe(403);
+    await runtime.startHistory();
+    const doc = "acme-api/2026-10-01-rate-limiter-plan.md";
+    const review = await runtime.app.request(`${BASE}/api/review?path=${doc}`);
+    expect(review.status).toBe(200);
+    const seen = await runtime.app.request(`${BASE}/api/seen`, {
+      method: "POST",
+      body: JSON.stringify({ path: doc, hash: runtime.store.contentOf(doc)?.hash }),
+      headers,
+    });
+    expect(seen.status).toBe(200);
+    await expect(readdir(path.join(docsRoot, "acme-api/.timthink"))).rejects.toThrow();
   });
 });

@@ -18,10 +18,14 @@ import { pluralise } from "../lib/format";
 import { findRepo } from "../lib/indexNav";
 import { MarkdownBody } from "../markdown/Markdown";
 import { PlanContext } from "../markdown/PlanContext";
+import { ArchiveBanner } from "../plan/ArchiveBanner";
 import { ContentsMenu } from "../plan/ContentsMenu";
 import { PlanMeta } from "../plan/PlanMeta";
+import { PlanOverflowMenu } from "../plan/PlanOverflowMenu";
 import { SessionsPanel } from "../plan/SessionsPanel";
 import { useActiveHeading } from "../plan/useActiveHeading";
+import { useArchiveShortcut } from "../plan/useArchiveShortcut";
+import { usePlanArchive } from "../plan/usePlanArchive";
 import { useRenderedMarkdown } from "../plan/useRenderedMarkdown";
 import { ReviewButton, ReviewChip } from "../review/ReviewChip";
 import { ReviewProvider } from "../review/ReviewContext";
@@ -62,12 +66,14 @@ interface PaperProps {
   body: ReactNode;
   bodyRef: (element: HTMLDivElement | null) => void;
   headerActions: ReactNode;
+  banner: ReactNode;
 }
 
-function Paper({ doc, repo, body, bodyRef, headerActions }: PaperProps) {
+function Paper({ doc, repo, body, bodyRef, headerActions, banner }: PaperProps) {
   const stripPrefix = doc.summary.relPath.includes("/") ? `${doc.summary.relPath.split("/")[0]}/` : "";
   return (
     <>
+      {banner}
       <ChangesBanner />
       <article className="mx-auto max-w-[760px] rounded-paper border border-line bg-surface px-8 pt-10 pb-14 sm:px-14">
         <header className="mb-10 border-b border-line-soft pb-7">
@@ -140,6 +146,8 @@ function PlanPaper({
   const toc = rendered?.toc ?? [];
   const activeId = useActiveHeading(toc, SCROLL_CONTAINER_ID);
   useScrollToHash(rendered !== null);
+  const archive = usePlanArchive(doc.summary.path);
+  useArchiveShortcut(archive);
   const body = rendered ? <ChangesAwareBody hast={rendered.hast} /> : null;
   return (
     <PlanContext.Provider value={{ repo: doc.summary.repo, docPath: doc.summary.path }}>
@@ -153,10 +161,18 @@ function PlanPaper({
               <>
                 <HistoryMenu currentHash={doc.hash} />
                 <ReviewButton />
+                <PlanOverflowMenu plan={archive} />
               </>
             }
             renderPaper={({ bodyRef, headerActions }) => (
-              <Paper doc={doc} repo={repo} body={body} bodyRef={bodyRef} headerActions={headerActions} />
+              <Paper
+                doc={doc}
+                repo={repo}
+                body={body}
+                bodyRef={bodyRef}
+                headerActions={headerActions}
+                banner={<ArchiveBanner plan={archive} />}
+              />
             )}
             renderOverlay={(slots) => <ChangesLayer {...slots} />}
           />

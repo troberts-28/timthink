@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TimthinkConfig } from "../config.js";
+import { DEFAULT_ARCHIVE_SETTINGS, type TimthinkConfig } from "../config.js";
 
 export const FIXTURE_DOCS = fileURLToPath(new URL("../../../fixtures/agent-docs", import.meta.url));
 export const FIXTURE_CLAUDE_PROJECTS = fileURLToPath(new URL("../../../fixtures/claude-projects", import.meta.url));
@@ -35,6 +35,9 @@ export function testConfig(overrides: Partial<TimthinkConfig>): TimthinkConfig {
     userName: "Test Reviewer",
     launchdLabel: "dev.timthink.test",
     repos: {},
+    groups: null,
+    archive: DEFAULT_ARCHIVE_SETTINGS,
+    readOnly: false,
     ...overrides,
   };
 }

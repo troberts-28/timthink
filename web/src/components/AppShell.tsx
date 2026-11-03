@@ -16,7 +16,7 @@ export function AppShell() {
       <aside className="min-h-0 border-r border-line-soft">
         <Sidebar index={index} selection={selection} />
       </aside>
-      <main id="main" className="scroll-quiet min-h-0 overflow-y-auto">
+      <main id="main" className="scroll-quiet scroll-stable min-h-0 overflow-y-auto">
         <Outlet />
       </main>
     </div>

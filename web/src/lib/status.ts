@@ -17,6 +17,7 @@ const STATUS_ALIASES: Record<string, string> = {
   "in progress": "in-progress",
   in_progress: "in-progress",
   wip: "in-progress",
+  active: "in-progress",
   complete: "done",
   completed: "done",
   shipped: "done",

@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { isIgnoredName } from "../docs/store.js";
+import { ReadOnlyError } from "../readOnly.js";
 import { isInside } from "../safePath.js";
 import { writeFileAtomic } from "./atomicWrite.js";
 import { withFileLock } from "./fileLock.js";
@@ -37,8 +38,15 @@ function isMissing(error: unknown): boolean {
 
 export type ReviewMutation = (file: ReviewFile) => ReviewFile | Promise<ReviewFile>;
 
+export interface ReviewStoreOptions {
+  readOnly?: boolean;
+}
+
 export class ReviewStore {
-  constructor(readonly docsRoot: string) {}
+  constructor(
+    readonly docsRoot: string,
+    private readonly options: ReviewStoreOptions = {},
+  ) {}
 
   filePath(docPath: string): string {
     assertDocPath(docPath);
@@ -71,6 +79,7 @@ export class ReviewStore {
   }
 
   async update(docPath: string, expectedVersion: number | null, mutate: ReviewMutation): Promise<ReviewFile> {
+    if (this.options.readOnly) throw new ReadOnlyError();
     const filePath = this.filePath(docPath);
     await mkdir(path.dirname(filePath), { recursive: true });
     return withFileLock(`${filePath}.lock`, async () => {

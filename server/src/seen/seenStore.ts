@@ -35,6 +35,15 @@ function threadKey(docPath: string, threadId: string): string {
   return `${docPath}#${threadId}`;
 }
 
+export async function readSeenFile(stateDir: string): Promise<SeenFile | null> {
+  try {
+    const parsed = seenFileSchema.safeParse(JSON.parse(await readFile(path.join(stateDir, SEEN_FILE), "utf8")));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export class SeenStore {
   private state: SeenFile | null = null;
   private writing: Promise<void> = Promise.resolve();

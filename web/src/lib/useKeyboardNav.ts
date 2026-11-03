@@ -1,13 +1,23 @@
-import type { DocsIndex } from "@timthink/server";
+import type { DocsIndex, IndexedDoc } from "@timthink/server";
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
+import { isArchived, useShowArchived } from "./archive";
+import { repoSections } from "./repoGroups";
 import { docHref } from "./routes";
 
-export function sidebarOrder(index: DocsIndex): string[] {
-  return index.repos.flatMap((repo) => [
-    ...repo.projects.flatMap((project) => project.docs.map((doc) => doc.path)),
-    ...repo.ungrouped.map((doc) => doc.path),
-  ]);
+export interface NavEntry {
+  path: string;
+  archived: boolean;
+}
+
+export function sidebarOrder(index: DocsIndex): NavEntry[] {
+  const entries = (docs: readonly IndexedDoc[]) => docs.map((doc) => ({ path: doc.path, archived: isArchived(doc) }));
+  return repoSections(index).flatMap((section) =>
+    section.repos.flatMap((repo) => [
+      ...repo.projects.flatMap((project) => entries(project.docs)),
+      ...entries(repo.ungrouped),
+    ]),
+  );
 }
 
 export function isTypingTarget(target: EventTarget | null): boolean {
@@ -15,15 +25,27 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-export function nextDocPath(order: readonly string[], current: string | null, step: 1 | -1): string | null {
-  if (order.length === 0) return null;
-  const index = current ? order.indexOf(current) : -1;
-  if (index === -1) return step === 1 ? (order[0] ?? null) : (order[order.length - 1] ?? null);
-  return order[Math.min(order.length - 1, Math.max(0, index + step))] ?? null;
+export function nextDocPath(
+  order: readonly NavEntry[],
+  current: string | null,
+  step: 1 | -1,
+  includeArchived: boolean,
+): string | null {
+  const visible = (entry: NavEntry | undefined) => entry !== undefined && (includeArchived || !entry.archived);
+  const start = current ? order.findIndex((entry) => entry.path === current) : -1;
+  if (start === -1) {
+    const candidates = order.filter(visible);
+    return (step === 1 ? candidates[0] : candidates.at(-1))?.path ?? null;
+  }
+  for (let position = start + step; position >= 0 && position < order.length; position += step) {
+    if (visible(order[position])) return order[position]?.path ?? null;
+  }
+  return current;
 }
 
 export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: string | null): void {
   const navigate = useNavigate();
+  const [showArchived] = useShowArchived();
   useEffect(() => {
     if (!index) return;
     const order = sidebarOrder(index);
@@ -31,7 +53,7 @@ export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: str
       if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
       const step = event.key === "j" ? 1 : event.key === "k" ? -1 : null;
       if (!step) return;
-      const target = nextDocPath(order, currentDocPath, step);
+      const target = nextDocPath(order, currentDocPath, step, showArchived);
       if (target && target !== currentDocPath) {
         event.preventDefault();
         navigate(docHref(target));
@@ -39,5 +61,5 @@ export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: str
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [index, currentDocPath, navigate]);
+  }, [index, currentDocPath, navigate, showArchived]);
 }

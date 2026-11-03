@@ -7,17 +7,26 @@ import { analyzeContent, type DocContent } from "./content.js";
 import { locateDoc, summarizeDoc } from "./summarize.js";
 import type {
   AttachmentSummary,
+  DocArchive,
   DocSummary,
   DocsIndex,
   GithubRepo,
+  IndexedDoc,
   PrLinkHost,
   ProjectIndex,
   RepoIndex,
 } from "./types.js";
 
-export interface RepoLinkInfo {
+export interface RepoInfo {
   github: GithubRepo | null;
   prLinks: PrLinkHost;
+  group: string | null;
+}
+
+export interface IndexOptions {
+  repoInfo: (repo: string) => RepoInfo;
+  archiveOf: (doc: DocSummary) => DocArchive;
+  groupOrder: (assigned: Array<string | null>) => string[] | null;
 }
 
 const IGNORED_NAMES = new Set(["node_modules", "__pycache__"]);
@@ -119,18 +128,33 @@ export class DocsStore {
       .map(toAttachmentSummary);
   }
 
-  buildIndex(linksFor: (repo: string) => RepoLinkInfo): DocsIndex {
-    const repoNames = new Set<string>();
-    for (const doc of this.docs.values()) repoNames.add(doc.repo);
-    for (const attachment of this.attachments.values()) repoNames.add(attachment.repo);
-    const repos = [...repoNames]
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => this.buildRepoIndex(name, linksFor(name)));
-    return { generatedAt: new Date().toISOString(), repos };
+  repoNames(): string[] {
+    const names = new Set<string>();
+    for (const doc of this.docs.values()) names.add(doc.repo);
+    for (const attachment of this.attachments.values()) names.add(attachment.repo);
+    return [...names].sort((a, b) => a.localeCompare(b));
   }
 
-  private buildRepoIndex(name: string, { github, prLinks }: RepoLinkInfo): RepoIndex {
-    const repoDocs = [...this.docs.values()].filter((doc) => doc.repo === name).sort(newestFirst);
+  buildIndex(options: IndexOptions): DocsIndex {
+    const repos = this.repoNames()
+      .map((name) => this.buildRepoIndex(name, options.repoInfo(name), options.archiveOf))
+      .sort((a, b) => b.lastActivity - a.lastActivity || a.name.localeCompare(b.name));
+    return {
+      generatedAt: new Date().toISOString(),
+      groups: options.groupOrder(repos.map((repo) => repo.group)),
+      repos,
+    };
+  }
+
+  private buildRepoIndex(
+    name: string,
+    { github, prLinks, group }: RepoInfo,
+    archiveOf: (doc: DocSummary) => DocArchive,
+  ): RepoIndex {
+    const repoDocs: IndexedDoc[] = [...this.docs.values()]
+      .filter((doc) => doc.repo === name)
+      .sort(newestFirst)
+      .map((doc) => ({ ...doc, archive: archiveOf(doc) }));
     const repoAttachments = [...this.attachments.values()].filter((entry) => entry.repo === name);
     const projects = new Map<string, ProjectIndex>();
     const projectFor = (projectName: string): ProjectIndex => {
@@ -141,7 +165,7 @@ export class DocsStore {
       }
       return project;
     };
-    const ungrouped: DocSummary[] = [];
+    const ungrouped: IndexedDoc[] = [];
     for (const doc of repoDocs) {
       if (doc.project === null) ungrouped.push(doc);
       else projectFor(doc.project).docs.push(doc);
@@ -154,11 +178,17 @@ export class DocsStore {
     const sortedProjects = [...projects.values()].sort(
       (a, b) => latestActivity(b).localeCompare(latestActivity(a)) || a.name.localeCompare(b.name),
     );
+    const archivedCount = repoDocs.filter((doc) => doc.archive.state !== "active").length;
+    const lastActivity = Math.max(0, ...repoDocs.map((doc) => doc.mtime), ...repoAttachments.map((file) => file.mtime));
     return {
       name,
       github,
       prLinks,
+      group,
+      lastActivity,
       docCount: repoDocs.length,
+      activeCount: repoDocs.length - archivedCount,
+      archivedCount,
       projects: sortedProjects,
       ungrouped,
       rootAttachmentCount,

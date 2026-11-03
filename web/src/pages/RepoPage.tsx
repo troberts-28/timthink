@@ -1,17 +1,20 @@
 import type { ProjectIndex } from "@timthink/server";
-import { FileText, Folder } from "lucide-react";
+import { Archive, FileText, Folder } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useDocsIndex } from "../api/queries";
+import { ArchivedDocs } from "../components/ArchivedDocs";
 import { FilesCard } from "../components/AttachmentList";
 import { DocList } from "../components/DocList";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
+import { partitionArchived } from "../lib/archive";
 import { compactDate, pluralise } from "../lib/format";
-import { findRepo } from "../lib/indexNav";
+import { findRepo, repoDocs } from "../lib/indexNav";
 import { projectHref } from "../lib/routes";
 
 function ProjectCard({ repo, project }: { repo: string; project: ProjectIndex }) {
-  const latest = project.docs[0];
+  const { active, archived } = partitionArchived(project.docs);
+  const latest = active[0];
   return (
     <Link
       to={projectHref(repo, project.name)}
@@ -23,7 +26,8 @@ function ProjectCard({ repo, project }: { repo: string; project: ProjectIndex })
       </span>
       <span className="flex items-center justify-between gap-3 text-meta text-ink-64">
         <span>
-          {pluralise(project.docs.length, "plan")}
+          {pluralise(active.length, "plan")}
+          {archived.length > 0 ? <span className="text-ink-32"> · {archived.length} archived</span> : null}
           {project.attachmentCount > 0 ? ` · ${pluralise(project.attachmentCount, "file")}` : ""}
         </span>
         {latest ? <span className="text-ink-32 tabular-nums">{compactDate(latest.date)}</span> : null}
@@ -57,6 +61,11 @@ export function RepoPage() {
       </a>
     </>
   ) : null;
+  const archived = partitionArchived(repoDocs(repo)).archived;
+  const activePlans = partitionArchived(repo.ungrouped).active;
+  const liveProjects = repo.projects.filter(
+    (project) => project.docs.length === 0 || partitionArchived(project.docs).active.length > 0,
+  );
   return (
     <PageContainer>
       <PageHeader
@@ -64,27 +73,34 @@ export function RepoPage() {
         title={repo.name}
         meta={
           <>
-            {pluralise(repo.docCount, "plan")} · {pluralise(repo.projects.length, "project")}
+            {pluralise(repo.docCount - archived.length, "active plan")}
+            {archived.length > 0 ? ` · ${archived.length} archived` : ""} · {pluralise(liveProjects.length, "project")}
             {github}
           </>
         }
       />
-      {repo.projects.length > 0 ? (
+      {liveProjects.length > 0 ? (
         <section className="mb-10">
           <SectionHeading>Projects</SectionHeading>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {repo.projects.map((project) => (
+            {liveProjects.map((project) => (
               <ProjectCard key={project.name} repo={repo.name} project={project} />
             ))}
           </div>
         </section>
       ) : null}
-      {repo.ungrouped.length > 0 ? (
+      {activePlans.length > 0 ? (
         <section className="mb-10">
-          <SectionHeading aside={pluralise(repo.ungrouped.length, "plan")}>Plans</SectionHeading>
-          <DocList docs={repo.ungrouped} />
+          <SectionHeading aside={pluralise(activePlans.length, "plan")}>Plans</SectionHeading>
+          <DocList docs={activePlans} />
         </section>
       ) : null}
+      {liveProjects.length === 0 && activePlans.length === 0 ? (
+        <div className="mb-10 rounded-card border border-line bg-surface">
+          <EmptyState icon={Archive}>Every plan here is archived.</EmptyState>
+        </div>
+      ) : null}
+      <ArchivedDocs docs={archived} />
       {repo.rootAttachmentCount > 0 ? (
         <section>
           <SectionHeading aside={pluralise(repo.rootAttachmentCount, "file")}>Files</SectionHeading>

@@ -1,10 +1,12 @@
 import { Folder } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useDocsIndex } from "../api/queries";
+import { ArchivedDocs } from "../components/ArchivedDocs";
 import { FilesCard } from "../components/AttachmentList";
 import { DocList } from "../components/DocList";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
+import { partitionArchived } from "../lib/archive";
 import { pluralise } from "../lib/format";
 import { findProject, findRepo } from "../lib/indexNav";
 import { repoHref } from "../lib/routes";
@@ -22,6 +24,7 @@ export function ProjectPage() {
       </PageContainer>
     );
   }
+  const { active, archived } = partitionArchived(project.docs);
   return (
     <PageContainer>
       <PageHeader
@@ -31,18 +34,21 @@ export function ProjectPage() {
           </Link>
         }
         title={project.name}
-        meta={`${pluralise(project.docs.length, "plan")} · ${pluralise(project.attachmentCount, "file")}`}
+        meta={`${pluralise(active.length, "active plan")}${archived.length > 0 ? ` · ${archived.length} archived` : ""} · ${pluralise(project.attachmentCount, "file")}`}
       />
       <section className="mb-10">
         <SectionHeading>Plans</SectionHeading>
-        {project.docs.length > 0 ? (
-          <DocList docs={project.docs} />
+        {active.length > 0 ? (
+          <DocList docs={active} />
         ) : (
           <div className="rounded-card border border-line bg-surface">
-            <EmptyState>This project has files but no plans.</EmptyState>
+            <EmptyState>
+              {archived.length > 0 ? "Every plan here is archived." : "This project has files but no plans."}
+            </EmptyState>
           </div>
         )}
       </section>
+      <ArchivedDocs docs={archived} />
       {project.attachmentCount > 0 ? (
         <section>
           <SectionHeading aside={pluralise(project.attachmentCount, "file")}>Files</SectionHeading>

@@ -4,7 +4,15 @@ import type { Attribution } from "../history/attribution.js";
 import { isDraftThread, unaddressedReviews } from "../reviews/operations.js";
 import type { Review, ReviewFile, Thread } from "../reviews/schema.js";
 import type { SeenEntry } from "../seen/seenStore.js";
-import type { InboxAttention, InboxDoc, InboxItem, InboxResponse, InboxSection, InboxSessionHint } from "./types.js";
+import type {
+  InboxAttention,
+  InboxDoc,
+  InboxItem,
+  InboxReason,
+  InboxResponse,
+  InboxSection,
+  InboxSessionHint,
+} from "./types.js";
 
 export const CHANGED_WINDOW_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,6 +27,7 @@ export interface LatestChange {
 
 export interface InboxDocInput {
   summary: DocSummary;
+  archived: boolean;
   hash: string;
   questions: readonly DocQuestion[];
   review: ReviewFile | null;
@@ -35,6 +44,7 @@ export interface InboxInput {
 }
 
 const SECTION_ORDER: readonly InboxSection[] = ["review", "replies", "questions", "waiting", "changed"];
+const SURFACES_WHEN_ARCHIVED: ReadonlySet<InboxReason> = new Set(["claude-replied", "review-addressed"]);
 
 function later(a: string | null | undefined, b: string | null | undefined): string | null {
   if (!a) return b ?? null;
@@ -144,7 +154,7 @@ function itemsForDoc(input: InboxDocInput, context: InboxInput): InboxItem[] {
 
   const change = changeSinceSeen(input, context);
   if (change && !items.some((entry) => entry.reason === "review-addressed")) items.push(change);
-  return items;
+  return input.archived ? items.filter((entry) => SURFACES_WHEN_ARCHIVED.has(entry.reason)) : items;
 }
 
 function changeSinceSeen(input: InboxDocInput, context: InboxInput): InboxItem | null {

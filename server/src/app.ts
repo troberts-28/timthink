@@ -4,6 +4,8 @@ import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono } from "hono";
 import { stream, streamSSE } from "hono/streaming";
 import { z } from "zod";
+import type { ArchiveService } from "./archive/archiveService.js";
+import { archiveRoutes } from "./archive/routes.js";
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
 import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
@@ -47,6 +49,8 @@ export interface AppDeps {
   history: HistoryService;
   seen: SeenStore;
   inbox: InboxService;
+  archive: ArchiveService;
+  onArchiveChange: (docPath: string) => void;
   openUrl: OpenUrl;
   getIndex: () => DocsIndex;
   token: string;
@@ -291,6 +295,7 @@ export function createApp(deps: AppDeps) {
         onChange: (docPath) => hub.publish({ type: "seen-changed", path: docPath, version: hub.nextVersion() }),
       }),
     )
+    .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
     .get("/api/inbox", async (c) => c.json(await deps.inbox.build()))
     .get("/api/events", (c) =>
       streamSSE(c, async (sse) => {

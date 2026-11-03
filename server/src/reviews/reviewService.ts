@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { ReadOnlyError } from "../readOnly.js";
 import { resolveInsideRoot } from "../safePath.js";
 import { createAnchor, locateAnchor, refreshAnchor } from "./anchor.js";
 import { writeFileAtomic } from "./atomicWrite.js";
@@ -86,6 +87,7 @@ export interface HubDocWrite {
 export interface ReviewServiceOptions {
   docsRoot: string;
   userName: string | null;
+  readOnly?: boolean;
   now?: () => string;
   onDocWrite?: (write: HubDocWrite) => void;
 }
@@ -96,7 +98,7 @@ export class ReviewService {
   private readonly now: () => string;
 
   constructor(private readonly options: ReviewServiceOptions) {
-    this.store = new ReviewStore(options.docsRoot);
+    this.store = new ReviewStore(options.docsRoot, { readOnly: options.readOnly ?? false });
     this.userName = userNameResolver(options.userName);
     this.now = options.now ?? (() => new Date().toISOString());
   }
@@ -120,7 +122,7 @@ export class ReviewService {
       try {
         file = await this.store.update(docPath, file.version, (current) => reanchorThreads(current, doc.raw, doc.hash));
       } catch (error) {
-        if (!(error instanceof ReviewConflictError)) throw error;
+        if (!(error instanceof ReviewConflictError || error instanceof ReadOnlyError)) throw error;
         file = reanchorThreads(await this.store.read(docPath), doc.raw, doc.hash);
       }
     }

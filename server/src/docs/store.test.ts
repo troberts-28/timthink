@@ -1,11 +1,15 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { copyFixtureDocs } from "../test/fixtures.js";
-import { DocsStore } from "./store.js";
+import { DocsStore, type IndexOptions } from "./store.js";
 import type { RepoIndex } from "./types.js";
 
-const noGithub = () => ({ github: null, prLinks: "graphite" as const });
+const noGithub: IndexOptions = {
+  repoInfo: () => ({ github: null, prLinks: "graphite", group: null }),
+  archiveOf: () => ({ state: "active" }),
+  groupOrder: () => null,
+};
 
 function repo(store: DocsStore, name: string): RepoIndex {
   const found = store.buildIndex(noGithub).repos.find((entry) => entry.name === name);
@@ -25,7 +29,7 @@ describe("DocsStore", () => {
 
   it("indexes repos, projects and ungrouped docs", () => {
     const index = store.buildIndex(noGithub);
-    expect(index.repos.map((entry) => entry.name)).toEqual(["acme-api", "garden-app"]);
+    expect(index.repos.map((entry) => entry.name).sort()).toEqual(["acme-api", "garden-app"]);
 
     const acme = repo(store, "acme-api");
     expect(acme.docCount).toBe(6);
@@ -40,6 +44,34 @@ describe("DocsStore", () => {
       "billing-migration/notes/2026-10-21-open-questions.md",
       "billing-migration/2026-10-20-billing-migration-plan.md",
     ]);
+  });
+
+  it("orders repos by their latest activity and counts archived docs", async () => {
+    const old = new Date(Date.UTC(2026, 0, 1));
+    const recent = new Date(Date.UTC(2026, 5, 1));
+    for (const relPath of [
+      "acme-api/2026-10-01-rate-limiter-plan.md",
+      "acme-api/2026-09-15-auth-refresh-notes.md",
+      "acme-api/2026-08-02-broken-frontmatter.md",
+      "acme-api/untitled-scratch.md",
+      "acme-api/2026-10-01-rate-limiter-demo.html",
+      "acme-api/billing-migration/2026-10-20-billing-migration-plan.md",
+      "acme-api/billing-migration/notes/2026-10-21-open-questions.md",
+      "acme-api/billing-migration/diagrams/flow.png",
+      "acme-api/billing-migration/data/sample-invoices.json",
+    ]) {
+      await utimes(path.join(root, relPath), old, old);
+    }
+    await utimes(path.join(root, "garden-app/plans/2026-07-10-sensor-pairing.md"), recent, recent);
+    await store.scanAll();
+    const index = store.buildIndex({
+      ...noGithub,
+      archiveOf: (doc) => (doc.repo === "acme-api" && doc.project === null ? { state: "auto" } : { state: "active" }),
+    });
+    expect(index.repos.map((entry) => entry.name)).toEqual(["garden-app", "acme-api"]);
+    const acme = index.repos[1];
+    expect(acme?.archivedCount).toBe(4);
+    expect(acme?.activeCount).toBe(2);
   });
 
   it("lists non-markdown files as attachments of their project or repo root", () => {

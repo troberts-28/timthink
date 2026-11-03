@@ -19,6 +19,17 @@ export interface DocSummary {
   frontmatterError: string | null;
 }
 
+export type ArchiveState = "active" | "auto" | "manual";
+
+export interface DocArchive {
+  state: ArchiveState;
+  reason?: string;
+}
+
+export interface IndexedDoc extends DocSummary {
+  archive: DocArchive;
+}
+
 export interface AttachmentSummary {
   path: string;
   relPath: string;
@@ -29,7 +40,7 @@ export interface AttachmentSummary {
 
 export interface ProjectIndex {
   name: string;
-  docs: DocSummary[];
+  docs: IndexedDoc[];
   attachmentCount: number;
 }
 
@@ -44,14 +55,19 @@ export interface RepoIndex {
   name: string;
   github: GithubRepo | null;
   prLinks: PrLinkHost;
+  group: string | null;
+  lastActivity: number;
   docCount: number;
+  activeCount: number;
+  archivedCount: number;
   projects: ProjectIndex[];
-  ungrouped: DocSummary[];
+  ungrouped: IndexedDoc[];
   rootAttachmentCount: number;
 }
 
 export interface DocsIndex {
   generatedAt: string;
+  groups: string[] | null;
   repos: RepoIndex[];
 }
 

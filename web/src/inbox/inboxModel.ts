@@ -55,3 +55,22 @@ export function groupByRepo(items: readonly InboxItem[]): RepoGroup[] {
     .map(([repo, entries]) => ({ repo, items: entries }))
     .sort((a, b) => (b.items[0]?.at ?? "").localeCompare(a.items[0]?.at ?? "") || a.repo.localeCompare(b.repo));
 }
+
+export interface GroupedRepos {
+  group: string | null;
+  repos: RepoGroup[];
+}
+
+export function groupRepoSections(
+  repos: readonly RepoGroup[],
+  groupOrder: readonly string[] | null,
+  groupOf: (repo: string) => string | null,
+): GroupedRepos[] {
+  if (!groupOrder || groupOrder.length === 0) return [{ group: null, repos: [...repos] }];
+  const grouped: GroupedRepos[] = groupOrder.map((group) => ({
+    group,
+    repos: repos.filter((entry) => groupOf(entry.repo) === group),
+  }));
+  const unplaced = repos.filter((entry) => !groupOrder.includes(groupOf(entry.repo) ?? ""));
+  return [...grouped, { group: null, repos: unplaced }].filter((section) => section.repos.length > 0);
+}

@@ -1,13 +1,16 @@
 import { type ServerType, serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import { createApp } from "./app.js";
+import { ArchiveService } from "./archive/archiveService.js";
+import { ArchiveStore, repoForArchiveFile } from "./archive/archiveStore.js";
 import { CodeService } from "./code/codeService.js";
 import { createZedOpener, type OpenInEditor } from "./code/editor.js";
 import { prLinkHostFor, type TimthinkConfig } from "./config.js";
 import { DocsStore } from "./docs/store.js";
 import type { DocsIndex, GithubRepo } from "./docs/types.js";
 import { type DocsWatcher, watchDocsRoot } from "./docs/watcher.js";
-import { EventHub } from "./events.js";
+import { EventHub, type HubEvent } from "./events.js";
+import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
@@ -63,6 +66,7 @@ export interface Runtime {
   history: HistoryService;
   seen: SeenStore;
   inbox: InboxService;
+  archive: ArchiveService;
   hub: EventHub;
   token: string;
   startHistory(): Promise<void>;
@@ -71,6 +75,7 @@ export interface Runtime {
 }
 
 const BACKFILL_INTERVAL_MS = 5 * 60_000;
+const INDEX_MAX_AGE_MS = 60 * 60_000;
 const HOOK_LOGS = new Set([SESSIONS_LOG, DOC_SESSIONS_LOG]);
 
 function startSessionTracking(sessions: SessionStore, log: (message: string) => void): DocsWatcher {
@@ -128,6 +133,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     store,
     sessions,
     keepHashes: (docPath) => seen.keepHashes(docPath),
+    readOnly: config.readOnly,
     onSnapshot: (docPath) => hub.publish({ type: "history-changed", path: docPath, version: hub.nextVersion() }),
     log,
   });
@@ -142,9 +148,28 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const reviews = new ReviewService({
     docsRoot: config.docsRoot,
     userName: config.userName,
+    readOnly: config.readOnly,
     onDocWrite: onHubDocWrite,
   });
-  const inbox = new InboxService({ store, reviews: reviews.store, seen, history, sessions });
+  const archive = new ArchiveService({
+    docs: store,
+    reviews: reviews.store,
+    archives: new ArchiveStore(config.docsRoot, { readOnly: config.readOnly }),
+    marks: {
+      docSeenAt: (docPath) => seen.get(docPath)?.at ?? null,
+      threadReadAt: (docPath, threadId) => seen.threadReadAt(docPath, threadId),
+    },
+    settings: config.archive,
+    log,
+  });
+  const inbox = new InboxService({
+    store,
+    reviews: reviews.store,
+    seen,
+    history,
+    sessions,
+    isArchived: (summary) => archive.isArchived(summary),
+  });
 
   await Promise.all([store.scanAll(), sessions.init()]);
   const seenInit = await seen.init(
@@ -154,13 +179,53 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     }),
   );
   if (seenInit.created) log(`initialised seen.json with ${store.allDocs().length} doc(s)`);
+  await archive.init();
   let cachedIndex: DocsIndex | null = null;
+  let cachedAt = 0;
   const repoNames = (): string[] => [...new Set(store.allDocs().map((doc) => doc.repo))];
   await github.refresh(repoNames());
 
   const getIndex = (): DocsIndex => {
-    cachedIndex ??= store.buildIndex((repo) => ({ github: github.get(repo), prLinks: prLinkHostFor(config, repo) }));
+    if (!cachedIndex || Date.now() - cachedAt > INDEX_MAX_AGE_MS) {
+      cachedIndex = store.buildIndex({
+        repoInfo: (repo) => {
+          const remote = github.get(repo);
+          return {
+            github: remote,
+            prLinks: prLinkHostFor(config, repo),
+            group: groupForRepo(config.groups, repo, remote),
+          };
+        },
+        archiveOf: (summary) => archive.stateFor(summary),
+        groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),
+      });
+      cachedAt = Date.now();
+    }
     return cachedIndex;
+  };
+
+  const publishArchiveChange = (paths: string[]): void => {
+    cachedIndex = null;
+    hub.publish({ type: "archive-changed", paths, version: hub.nextVersion() });
+  };
+
+  const refreshArchiveFor = (docPath: string): void => {
+    archive
+      .refreshDoc(docPath)
+      .then((changed) => {
+        if (changed) publishArchiveChange([docPath]);
+      })
+      .catch((error: unknown) => log(`refreshing archive state failed: ${String(error)}`));
+  };
+
+  hub.subscribe((event: HubEvent) => {
+    if (event.type === "review-changed" || event.type === "seen-changed") refreshArchiveFor(event.path);
+  });
+
+  const reloadArchives = async (relPaths: readonly string[]): Promise<void> => {
+    const repos = [...new Set(relPaths.map(repoForArchiveFile).filter((repo) => repo !== null))];
+    const changed = await Promise.all(repos.map((repo) => archive.reloadRepo(repo)));
+    if (changed.some(Boolean)) publishArchiveChange([]);
   };
 
   const publishReviewChanges = (relPaths: readonly string[]): void => {
@@ -170,9 +235,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
 
   const handleChanges = async (relPaths: string[]): Promise<void> => {
     publishReviewChanges(relPaths);
+    await reloadArchives(relPaths);
     const result = await store.applyChanges(relPaths);
     if (!result.changed) return;
-    await github.refresh(repoNames());
+    await Promise.all([github.refresh(repoNames()), archive.ensureRepos(store.repoNames())]);
     cachedIndex = null;
     history.schedule(result.changedDocs);
     for (const docPath of result.changedDocs) {
@@ -196,6 +262,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     history,
     seen,
     inbox,
+    archive,
+    onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     openUrl: options.openUrl ?? createMacOpener(),
     getIndex,
     token,
@@ -213,6 +281,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     history,
     seen,
     inbox,
+    archive,
     hub,
     token,
     startHistory: async () => {

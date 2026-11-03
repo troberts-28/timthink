@@ -20,6 +20,7 @@ export interface HistoryServiceOptions {
   store: DocsStore;
   sessions: WriterLookup;
   keepHashes: (docPath: string) => ReadonlySet<string>;
+  readOnly?: boolean;
   onSnapshot?: (docPath: string, entry: SnapshotEntry) => void;
   debounceMs?: number;
   cap?: number;
@@ -73,7 +74,7 @@ export class HistoryService {
 
   async snapshotAll(): Promise<BulkSnapshotStats> {
     const started = performance.now();
-    const docs = this.options.store.allDocs().map((doc) => doc.path);
+    const docs = this.options.readOnly ? [] : this.options.store.allDocs().map((doc) => doc.path);
     let saved = 0;
     let next = 0;
     const worker = async (): Promise<void> => {
@@ -113,6 +114,7 @@ export class HistoryService {
   }
 
   private async capture(docPath: string): Promise<SnapshotEntry | null> {
+    if (this.options.readOnly) return null;
     const absolute = await resolveInsideRoot(this.options.docsRoot, docPath).catch(() => null);
     if (!absolute) return null;
     const [raw, stats] = await Promise.all([

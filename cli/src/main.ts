@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, type TimthinkConfig } from "@timthink/server";
+import { ARCHIVE_USAGE, runArchive } from "./commands/archive.js";
 import { runCheck } from "./commands/check.js";
 import { findDocsDir } from "./commands/docsDir.js";
 import { doctor, probePort } from "./commands/doctor.js";
@@ -32,6 +33,10 @@ Commands:
   docs-root             Print the docs root
   check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
+  archive <doc>         Archive a plan; also --list and --dry-run-auto (see \`timthink archive --help\`)
+  unarchive <doc>       Keep a plan active, even when the auto rule would archive it
+  archive <doc>         Archive a plan; also --list, --dry-run-auto (see \`timthink archive --help\`)
+  unarchive <doc>       Keep a plan active, even when the auto rule would archive it
   doctor                Check every installed component and print fixes
   install [--apply] [--docs-root dir] [--code-root dir]
                         Set up the config, CLI shim, launchd agent, skill and Claude Code hooks (dry run unless --apply)
@@ -89,6 +94,10 @@ async function main(argv: string[]): Promise<number> {
       help: { type: "boolean", short: "h" },
       message: { type: "string", short: "m" },
       cwd: { type: "string" },
+      list: { type: "boolean", default: false },
+      "dry-run-auto": { type: "boolean", default: false },
+      clear: { type: "boolean", default: false },
+      repo: { type: "string" },
       "docs-root": { type: "string" },
       "code-root": { type: "string" },
     },
@@ -97,6 +106,10 @@ async function main(argv: string[]): Promise<number> {
   if (command === "review" && (values.help || rest.length === 0)) {
     console.log(REVIEW_USAGE);
     return values.help ? 0 : 1;
+  }
+  if (command === "archive" && values.help) {
+    console.log(ARCHIVE_USAGE);
+    return 0;
   }
   if (!command || values.help) {
     console.log(USAGE);
@@ -135,6 +148,15 @@ async function main(argv: string[]): Promise<number> {
     }
     case "review":
       return runReview(config, rest, values.message === undefined ? {} : { message: values.message }, consoleIo);
+    case "archive":
+    case "unarchive":
+      return runArchive(
+        config,
+        command,
+        rest,
+        { list: values.list, dryRunAuto: values["dry-run-auto"], clear: values.clear, repo: values.repo },
+        { out: (text) => console.log(text), err: (text) => console.error(text) },
+      );
     case "doctor":
       return doctor(config, machinePaths(config), { run: runCommand, probePort, pathEnv: process.env.PATH ?? "" });
     case "install": {

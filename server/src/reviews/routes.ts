@@ -1,13 +1,14 @@
 import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
+import { ReadOnlyError } from "../readOnly.js";
 import { InvalidRangeError } from "./anchor.js";
 import { ReviewOperationError } from "./operations.js";
 import { DocChangedError, DocNotFoundError, type ReviewService } from "./reviewService.js";
 import { CorruptReviewFileError, InvalidDocPathError, ReviewConflictError } from "./reviewStore.js";
 import { MAX_COMMENT_LENGTH, MAX_SUGGESTION_LENGTH, threadKindSchema, verdictSchema } from "./schema.js";
 
-export type ReviewErrorCode = "conflict" | "doc-changed" | "not-found" | "invalid" | "corrupt";
+export type ReviewErrorCode = "conflict" | "doc-changed" | "not-found" | "invalid" | "corrupt" | "read-only";
 
 export interface ReviewErrorResponse {
   error: ReviewErrorCode;
@@ -42,8 +43,9 @@ const answerBody = versioned.extend({
 const submitBody = versioned.extend({ verdict: verdictSchema, body: commentText });
 
 function failure(c: Context, error: unknown) {
-  const respond = (code: ReviewErrorCode, status: 404 | 409 | 422 | 500, message: string) =>
+  const respond = (code: ReviewErrorCode, status: 403 | 404 | 409 | 422 | 500, message: string) =>
     c.json<ReviewErrorResponse, typeof status>({ error: code, message }, status);
+  if (error instanceof ReadOnlyError) return respond("read-only", 403, error.message);
   if (error instanceof ReviewConflictError) return respond("conflict", 409, error.message);
   if (error instanceof DocChangedError) return respond("doc-changed", 409, error.message);
   if (error instanceof ReviewOperationError) {

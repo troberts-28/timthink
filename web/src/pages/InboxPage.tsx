@@ -1,39 +1,68 @@
-import type { InboxItem } from "@timthink/server";
+import type { DocsIndex, InboxItem } from "@timthink/server";
 import { Clock, Inbox } from "lucide-react";
 import { useDocsIndex, useInbox } from "../api/queries";
 import { DocList } from "../components/DocList";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
 import { InboxRow } from "../inbox/InboxRow";
-import { groupByRepo, INBOX_SECTIONS, type SectionSpec } from "../inbox/inboxModel";
+import { groupByRepo, groupRepoSections, INBOX_SECTIONS, type RepoGroup, type SectionSpec } from "../inbox/inboxModel";
 import { pluralise } from "../lib/format";
 import { recentDocs } from "../lib/indexNav";
+import { groupOfRepo } from "../lib/repoGroups";
 
 const RECENT_LIMIT = 12;
 
-function InboxSectionCard({ spec, items }: { spec: SectionSpec; items: InboxItem[] }) {
-  const groups = groupByRepo(items);
-  const showRepos = groups.length > 1;
+function RepoItems({ group, showRepo }: { group: RepoGroup; showRepo: boolean }) {
+  return (
+    <li className="border-b border-line-soft last:border-b-0">
+      {showRepo ? (
+        <p className="m-0 border-b border-line-soft bg-bg-sunken/60 px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-64">
+          {group.repo}
+        </p>
+      ) : null}
+      <ul className="m-0 list-none p-0">
+        {group.items.map((item) => (
+          <InboxRow key={item.id} item={item} showRepo={!showRepo} />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+function InboxSectionCard({
+  spec,
+  items,
+  index,
+}: {
+  spec: SectionSpec;
+  items: InboxItem[];
+  index: DocsIndex | undefined;
+}) {
+  const repos = groupByRepo(items);
+  const showRepos = repos.length > 1;
+  const sections = groupRepoSections(repos, index?.groups ?? null, (repo) => groupOfRepo(index, repo));
   return (
     <section aria-label={spec.title} className="mb-10">
       <SectionHeading aside={spec.hint}>
         {spec.title} <span className="ml-1 text-ink-32 tabular-nums">{items.length}</span>
       </SectionHeading>
       <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
-        {groups.map((group) => (
-          <li key={group.repo} className="border-b border-line-soft last:border-b-0">
-            {showRepos ? (
+        {sections.map(({ group, repos: groupRepos }) =>
+          group === null ? (
+            groupRepos.map((repo) => <RepoItems key={repo.repo} group={repo} showRepo={showRepos} />)
+          ) : (
+            <li key={group} className="border-b border-line-soft last:border-b-0">
               <p className="m-0 border-b border-line-soft bg-bg-sunken/60 px-5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-64">
-                {group.repo}
+                {group}
               </p>
-            ) : null}
-            <ul className="m-0 list-none p-0">
-              {group.items.map((item) => (
-                <InboxRow key={item.id} item={item} showRepo={!showRepos} />
-              ))}
-            </ul>
-          </li>
-        ))}
+              <ul className="m-0 list-none p-0">
+                {groupRepos.map((repo) => (
+                  <RepoItems key={repo.repo} group={repo} showRepo={false} />
+                ))}
+              </ul>
+            </li>
+          ),
+        )}
       </ul>
     </section>
   );
@@ -67,7 +96,7 @@ export function InboxPage() {
       {sections
         .filter(({ items }) => items.length > 0)
         .map(({ spec, items }) => (
-          <InboxSectionCard key={spec.id} spec={spec} items={items} />
+          <InboxSectionCard key={spec.id} spec={spec} items={items} index={index} />
         ))}
       <section aria-label="Recent plans">
         <SectionHeading aside="Most recently edited first">Recent plans</SectionHeading>

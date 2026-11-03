@@ -150,6 +150,7 @@ export function useLiveUpdates(): void {
       }
     };
     source.addEventListener("index-changed", onIndexChanged);
+    source.addEventListener("archive-changed", onIndexChanged);
     source.addEventListener("doc-changed", onDocChanged);
     source.addEventListener("doc-removed", onDocChanged);
     source.addEventListener("sessions-changed", onSessionsChanged);

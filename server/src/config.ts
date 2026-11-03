@@ -17,6 +17,19 @@ const repoOverrideSchema = z.object({
   aliases: z.array(z.string().min(1)).optional(),
 });
 
+const groupSchema = z.object({
+  name: z.string().trim().min(1),
+  owners: z.array(z.string().min(1)).optional(),
+  repos: z.array(z.string().min(1)).optional(),
+  default: z.boolean().optional(),
+});
+
+const archiveSchema = z.object({
+  auto: z.boolean().optional(),
+  staleAfterDays: z.number().positive().optional(),
+  finishedAfterDays: z.number().nonnegative().optional(),
+});
+
 const configFileSchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
   docsRoot: z.string().optional(),
@@ -30,6 +43,9 @@ const configFileSchema = z.object({
     .regex(/^[A-Za-z0-9][\w.-]*$/)
     .optional(),
   repos: z.record(z.string(), repoOverrideSchema).optional(),
+  groups: z.array(groupSchema).optional(),
+  archive: archiveSchema.optional(),
+  readOnly: z.boolean().optional(),
 });
 
 export type ConfigFile = z.infer<typeof configFileSchema>;
@@ -40,6 +56,21 @@ export interface RepoOverride {
   prLinks?: PrLinkHost;
   aliases?: string[];
 }
+
+export interface RepoGroupConfig {
+  name: string;
+  owners: string[];
+  repos: string[];
+  default: boolean;
+}
+
+export interface ArchiveSettings {
+  auto: boolean;
+  staleAfterDays: number;
+  finishedAfterDays: number;
+}
+
+export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = { auto: true, staleAfterDays: 21, finishedAfterDays: 3 };
 
 export interface TimthinkConfig {
   configPath: string;
@@ -53,6 +84,9 @@ export interface TimthinkConfig {
   userName: string | null;
   launchdLabel: string;
   repos: Record<string, RepoOverride>;
+  groups: RepoGroupConfig[] | null;
+  archive: ArchiveSettings;
+  readOnly: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -98,6 +132,20 @@ function resolveRepoOverride(override: z.infer<typeof repoOverrideSchema>): Repo
   return resolved;
 }
 
+function resolveGroups(groups: ConfigFile["groups"]): RepoGroupConfig[] | null {
+  if (!groups || groups.length === 0) return null;
+  return groups.map((group) => ({
+    name: group.name,
+    owners: group.owners ?? [],
+    repos: group.repos ?? [],
+    default: group.default ?? false,
+  }));
+}
+
+function isTruthyFlag(value: string | undefined): boolean {
+  return value === "1" || value === "true";
+}
+
 export function loadConfig(env: Env = process.env): TimthinkConfig {
   const configPath = defaultConfigPath(env);
   const file = readConfigFile(configPath);
@@ -117,6 +165,9 @@ export function loadConfig(env: Env = process.env): TimthinkConfig {
     userName: file?.userName ?? null,
     launchdLabel: file?.launchdLabel ?? DEFAULT_LAUNCHD_LABEL,
     repos,
+    groups: resolveGroups(file?.groups),
+    archive: { ...DEFAULT_ARCHIVE_SETTINGS, ...file?.archive },
+    readOnly: isTruthyFlag(env.TIMTHINK_READONLY) || (file?.readOnly ?? false),
   };
 }
 
