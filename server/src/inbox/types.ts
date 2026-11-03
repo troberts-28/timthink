@@ -1,4 +1,5 @@
 import type { Attribution } from "../history/attribution.js";
+import type { QuestionOption } from "../markdown/questionBlock.js";
 
 export type InboxSection = "review" | "replies" | "questions" | "waiting" | "changed";
 
@@ -28,6 +29,12 @@ export interface InboxSessionHint {
   canResume: boolean;
 }
 
+export interface InboxQuestion {
+  prompt: string;
+  options: QuestionOption[];
+  details: string | null;
+}
+
 export interface InboxItem {
   id: string;
   section: InboxSection;
@@ -37,6 +44,7 @@ export interface InboxItem {
   detail: string | null;
   count: number;
   questionId: string | null;
+  question: InboxQuestion | null;
   attribution: Attribution | null;
   session: InboxSessionHint | null;
 }

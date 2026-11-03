@@ -22,7 +22,10 @@ async function renderLikeTheApp(markdown: string): Promise<string> {
   const visit = async (parent: Root | HastElement): Promise<void> => {
     for (const child of parent.children) {
       if (child.type !== "element") continue;
-      if (isCodeFence(child)) {
+      if (child.properties.dataFence === "question") {
+        child.children = child.children.filter((node) => node.type === "element");
+        await visit(child);
+      } else if (isCodeFence(child)) {
         const code = child.children
           .map((node) => (node.type === "text" ? node.value : ""))
           .join("")
@@ -99,6 +102,10 @@ const cases: Array<[string, string, string]> = [
   ["a single highlighted code token", "log", "log"],
   ["indented code block in a list", "test --run", "test --run"],
   ["across two paragraphs", "ends here.\nFinal paragraph two", "ends here.\n\nFinal paragraph two"],
+  ["question details paragraph", "on every request", "on every **request**"],
+  ["question details code path", "server/src/sessions.ts:12", "server/src/sessions.ts:12"],
+  ["question details section heading", "Recommendation", "Recommendation"],
+  ["question details recommendation", "revisit if restarts hurt", "revisit if restarts hurt"],
 ];
 
 describe("domRangeToSource / sourceToDomRange", () => {

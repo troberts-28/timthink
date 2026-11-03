@@ -21,12 +21,14 @@ export function rehypeHeadingIds(toc: TocEntry[]) {
   return (tree: Root): void => {
     const slugger = new GithubSlugger();
     visit(tree, "element", (node) => {
+      if (node.properties.dataQuestionDetails !== undefined) return SKIP;
       const depth = HEADING_DEPTH[node.tagName];
       if (!depth) return;
       const text = node.children.map(textContent).join("").trim();
       const id = slugger.slug(text || "section");
       node.properties = { ...node.properties, id };
       toc.push({ id, text, depth });
+      return;
     });
   };
 }
@@ -106,7 +108,7 @@ export function rehypeSourcePositions() {
   return (tree: Root, file: VFile): void => {
     const source = String(file);
     const wrappers = new WeakSet<Element>();
-    visit(tree, "element", (node) => {
+    const annotate = (node: Element) => {
       if (wrappers.has(node)) return SKIP;
       const range = positionOf(node);
       if (POSITIONED_TAGS.has(node.tagName) && range) {
@@ -117,13 +119,17 @@ export function rehypeSourcePositions() {
           const [contentStart, contentEnd] = fenceContentRange(source, range[0], range[1]);
           node.properties = { ...node.properties, dataCs: contentStart, dataCe: contentEnd };
         }
+        for (const child of node.children) {
+          if (child.type === "element") visit(child, "element", annotate);
+        }
         return SKIP;
       }
       node.children = node.children.map((child) =>
         child.type === "text" ? (wrapText(child, node, wrappers) ?? child) : child,
       );
       return;
-    });
+    };
+    visit(tree, "element", annotate);
   };
 }
 

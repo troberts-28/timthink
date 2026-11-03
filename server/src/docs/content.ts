@@ -1,11 +1,8 @@
 import { parseInfoString, scanFences } from "../markdown/fences.js";
-import { parseQuestionBlock } from "../markdown/questionBlock.js";
+import { parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
 import { docHash } from "../reviews/paths.js";
 
-export interface DocQuestion {
-  id: string | null;
-  prompt: string;
-  options: string[];
+export interface DocQuestion extends QuestionBlock {
   line: number;
 }
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_ARCHIVE_SETTINGS, type TimthinkConfig } from "../config.js";
 
 export const FIXTURE_DOCS = fileURLToPath(new URL("../../../fixtures/agent-docs", import.meta.url));
+export const FIXTURE_QUESTION_DOCS = fileURLToPath(new URL("../../../fixtures/question-blocks", import.meta.url));
 export const FIXTURE_CLAUDE_PROJECTS = fileURLToPath(new URL("../../../fixtures/claude-projects", import.meta.url));
 
 export async function makeTempDir(prefix = "timthink-test-"): Promise<string> {

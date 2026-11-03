@@ -1,4 +1,7 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { FIXTURE_QUESTION_DOCS } from "../test/fixtures.js";
 import { type CheckInput, checkDoc } from "./checkDoc.js";
 
 const existing = new Set(["/docs/acme/prototype.html", "/docs/acme/sibling.md", "/docs/acme/data/sample.json"]);
@@ -35,7 +38,13 @@ describe("checkDoc", () => {
       "```question id=gate",
       "Gate it?",
       "- Yes (recommended)",
+      "  Safe.",
       "- No",
+      "---",
+      "### Context",
+      "Why it matters.",
+      "### Recommendation",
+      "Yes.",
       "```",
       "",
       "```mermaid",
@@ -82,11 +91,60 @@ describe("checkDoc", () => {
       "- b",
       "```",
     ].join("\n");
+    const noDetails =
+      "warning question block has no details: add `---` then ### Context, ### Options and ### Recommendation";
     expect(await problems(raw)).toEqual([
       "1 error mark at most one option (recommended)",
+      `1 ${noDetails}`,
       '6 error question id "gate" is already used on line 1',
       "6 error question block needs at least two `- option` lines",
+      `6 ${noDetails}`,
       "10 error question block needs an id (```question id=some-id)",
+      `10 ${noDetails}`,
+    ]);
+  });
+
+  it("checks question details for a recommendation, nested fences and mermaid", async () => {
+    const raw = [
+      "# Plan",
+      "",
+      "```question id=gate",
+      "Gate it?",
+      "- Yes",
+      "- No",
+      "---",
+      "### Context",
+      "Only context.",
+      "```",
+      "",
+      "````question id=store",
+      "Where?",
+      "- Disk",
+      "- Memory",
+      "---",
+      "### Recommendation",
+      "```mermaid",
+      "flowchart LR",
+      "  A B",
+      "```",
+      "````",
+      "",
+      "```question id=early",
+      "Early?",
+      "- A",
+      "- B",
+      "---",
+      "### Recommendation",
+      "```ts",
+      "const x = 1;",
+      "```",
+      "```",
+    ].join("\n");
+    expect(await problems(raw)).toEqual([
+      "7 warning question details have no ### Recommendation",
+      "20 error mermaid: Expecting an arrow",
+      "30 error this fence ends the question block early: open the question with more backticks (````question)",
+      "33 error code fence is never closed",
     ]);
   });
 
@@ -113,6 +171,17 @@ describe("checkDoc", () => {
       "3 error link target diagrams/none.png doesn't exist",
       "4 error link target ../acme/also-gone.md doesn't exist",
       "5 error code fence is never closed",
+    ]);
+  });
+
+  it("passes the rich question fixture, warning only about its legacy block", async () => {
+    const raw = await readFile(
+      path.join(FIXTURE_QUESTION_DOCS, "acme-api/2026-10-28-webhook-delivery-plan.md"),
+      "utf8",
+    );
+    const legacyLine = raw.split("\n").indexOf("```question id=dashboard-placement") + 1;
+    expect(await problems(raw)).toEqual([
+      `${legacyLine} warning question block has no details: add \`---\` then ### Context, ### Options and ### Recommendation`,
     ]);
   });
 });

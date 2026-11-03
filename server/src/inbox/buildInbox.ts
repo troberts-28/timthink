@@ -95,6 +95,7 @@ function item(
     detail: null,
     count: 1,
     questionId: null,
+    question: null,
     attribution: null,
     session: null,
     ...fields,
@@ -147,6 +148,7 @@ function itemsForDoc(input: InboxDocInput, context: InboxInput): InboxItem[] {
           at: mtime,
           detail: clip(question.prompt) || null,
           questionId: question.id,
+          question: { prompt: question.prompt, options: question.options, details: question.details?.markdown ?? null },
         }),
       );
     }

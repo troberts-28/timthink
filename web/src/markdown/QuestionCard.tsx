@@ -1,15 +1,23 @@
-import type { Answer } from "@timthink/server";
-import { parseQuestionBlock, type QuestionBlock, splitRecommended } from "@timthink/server/shared";
+import type { Answer, Thread } from "@timthink/server";
+import { parseQuestionBlock, type QuestionBlock, type QuestionOption } from "@timthink/server/shared";
 import { Check, CircleHelp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { type ReviewContextValue, useReviewContext } from "../review/ReviewContext";
 import { answersFor } from "../review/reviewModel";
 import { InlineText } from "./InlineText";
+import { QuestionContext } from "./QuestionContext";
+
+interface SourceRange {
+  start: number;
+  end: number;
+}
 
 interface QuestionCardProps {
   code: string;
   attributes: Record<string, string>;
   sourceProps: Record<string, string>;
+  details: ReactNode | null;
+  detailsRange: SourceRange | null;
 }
 
 type AnswerStatus = "unanswered" | "draft" | "sent" | "answered";
@@ -40,18 +48,61 @@ function OptionMarker({ selected }: { selected: boolean }) {
   );
 }
 
-function StaticOptions({ question }: { question: QuestionBlock }) {
+export function OptionText({ option }: { option: QuestionOption }) {
+  return (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="block">
+          <InlineText text={option.label} />
+        </span>
+        {option.summary ? (
+          <span className="question-option-summary">
+            <InlineText text={option.summary} />
+          </span>
+        ) : null}
+      </span>
+      {option.recommended ? <span className="chip chip-accent question-recommended">Recommended</span> : null}
+    </>
+  );
+}
+
+export function StaticOptions({ options }: { options: readonly QuestionOption[] }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {question.options.map((option) => {
-        const { text, recommended } = splitRecommended(option);
+      {options.map((option) => (
+        <li key={option.label} className="question-option m-0">
+          <OptionMarker selected={false} />
+          <OptionText option={option} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function InteractiveOptions({
+  question,
+  selected,
+  onPick,
+}: {
+  question: QuestionBlock;
+  selected: number | null;
+  onPick: (index: number) => void;
+}) {
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Options">
+      {question.options.map((option, index) => {
+        const isSelected = selected === index;
         return (
-          <li key={option} className="question-option m-0">
-            <OptionMarker selected={false} />
-            <span className="min-w-0 flex-1">
-              <InlineText text={text} />
-            </span>
-            {recommended ? <span className="chip chip-ok-soft mt-px">Recommended</span> : null}
+          <li key={option.label} className="m-0">
+            <button
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onPick(index)}
+              className={`question-option is-interactive ${isSelected ? "is-selected" : ""}`}
+            >
+              <OptionMarker selected={isSelected} />
+              <OptionText option={option} />
+            </button>
           </li>
         );
       })}
@@ -62,9 +113,11 @@ function StaticOptions({ question }: { question: QuestionBlock }) {
 function InteractiveAnswer({
   question,
   review,
+  context,
 }: {
   question: QuestionBlock & { id: string };
   review: ReviewContextValue;
+  context: ReactNode;
 }) {
   const { draft, latest } = answersFor(review.review, question.id);
   const shown = draft ?? latest;
@@ -80,7 +133,7 @@ function InteractiveAnswer({
       questionId: question.id,
       prompt: question.prompt,
       choice,
-      choiceText: choice === null ? null : (splitRecommended(question.options[choice] ?? "").text ?? null),
+      choiceText: choice === null ? null : (question.options[choice]?.label ?? null),
       note: nextNote,
     });
 
@@ -96,28 +149,8 @@ function InteractiveAnswer({
 
   return (
     <>
-      <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Options">
-        {question.options.map((option, index) => {
-          const { text, recommended } = splitRecommended(option);
-          const isSelected = selected === index;
-          return (
-            <li key={option} className="m-0">
-              <button
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => pick(index)}
-                className={`question-option is-interactive ${isSelected ? "is-selected" : ""}`}
-              >
-                <OptionMarker selected={isSelected} />
-                <span className="min-w-0 flex-1">
-                  <InlineText text={text} />
-                </span>
-                {recommended ? <span className="chip chip-ok-soft mt-px">Recommended</span> : null}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <InteractiveOptions question={question} selected={selected} onPick={pick} />
+      {context}
       <textarea
         rows={note ? 2 : 1}
         value={note}
@@ -147,10 +180,44 @@ function InteractiveAnswer({
   );
 }
 
-export function QuestionCard({ code, attributes, sourceProps }: QuestionCardProps) {
+function within(range: SourceRange, start: number, end: number): boolean {
+  return start < range.end && end > range.start;
+}
+
+function threadInside(range: SourceRange | null, threads: readonly Thread[], id: string | null): boolean {
+  if (!range) return false;
+  return threads.some(
+    (thread) =>
+      (id === null ? thread.status === "open" : thread.id === id) &&
+      within(range, thread.anchor.start, thread.anchor.end),
+  );
+}
+
+function useContextOpen(review: ReviewContextValue | null, range: SourceRange | null) {
+  const [open, setOpen] = useState(false);
+  const threads = review?.review?.threads ?? [];
+  const current = review?.anchorsCurrent ?? false;
+  const hasOpenThreads = current && threadInside(range, threads, null);
+  const activeInside = current && review?.activeThreadId ? threadInside(range, threads, review.activeThreadId) : false;
+  const composer = review?.composer ?? null;
+  const composing = range !== null && composer !== null && within(range, composer.start, composer.end);
+  const reveal = hasOpenThreads || activeInside || composing;
+  useEffect(() => {
+    if (reveal) setOpen(true);
+  }, [reveal]);
+  return [open, setOpen] as const;
+}
+
+export function QuestionCard({ code, attributes, sourceProps, details, detailsRange }: QuestionCardProps) {
   const question = parseQuestionBlock(code, attributes);
   const review = useReviewContext();
+  const [contextOpen, setContextOpen] = useContextOpen(review, detailsRange);
   const answered = review && question.id ? answersFor(review.review, question.id).latest?.ack : null;
+  const context = details ? (
+    <QuestionContext open={contextOpen} onToggle={() => setContextOpen((value) => !value)}>
+      {details}
+    </QuestionContext>
+  ) : null;
   return (
     <section
       id={question.id ? `question-${question.id}` : undefined}
@@ -178,9 +245,12 @@ export function QuestionCard({ code, attributes, sourceProps }: QuestionCardProp
           <InlineText text={question.prompt} />
         </p>
         {review && question.id ? (
-          <InteractiveAnswer question={{ ...question, id: question.id }} review={review} />
+          <InteractiveAnswer question={{ ...question, id: question.id }} review={review} context={context} />
         ) : (
-          <StaticOptions question={question} />
+          <>
+            <StaticOptions options={question.options} />
+            {context}
+          </>
         )}
       </div>
     </section>

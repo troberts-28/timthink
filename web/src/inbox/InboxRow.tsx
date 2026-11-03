@@ -10,6 +10,7 @@ import { relativeTime } from "../lib/format";
 import { docHref } from "../lib/routes";
 import { useToast } from "../lib/toast";
 import { reviewCommand } from "../review/handOff";
+import { InboxQuestion } from "./InboxQuestion";
 import { reasonChip } from "./inboxModel";
 
 const COPIED_FEEDBACK_MS = 1500;
@@ -120,6 +121,7 @@ function actionsFor(item: InboxItem): ReactNode {
 }
 
 function Detail({ item }: { item: InboxItem }) {
+  if (item.question) return <InboxQuestion question={item.question} doc={item.doc} />;
   if (!item.detail) return null;
   if (item.section === "questions") {
     return <p className="m-0 mt-1.5 line-clamp-2 text-ui text-ink">{item.detail}</p>;

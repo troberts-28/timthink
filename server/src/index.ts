@@ -62,6 +62,7 @@ export type {
   InboxAttention,
   InboxDoc,
   InboxItem,
+  InboxQuestion,
   InboxReason,
   InboxResponse,
   InboxSection,

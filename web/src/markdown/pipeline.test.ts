@@ -90,4 +90,86 @@ describe("markdownToHast", () => {
     const sliced = spans.map((node) => markdown.slice(Number(node.properties.dataS), Number(node.properties.dataE)));
     expect(sliced).toEqual(["See ", "PR 4211", " now"]);
   });
+
+  describe("question details", () => {
+    const markdown = [
+      "## Decisions",
+      "",
+      "````question id=gate",
+      "Gate it?",
+      "- Gate (recommended)",
+      "  Safer.",
+      "- Ship",
+      "---",
+      "### Context",
+      "Reads `src/a.ts:42`, see PR 4211.",
+      "",
+      "### Recommendation",
+      "Gate **it** now.",
+      "",
+      "```mermaid",
+      "flowchart LR",
+      "  A --> B",
+      "```",
+      "````",
+      "",
+      "## After",
+      "",
+    ].join("\n");
+
+    it("renders details inside the fence, grouped into labelled sections", () => {
+      const nodes = render(markdown);
+      const fence = nodes.find((node) => node.properties.dataFence === "question");
+      const details = fence ? elements(fence).find((node) => node.properties.dataQuestionDetails !== undefined) : null;
+      const sections = details ? elements(details).filter((node) => node.tagName === "section") : [];
+      expect(sections.map((node) => node.properties.dataQuestionSection)).toEqual(["context", "recommendation"]);
+      const inner = details ? elements(details) : [];
+      expect(inner.some((node) => node.properties.dataCodeRef === "src/a.ts:42")).toBe(true);
+      expect(inner.some((node) => node.properties.dataPr === "true")).toBe(true);
+      expect(inner.some((node) => node.properties.dataFence === "mermaid")).toBe(true);
+      expect(markdown.slice(Number(fence?.properties.dataDetailsStart), Number(fence?.properties.dataDetailsEnd))).toBe(
+        markdown.split("---\n")[1]?.replace(/\n````[\s\S]*$/, ""),
+      );
+    });
+
+    it("keeps details headings out of the TOC and gives them no ids", () => {
+      const { hast, toc } = markdownToHast(markdown, options);
+      expect(toc.map((entry) => entry.text)).toEqual(["Decisions", "After"]);
+      const h3s = elements(hast).filter((node) => node.tagName === "h3");
+      expect(h3s.map((node) => node.properties.id)).toEqual([undefined, undefined]);
+    });
+
+    it("maps text in the details back to its source offsets", () => {
+      const spans = render(markdown).filter((node) => node.tagName === "span" && node.properties.dataS !== undefined);
+      const sliced = spans.map((node) => markdown.slice(Number(node.properties.dataS), Number(node.properties.dataE)));
+      expect(sliced).toEqual([
+        "Decisions",
+        "Context",
+        "Reads ",
+        "`src/a.ts:42`",
+        ", see ",
+        "PR 4211",
+        ".",
+        "Recommendation",
+        "Gate ",
+        "it",
+        " now.",
+        "After",
+      ]);
+      const mermaid = render(markdown).find((node) => node.properties.dataFence === "mermaid");
+      expect(markdown.slice(Number(mermaid?.properties.dataCs), Number(mermaid?.properties.dataCe))).toBe(
+        "flowchart LR\n  A --> B\n",
+      );
+    });
+
+    it("renders details without source offsets when the fence isn't verbatim in the source", () => {
+      const indented = "- item\n\n  ```question id=x\n  Pick?\n  - A\n  - B\n  ---\n  Some context.\n  ```\n";
+      const nodes = render(indented);
+      const fence = nodes.find((node) => node.properties.dataFence === "question");
+      const paragraph = fence ? elements(fence).find((node) => node.tagName === "p") : null;
+      expect(paragraph).toBeDefined();
+      expect(paragraph?.properties.dataS).toBeUndefined();
+      expect(fence?.properties.dataDetailsStart).toBeUndefined();
+    });
+  });
 });

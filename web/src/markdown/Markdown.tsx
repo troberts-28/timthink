@@ -1,7 +1,7 @@
 import { parseInfoString } from "@timthink/server/shared";
-import type { Root } from "hast";
+import type { Element, Root } from "hast";
 import type { Components } from "hast-util-to-jsx-runtime";
-import { type ComponentProps, createElement, memo, type ReactNode } from "react";
+import { Children, type ComponentProps, createElement, isValidElement, memo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { RemovedGhost } from "../changes/RemovedGhost";
 import { docHref, rawFileHref, resolveRelative } from "../lib/routes";
@@ -27,14 +27,34 @@ function numericAttribute(props: object, name: string): number | null {
   return value === undefined ? null : Number(value);
 }
 
+function detailsRange(props: object): { start: number; end: number } | null {
+  const start = numericAttribute(props, "data-details-start");
+  const end = numericAttribute(props, "data-details-end");
+  return start !== null && end !== null ? { start, end } : null;
+}
+
+function QuestionFence({ meta, ...props }: ComponentProps<"div"> & { meta: string }) {
+  const children = Children.toArray(props.children);
+  const code = textOf(children.filter((child) => typeof child === "string")).replace(/\n$/, "");
+  const details = children.filter(isValidElement);
+  return (
+    <QuestionCard
+      code={code}
+      attributes={parseInfoString(meta)}
+      sourceProps={sourceAttributes(props)}
+      details={details.length > 0 ? details : null}
+      detailsRange={detailsRange(props)}
+    />
+  );
+}
+
 function Fence(props: ComponentProps<"div">) {
   const lang = dataAttribute(props, "data-fence") ?? "";
   const meta = dataAttribute(props, "data-meta") ?? "";
+  if (lang === "question") return <QuestionFence meta={meta} {...props} />;
   const code = textOf(props.children).replace(/\n$/, "");
   const sourceProps = sourceAttributes(props);
   if (lang === "mermaid") return <MermaidDiagram code={code} sourceProps={sourceProps} />;
-  if (lang === "question")
-    return <QuestionCard code={code} attributes={parseInfoString(meta)} sourceProps={sourceProps} />;
   if (lang === "demo") return <DemoEmbed attributes={parseInfoString(meta)} sourceProps={sourceProps} />;
   return (
     <CodeBlock
@@ -158,4 +178,8 @@ const components: Partial<Components> = {
 
 export const MarkdownBody = memo(function MarkdownBody({ hast }: { hast: Root }) {
   return <div className="plan-body">{hastToReact(hast, components)}</div>;
+});
+
+export const MarkdownElement = memo(function MarkdownElement({ element }: { element: Element }) {
+  return hastToReact({ type: "root", children: [element] }, components);
 });

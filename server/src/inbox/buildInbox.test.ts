@@ -88,7 +88,16 @@ function inbox(docs: InboxDocInput[], threadReads: Record<string, string> = {}) 
   });
 }
 
-const question: DocQuestion = { id: "gate", prompt: "Should writes be gated?", options: ["Yes", "No"], line: 12 };
+const question: DocQuestion = {
+  id: "gate",
+  prompt: "Should writes be gated?",
+  options: [
+    { label: "Yes", summary: "Safer rollout.", recommended: true },
+    { label: "No", summary: null, recommended: false },
+  ],
+  details: { markdown: "### Recommendation\nGate it.", offset: 40, lineIndex: 4 },
+  line: 12,
+};
 
 describe("buildInbox", () => {
   it("is empty when everything has been seen", () => {
@@ -145,7 +154,13 @@ describe("buildInbox", () => {
     ]);
     const replies = result.items.find((item) => item.reason === "claude-replied");
     expect(replies).toMatchObject({ count: 2, detail: "Because the feed needs it.", at: "2026-11-02T09:30:00.000Z" });
-    expect(result.items.find((item) => item.section === "questions")?.detail).toBe("Should writes be gated?");
+    const open = result.items.find((item) => item.section === "questions");
+    expect(open?.detail).toBe("Should writes be gated?");
+    expect(open?.question).toEqual({
+      prompt: "Should writes be gated?",
+      options: question.options,
+      details: "### Recommendation\nGate it.",
+    });
     expect(result.items.find((item) => item.section === "waiting")?.session?.id).toBe("s-1");
     expect(result.attention).toEqual({ total: 4, byRepo: { acme: 2, garden: 2 } });
   });

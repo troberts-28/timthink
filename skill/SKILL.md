@@ -33,21 +33,39 @@ Leave out fields you don't know. `status` is one of `draft`, `review`, `approved
 **Content conventions.**
 - Code paths in backticks, with a line number when you mean a specific place: `src/server/app.ts:42`. They become editor links.
 - Diagrams in ` ```mermaid ` blocks.
-- A genuine open decision goes in a `question` block, one per decision, with a stable `id`. Mark at most one option `(recommended)`:
+- A genuine open decision goes in a `question` block, one per decision, with a stable `id`. The user decides from the block alone, so every block MUST carry its decision context:
+  - **Options**: each `- option` line gets an indented line under it with a one-line trade-off. Mark at most one option `(recommended)`.
+  - **Details**: after the options, a line that is exactly `---`, then three sections:
+    - `### Context`: what the problem is, why it matters now and what it affects, citing code paths.
+    - `### Options`: each option with concrete pros, cons, effort and risk.
+    - `### Recommendation`: your pick, why, and what would change your mind.
 
   ````markdown
   ```question id=activity-gate
   Should writes to the activity table be gated?
-  - Gate behind the release flag
+  - Gate behind `release_activity_feed`
+    Safer rollout, but history only starts when the flag flips.
   - Dark-write from day one (recommended)
+    History builds up before the UI ships; tiny write cost.
+  ---
+  ### Context
+  The feed UI ships in two weeks and reads history from `activity_events` (`src/feed/activityRepo.ts:40`). Without history it launches empty.
+
+  ### Options
+  **Gate it.** Pros: no writes until we're ready to ship. Cons: the feed starts empty for everyone. Effort: small. Risk: low.
+
+  **Dark-write.** Pros: two weeks of history at launch. Cons: about 1ms extra per write and a table nothing reads yet. Effort: small. Risk: low; writes are fire-and-forget.
+
+  ### Recommendation
+  Dark-write from day one: an empty feed at launch is the bigger risk. Gate it instead if write latency on the hot path becomes a concern.
   ```
   ````
 
-  Don't use question blocks for things you can decide yourself.
+  The details are ordinary markdown (code paths, PR links, lists, `mermaid`). If they contain a fenced code block, open the question with four backticks (````` ````question `````) so the inner fence doesn't close it. Don't use question blocks for things you can decide yourself.
 - Richer prototypes go in a sibling `.html` file embedded with ` ```demo src=prototype.html ` .
 
 **Finishing.**
-1. Run `timthink check <path-to-plan>`. It checks frontmatter, `question`/`mermaid`/`demo` blocks and relative links, printing problems with line numbers. Fix every error and re-run until it passes before you report back.
+1. Run `timthink check <path-to-plan>`. It checks frontmatter, `question`/`mermaid`/`demo` blocks and relative links, printing problems with line numbers. Fix every error and every question-block warning, and re-run until it passes before you report back.
 2. When the plan wants input, run `timthink url <path-to-plan>` and end your message with the URL it prints.
 
 ## `/timthink review [doc]`

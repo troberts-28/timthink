@@ -39,3 +39,16 @@ console.log(answer)
 Final paragraph one ends here.
 
 Final paragraph two starts here.
+
+```question id=store
+Where should sessions live?
+- In memory (recommended)
+  Fast, but lost on restart.
+- On disk
+---
+### Context
+Sessions are read in `server/src/sessions.ts:12` on every **request**.
+
+### Recommendation
+Keep them in memory; revisit if restarts hurt.
+```

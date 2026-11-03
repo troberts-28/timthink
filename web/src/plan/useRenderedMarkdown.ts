@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { repoDocs } from "../lib/indexNav";
 import type { RepoLinkTarget } from "../markdown/linkPatterns";
 import { markdownToHast, type RenderedMarkdown } from "../markdown/pipeline";
+import type { AutoLinkOptions } from "../markdown/remarkAutoLinks";
 
 function linkTargets(index: DocsIndex | undefined): ReadonlyMap<string, RepoLinkTarget> {
   const targets = new Map<string, RepoLinkTarget>();
@@ -12,17 +13,26 @@ function linkTargets(index: DocsIndex | undefined): ReadonlyMap<string, RepoLink
   return targets;
 }
 
+export function useAutoLinkOptions(
+  docPath: string,
+  repo: RepoIndex | undefined,
+  index: DocsIndex | undefined,
+): AutoLinkOptions {
+  const github = repo?.github ?? null;
+  const prLinks = repo?.prLinks ?? "graphite";
+  const repoDocPaths = useMemo(() => (repo ? repoDocs(repo).map((entry) => entry.path) : []), [repo]);
+  const knownRepos = useMemo(() => linkTargets(index), [index]);
+  return useMemo(
+    () => ({ github, prLinks, docPath, repoDocPaths, knownRepos }),
+    [github, prLinks, docPath, repoDocPaths, knownRepos],
+  );
+}
+
 export function useRenderedMarkdown(
   doc: DocDetail | undefined,
   repo: RepoIndex | undefined,
   index: DocsIndex | undefined,
 ): RenderedMarkdown | null {
-  const github = repo?.github ?? null;
-  const prLinks = repo?.prLinks ?? "graphite";
-  const repoDocPaths = useMemo(() => (repo ? repoDocs(repo).map((entry) => entry.path) : []), [repo]);
-  const knownRepos = useMemo(() => linkTargets(index), [index]);
-  return useMemo(() => {
-    if (!doc) return null;
-    return markdownToHast(doc.raw, { github, prLinks, docPath: doc.summary.path, repoDocPaths, knownRepos });
-  }, [doc, github, prLinks, repoDocPaths, knownRepos]);
+  const options = useAutoLinkOptions(doc?.summary.path ?? "", repo, index);
+  return useMemo(() => (doc ? markdownToHast(doc.raw, options) : null), [doc, options]);
 }

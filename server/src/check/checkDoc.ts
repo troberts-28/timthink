@@ -1,7 +1,7 @@
 import path from "node:path";
 import { isMap, isScalar, LineCounter, parseDocument } from "yaml";
 import { type Fence, parseInfoString, scanFences } from "../markdown/fences.js";
-import { parseQuestionBlock, splitRecommended } from "../markdown/questionBlock.js";
+import { detailsSections, parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
 
 export const KNOWN_STATUSES = ["draft", "review", "approved", "in-progress", "done", "abandoned"] as const;
 
@@ -112,6 +112,32 @@ function fieldProblem(key: string, value: unknown): Omit<CheckProblem, "line"> |
   }
 }
 
+function checkQuestionDetails(question: QuestionBlock, fence: Fence): CheckProblem[] {
+  const details = question.details;
+  if (!details) {
+    return [
+      {
+        line: fence.line,
+        severity: "warning",
+        message: "question block has no details: add `---` then ### Context, ### Options and ### Recommendation",
+      },
+    ];
+  }
+  const dividerLine = fence.contentLine + details.lineIndex - 1;
+  const problems: CheckProblem[] = [];
+  if (!detailsSections(details.markdown).includes("recommendation")) {
+    problems.push({ line: dividerLine, severity: "warning", message: "question details have no ### Recommendation" });
+  }
+  for (const nested of scanFences(details.markdown).filter((candidate) => !candidate.closed)) {
+    problems.push({
+      line: dividerLine + nested.line,
+      severity: "error",
+      message: `this fence ends the question block early: open the question with more backticks (${"`".repeat(4)}question)`,
+    });
+  }
+  return problems;
+}
+
 function checkQuestions(fences: readonly Fence[]): CheckProblem[] {
   const problems: CheckProblem[] = [];
   const seen = new Map<string, number>();
@@ -133,16 +159,31 @@ function checkQuestions(fences: readonly Fence[]): CheckProblem[] {
     if (question.options.length < 2) {
       problems.push({ line, severity: "error", message: "question block needs at least two `- option` lines" });
     }
-    const recommended = question.options.filter((option) => splitRecommended(option).recommended).length;
-    if (recommended > 1) {
+    if (question.options.filter((option) => option.recommended).length > 1) {
       problems.push({ line, severity: "error", message: "mark at most one option (recommended)" });
     }
+    problems.push(...checkQuestionDetails(question, fence));
   }
   return problems;
 }
 
+function questionDetailFences(fences: readonly Fence[]): Fence[] {
+  return fences
+    .filter((fence) => fence.lang === "question")
+    .flatMap((fence) => {
+      const details = parseQuestionBlock(fence.content, {}).details;
+      if (!details) return [];
+      const lineShift = fence.contentLine + details.lineIndex - 1;
+      return scanFences(details.markdown).map((nested) => ({
+        ...nested,
+        line: nested.line + lineShift,
+        contentLine: nested.contentLine + lineShift,
+      }));
+    });
+}
+
 async function checkMermaid(fences: readonly Fence[], input: CheckInput, notes: string[]): Promise<CheckProblem[]> {
-  const diagrams = fences.filter((fence) => fence.lang === "mermaid");
+  const diagrams = [...fences, ...questionDetailFences(fences)].filter((fence) => fence.lang === "mermaid");
   if (diagrams.length === 0) return [];
   if (!input.parseMermaid) {
     notes.push(`Skipped ${diagrams.length} mermaid diagram(s): the mermaid parser isn't available.`);
