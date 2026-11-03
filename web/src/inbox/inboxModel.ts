@@ -10,6 +10,7 @@ export const INBOX_SECTIONS: readonly SectionSpec[] = [
   { id: "review", title: "Needs your review", hint: "Plans asking for your input" },
   { id: "replies", title: "Claude replied", hint: "New replies in your threads" },
   { id: "questions", title: "Open questions", hint: "Decisions waiting on an answer" },
+  { id: "prs", title: "Pull requests", hint: "PRs from your plans that need you, and plans they finished" },
   { id: "waiting", title: "Waiting on Claude", hint: "Reviews you've sent" },
   { id: "changed", title: "Changed since you last looked", hint: "Edited in the last 14 days" },
 ];
@@ -33,10 +34,30 @@ export function reasonChip(item: InboxItem): ReasonChip {
       return { label: "Review sent", className: "chip-info" };
     case "new":
       return { label: "New plan", className: "chip-ok-soft" };
+    case "ci-failing":
+      return { label: item.count === 1 ? "CI failing" : `CI failing on ${item.count} PRs`, className: "chip-bad" };
+    case "changes-requested":
+      return { label: "Changes requested", className: "chip-bad" };
+    case "review-comments":
+      return {
+        label: item.count === 1 ? "Unresolved comments" : `Unresolved comments on ${item.count} PRs`,
+        className: "chip-accent",
+      };
+    case "pr-closed-unmerged":
+      return { label: "Closed without merging", className: "chip-neutral" };
+    case "plan-completed":
+      return { label: "All PRs merged", className: "chip-ok-soft" };
     case "edited": {
       const by = item.attribution?.kind;
       return {
-        label: by === "claude" ? "Edited by Claude" : by === "human" ? "Edited by you" : "Edited",
+        label:
+          by === "claude"
+            ? "Edited by Claude"
+            : by === "human"
+              ? "Edited by you"
+              : by === "timthink"
+                ? "Edited by timthink"
+                : "Edited",
         className: "chip-neutral",
       };
     }

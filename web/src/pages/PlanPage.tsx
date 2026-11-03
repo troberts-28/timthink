@@ -29,7 +29,7 @@ import { useActiveHeading } from "../plan/useActiveHeading";
 import { useArchiveShortcut } from "../plan/useArchiveShortcut";
 import { usePlanArchive } from "../plan/usePlanArchive";
 import { useRenderedMarkdown } from "../plan/useRenderedMarkdown";
-import { PrStatusProvider } from "../prs/PrStatusContext";
+import { PrStatusProvider, useMergedOpenTaskCount } from "../prs/PrStatusContext";
 import { ReviewButton, ReviewChip } from "../review/ReviewChip";
 import { ReviewProvider } from "../review/ReviewContext";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
@@ -50,14 +50,17 @@ function PaperSkeleton() {
   );
 }
 
-function TaskSummary({ doc }: { doc: DocDetail }) {
-  const { tasks } = doc.summary;
-  if (tasks.total === 0) return null;
+function TaskSummary({ doc, hast }: { doc: DocDetail; hast: Root | null }) {
+  const merged = useMergedOpenTaskCount(hast);
+  const { total } = doc.summary.tasks;
+  if (total === 0) return null;
+  const tasks = { total, done: Math.min(total, doc.summary.tasks.done + merged) };
   return (
     <div className="mt-6 flex items-center gap-3">
       <ProgressBar tasks={tasks} className="flex-1" />
       <span className="flex-none text-meta text-ink-64 tabular-nums">
-        {tasks.done} of {pluralise(tasks.total, "task")} done
+        {tasks.done} of {pluralise(total, "task")} done
+        {merged > 0 ? ` (${merged} by merged PRs)` : ""}
       </span>
     </div>
   );
@@ -65,6 +68,7 @@ function TaskSummary({ doc }: { doc: DocDetail }) {
 
 interface PaperProps {
   doc: DocDetail;
+  hast: Root | null;
   repo: RepoIndex | undefined;
   body: ReactNode;
   bodyRef: (element: HTMLDivElement | null) => void;
@@ -72,7 +76,7 @@ interface PaperProps {
   banner: ReactNode;
 }
 
-function Paper({ doc, repo, body, bodyRef, headerActions, banner }: PaperProps) {
+function Paper({ doc, hast, repo, body, bodyRef, headerActions, banner }: PaperProps) {
   const stripPrefix = doc.summary.relPath.includes("/") ? `${doc.summary.relPath.split("/")[0]}/` : "";
   return (
     <>
@@ -94,7 +98,7 @@ function Paper({ doc, repo, body, bodyRef, headerActions, banner }: PaperProps) 
             <PlanMeta doc={doc.summary} github={repo?.github ?? null} prLinks={repo?.prLinks ?? "graphite"} />
           </div>
           <ReviewChipRow />
-          <TaskSummary doc={doc} />
+          <TaskSummary doc={doc} hast={hast} />
         </header>
         <div ref={bodyRef}>{body}</div>
         {doc.attachments.length > 0 ? (
@@ -151,11 +155,7 @@ function PlanPaper({
   useScrollToHash(rendered !== null);
   const archive = usePlanArchive(doc.summary.path);
   useArchiveShortcut(archive);
-  const body = rendered ? (
-    <PrStatusProvider hast={rendered.hast}>
-      <ChangesAwareBody hast={rendered.hast} />
-    </PrStatusProvider>
-  ) : null;
+  const body = rendered ? <ChangesAwareBody hast={rendered.hast} /> : null;
   const [buildOpen, setBuildOpen] = useState(false);
   const openBuild = useCallback(() => setBuildOpen(true), []);
   const closeBuild = useCallback(() => setBuildOpen(false), []);
@@ -168,28 +168,31 @@ function PlanPaper({
           <TopBarSlot>
             <ContentsMenu toc={toc} activeId={activeId} />
           </TopBarSlot>
-          <ReviewWorkspace
-            headerActions={
-              <>
-                <HistoryMenu currentHash={doc.hash} />
-                <ReviewButton />
-                <BuildButton status={doc.summary.status} onClick={openBuild} />
-                <PlanFileActions docPath={doc.summary.path} raw={doc.raw} />
-                <ArchiveButton plan={archive} />
-              </>
-            }
-            renderPaper={({ bodyRef, headerActions }) => (
-              <Paper
-                doc={doc}
-                repo={repo}
-                body={body}
-                bodyRef={bodyRef}
-                headerActions={headerActions}
-                banner={<ArchiveBanner plan={archive} />}
-              />
-            )}
-            renderOverlay={(slots) => <ChangesLayer {...slots} />}
-          />
+          <PrStatusProvider hast={rendered?.hast ?? null}>
+            <ReviewWorkspace
+              headerActions={
+                <>
+                  <HistoryMenu currentHash={doc.hash} />
+                  <ReviewButton />
+                  <BuildButton status={doc.summary.status} onClick={openBuild} />
+                  <PlanFileActions docPath={doc.summary.path} raw={doc.raw} />
+                  <ArchiveButton plan={archive} />
+                </>
+              }
+              renderPaper={({ bodyRef, headerActions }) => (
+                <Paper
+                  doc={doc}
+                  hast={rendered?.hast ?? null}
+                  repo={repo}
+                  body={body}
+                  bodyRef={bodyRef}
+                  headerActions={headerActions}
+                  banner={<ArchiveBanner plan={archive} />}
+                />
+              )}
+              renderOverlay={(slots) => <ChangesLayer {...slots} />}
+            />
+          </PrStatusProvider>
         </ChangesProvider>
       </ReviewProvider>
     </PlanContext.Provider>

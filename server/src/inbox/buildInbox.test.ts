@@ -75,6 +75,9 @@ function doc(path: string, overrides: Partial<InboxDocInput> = {}): InboxDocInpu
     seen: { hash: "current", at: "2026-11-01T11:00:00.000Z", previous: null },
     latestChange: null,
     session: null,
+    prSignals: [],
+    completion: null,
+    buildSession: null,
     ...overrides,
   };
 }
@@ -239,5 +242,33 @@ describe("buildInbox", () => {
     expect(inbox([old, created, legacy]).items.map((item) => [item.reason, item.doc.path])).toEqual([
       ["new", "acme/created.md"],
     ]);
+  });
+
+  it("lists PR signals for open plans and the completion until the plan is viewed", () => {
+    const signal = { reason: "ci-failing" as const, numbers: [5], detail: "#5: test", at: "2026-11-02T10:00:00.000Z" };
+    const hint = { id: "s-2", title: "Build", live: true, canFocus: true, canResume: true };
+    const open = doc("acme-api/open.md", { prSignals: [signal], buildSession: hint });
+    const finished = doc("acme-api/done.md", {
+      summary: { ...summary("acme-api/done.md"), status: "done" },
+      prSignals: [signal],
+      completion: { marker: "5,6", at: "2026-11-02T12:00:00.000Z" },
+    });
+    const items = buildInbox({
+      docs: [open, finished],
+      seenInitialisedAt: "2026-10-01T00:00:00.000Z",
+      threadReadAt: () => null,
+      now: NOW,
+    }).items.filter((entry) => entry.section === "prs");
+    expect(items.map((entry) => [entry.doc.path, entry.reason, entry.prs, entry.session?.id ?? null])).toEqual([
+      ["acme-api/done.md", "plan-completed", [], null],
+      ["acme-api/open.md", "ci-failing", [5], "s-2"],
+    ]);
+    const viewed = doc("acme-api/done.md", {
+      completion: { marker: "5", at: "2026-11-01T09:00:00.000Z" },
+    });
+    expect(
+      buildInbox({ docs: [viewed], seenInitialisedAt: "2026-10-01T00:00:00.000Z", threadReadAt: () => null, now: NOW })
+        .items,
+    ).toEqual([]);
   });
 });

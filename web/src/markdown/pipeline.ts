@@ -9,6 +9,7 @@ import {
   rehypeHeadingIds,
   rehypeSectionRanges,
   rehypeSourcePositions,
+  rehypeTaskPrs,
   rehypeUnwrapFences,
   type TocEntry,
 } from "./rehypePlugins";
@@ -35,7 +36,8 @@ export function markdownToHast(raw: string, options: AutoLinkOptions): RenderedM
     .use(rehypeQuestionDetails, options)
     .use(rehypeHeadingIds, toc)
     .use(rehypeSourcePositions)
-    .use(rehypeSectionRanges);
+    .use(rehypeSectionRanges)
+    .use(rehypeTaskPrs);
   const hast = processor.runSync(processor.parse(raw), raw);
   return { hast, toc };
 }

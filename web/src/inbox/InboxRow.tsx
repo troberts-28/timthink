@@ -1,9 +1,10 @@
 import type { InboxItem, SessionActionResponse } from "@timthink/server";
-import { Check, Copy, LoaderCircle, Play, SquareTerminal } from "lucide-react";
+import { Check, Copy, LoaderCircle, Play, SquareTerminal, Wrench } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { markSeen } from "../api/changes";
 import { focusSession, resumeSession } from "../api/client";
+import { dismissClosedPrs } from "../api/prs";
 import { Button } from "../components/Button";
 import { StatusDot } from "../components/StatusChip";
 import { relativeTime } from "../lib/format";
@@ -107,7 +108,83 @@ function MarkSeenButton({ item }: { item: InboxItem }) {
   );
 }
 
+const PR_COMMANDS: Partial<Record<InboxItem["reason"], { command: "fix-ci" | "address-comments"; label: string }>> = {
+  "ci-failing": { command: "fix-ci", label: "Fix CI" },
+  "changes-requested": { command: "address-comments", label: "Address comments" },
+  "review-comments": { command: "address-comments", label: "Address comments" },
+};
+
+function PrCommandButton({ item }: { item: InboxItem }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const spec = PR_COMMANDS[item.reason];
+  if (!spec) return null;
+  const slash = `/${spec.command}`;
+  const run = async () => {
+    setBusy(true);
+    try {
+      const copied = await navigator.clipboard.writeText(slash).then(
+        () => true,
+        () => false,
+      );
+      const session = item.session;
+      const result: SessionActionResponse | null = !session
+        ? null
+        : session.canFocus
+          ? await focusSession(session.id)
+          : session.canResume
+            ? await resumeSession(session.id, { command: spec.command })
+            : null;
+      const code = <code className="font-mono text-[12.5px]">{slash}</code>;
+      if (result?.status === "focused") toast(<>Jumped to the build session. Paste and press Enter to send {code}</>);
+      else if (result?.status === "resumed") toast(<>Resuming the build session with {code}</>);
+      else if (result && (result.status === "unavailable" || result.status === "error")) toast(result.message, "bad");
+      else if (copied) toast(<>Copied {code}. Paste it into the session that built this plan.</>);
+      else toast("Couldn't copy to the clipboard", "bad");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Couldn't reach Warp", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button
+      tone="primary"
+      disabled={busy}
+      icon={
+        busy ? (
+          <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Wrench className="size-3.5" aria-hidden />
+        )
+      }
+      onClick={() => void run()}
+      title={item.session ? `${spec.label} in “${item.session.title}”` : `Copy ${slash}`}
+    >
+      {spec.label}
+    </Button>
+  );
+}
+
+function DismissClosedButton({ item }: { item: InboxItem }) {
+  const toast = useToast();
+  return (
+    <Button
+      tone="ghost"
+      icon={<Check className="size-3.5" aria-hidden />}
+      onClick={() => {
+        dismissClosedPrs(item.doc.path, item.prs).catch(() => toast("Couldn't dismiss it", "bad"));
+      }}
+    >
+      Dismiss
+    </Button>
+  );
+}
+
 function actionsFor(item: InboxItem): ReactNode {
+  if (item.reason in PR_COMMANDS) return <PrCommandButton item={item} />;
+  if (item.reason === "pr-closed-unmerged") return <DismissClosedButton item={item} />;
+  if (item.reason === "plan-completed") return <MarkSeenButton item={item} />;
   if (item.section === "waiting") {
     return (
       <>
@@ -125,6 +202,9 @@ function Detail({ item }: { item: InboxItem }) {
   if (!item.detail) return null;
   if (item.section === "questions") {
     return <p className="m-0 mt-1.5 line-clamp-2 text-ui text-ink">{item.detail}</p>;
+  }
+  if (item.section === "prs") {
+    return <p className="m-0 mt-1.5 line-clamp-2 text-ui text-ink-64">{item.detail}</p>;
   }
   return (
     <p className="m-0 mt-1.5 line-clamp-2 text-ui text-ink-64">

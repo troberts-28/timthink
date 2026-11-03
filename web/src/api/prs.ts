@@ -32,3 +32,7 @@ export async function lookupPrs(owner: string, repo: string, numbers: readonly n
   if (!response.ok) throw new Error(`PR lookup failed (${response.status})`);
   return response.json() as Promise<PrLookupResponse>;
 }
+
+export async function dismissClosedPrs(path: string, numbers: readonly number[]): Promise<void> {
+  await postJson("/api/doc-prs/dismiss", { path, numbers });
+}

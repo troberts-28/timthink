@@ -2,6 +2,7 @@ import GithubSlugger from "github-slugger";
 import type { Element, ElementContent, Root, Text } from "hast";
 import { SKIP, visit } from "unist-util-visit";
 import type { VFile } from "vfile";
+import { prRefFromHref, prRefKey } from "../prs/prRefs";
 
 export interface TocEntry {
   id: string;
@@ -165,6 +166,48 @@ export function rehypeUnwrapFences() {
       only.position = node.position;
       parent.children[index] = only;
       return SKIP;
+    });
+  };
+}
+
+function isElement(node: unknown): node is Element {
+  return typeof node === "object" && node !== null && (node as Element).type === "element";
+}
+
+function prKeysUnder(node: Element, into: string[]): string[] {
+  for (const child of node.children) {
+    if (!isElement(child)) continue;
+    if (child.tagName === "ul" || child.tagName === "ol") continue;
+    const href = child.properties.href;
+    if (child.tagName === "a" && child.properties.dataPr !== undefined && typeof href === "string") {
+      const ref = prRefFromHref(href);
+      if (ref) into.push(prRefKey(ref));
+    }
+    prKeysUnder(child, into);
+  }
+  return into;
+}
+
+function isOpenTask(item: Element): boolean {
+  const classes = item.properties.className;
+  if (!Array.isArray(classes) || !classes.includes("task-list-item")) return false;
+  const checkbox = item.children.find(
+    (child): child is Element => isElement(child) && child.tagName === "input" && child.properties.type === "checkbox",
+  );
+  const paragraph = item.children.find((child): child is Element => isElement(child) && child.tagName === "p");
+  const nested = paragraph?.children.find(
+    (child): child is Element => isElement(child) && child.tagName === "input" && child.properties.type === "checkbox",
+  );
+  const box = checkbox ?? nested;
+  return box !== undefined && !box.properties.checked;
+}
+
+export function rehypeTaskPrs() {
+  return (tree: Root): void => {
+    visit(tree, "element", (node: Element) => {
+      if (node.tagName !== "li" || !isOpenTask(node)) return;
+      const keys = [...new Set(prKeysUnder(node, []))];
+      if (keys.length > 0) node.properties.dataTaskPrs = keys.join(" ");
     });
   };
 }
