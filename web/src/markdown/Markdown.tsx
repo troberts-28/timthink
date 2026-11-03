@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { RemovedGhost } from "../changes/RemovedGhost";
 import { docHref, rawFileHref, resolveRelative } from "../lib/routes";
 import { PrLink } from "../prs/PrLink";
+import { useTaskMerged } from "../prs/PrStatusContext";
 import { SectionMenu } from "../review/SectionMenu";
 import { CodeBlock } from "./CodeBlock";
 import { CodeRef } from "./CodeRef";
@@ -172,7 +173,14 @@ function Aside(props: ComponentProps<"aside">) {
   return <aside {...props} />;
 }
 
+function ListItem(props: ComponentProps<"li">) {
+  const merged = useTaskMerged(dataAttribute(props, "data-task-prs"));
+  if (!merged) return <li {...props} />;
+  return <li {...props} className={`${props.className ?? ""} task-merged`} title="Its PR merged" />;
+}
+
 const components: Partial<Components> = {
+  li: ListItem,
   aside: Aside,
   div: Div,
   code: Code,

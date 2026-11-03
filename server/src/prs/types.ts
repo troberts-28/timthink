@@ -61,3 +61,17 @@ export function prKey(owner: string, repo: string, number: number): string {
 export function isTerminal(info: PrInfo): boolean {
   return info.state === "merged" || info.state === "closed";
 }
+
+export type PrSignalReason = "ci-failing" | "changes-requested" | "review-comments" | "pr-closed-unmerged";
+
+export interface PrSignal {
+  reason: PrSignalReason;
+  numbers: number[];
+  detail: string;
+  at: string;
+}
+
+export interface PlanCompletion {
+  marker: string;
+  at: string;
+}

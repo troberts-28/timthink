@@ -17,7 +17,7 @@ describe("buildRepoQuery", () => {
     expect(query).toContain('h0: pullRequests(headRefName: "feat/a"');
     expect(query).toContain('b0: pullRequests(baseRefName: "feat/\\"b\\""');
     expect(query).toContain(
-      'm13: object(expression: "main") { ... on Commit { history(first: 100, since: "2026-11-02T16:00:00.000Z", until: "2026-11-02T18:00:00.000Z")',
+      'm13: object(expression: "main") { ... on Commit { history(first: 100, since: "2026-11-02T11:00:00.000Z", until: "2026-11-02T17:10:00.000Z") { nodes { message } }',
     );
   });
 
@@ -46,7 +46,7 @@ describe("parseRepoQuery", () => {
           p7: pr,
           p8: null,
           b0: { nodes: [{ number: 9, headRefName: "feat/y" }] },
-          m7: { history: { nodes: [{ messageHeadline: "fix: x (#7)" }] } },
+          m7: { history: { nodes: [{ message: "fix: x (#7)\n\nBody text (#99)" }] } },
         },
       },
     });

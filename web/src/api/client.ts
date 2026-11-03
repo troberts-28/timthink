@@ -99,7 +99,11 @@ export async function focusSession(id: string): Promise<SessionActionResponse> {
   return sessionActionResult(response);
 }
 
-export type ResumeWith = { reviewDoc: string } | { build: BuildRequest } | Record<string, never>;
+export type ResumeWith =
+  | { reviewDoc: string }
+  | { build: BuildRequest }
+  | { command: "fix-ci" | "address-comments" }
+  | Record<string, never>;
 
 export async function resumeSession(id: string, resumeWith: ResumeWith = {}): Promise<SessionActionResponse> {
   const token = await sessionToken();

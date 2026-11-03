@@ -4,29 +4,7 @@ import type { Element, Root } from "hast";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { lookupPrs } from "../api/prs";
 import { queryKeys } from "../api/queries";
-
-const PR_HREF = [
-  /app\.graphite\.(?:com|dev)\/github\/pr\/([\w.-]+)\/([\w.-]+)\/(\d+)/,
-  /github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/,
-];
-
-export interface PrRef {
-  owner: string;
-  repo: string;
-  number: number;
-}
-
-export function prRefFromHref(href: string): PrRef | null {
-  for (const pattern of PR_HREF) {
-    const match = pattern.exec(href);
-    if (match?.[1] && match[2] && match[3]) return { owner: match[1], repo: match[2], number: Number(match[3]) };
-  }
-  return null;
-}
-
-function refKey({ owner, repo, number }: PrRef): string {
-  return `${owner.toLowerCase()}/${repo.toLowerCase()}#${number}`;
-}
+import { type PrRef, prRefFromHref, prRefKey } from "./prRefs";
 
 function collectPrRefs(node: Root | Element, into: Map<string, PrRef>): Map<string, PrRef> {
   for (const child of node.children) {
@@ -34,7 +12,7 @@ function collectPrRefs(node: Root | Element, into: Map<string, PrRef>): Map<stri
     const href = child.properties.href;
     if (child.tagName === "a" && child.properties.dataPr !== undefined && typeof href === "string") {
       const ref = prRefFromHref(href);
-      if (ref) into.set(refKey(ref), ref);
+      if (ref) into.set(prRefKey(ref), ref);
     }
     collectPrRefs(child, into);
   }
@@ -64,7 +42,7 @@ export function PrStatusProvider({ hast, children }: { hast: Root | null; childr
   const statuses = useMemo(() => {
     const map = new Map<string, PrInfo>();
     for (const result of results) {
-      for (const info of result.data?.prs ?? []) map.set(refKey(info), info);
+      for (const info of result.data?.prs ?? []) map.set(prRefKey(info), info);
     }
     return map;
   }, [results]);
@@ -74,5 +52,30 @@ export function PrStatusProvider({ hast, children }: { hast: Root | null; childr
 export function usePrStatus(href: string | undefined): PrInfo | null {
   const statuses = useContext(PrStatusContext);
   const ref = href ? prRefFromHref(href) : null;
-  return ref ? (statuses.get(refKey(ref)) ?? null) : null;
+  return ref ? (statuses.get(prRefKey(ref)) ?? null) : null;
+}
+
+function allMerged(statuses: ReadonlyMap<string, PrInfo>, keys: readonly string[]): boolean {
+  return keys.length > 0 && keys.every((key) => statuses.get(key)?.state === "merged");
+}
+
+export function useTaskMerged(taskPrs: string | undefined): boolean {
+  const statuses = useContext(PrStatusContext);
+  return taskPrs ? allMerged(statuses, taskPrs.split(" ")) : false;
+}
+
+function openTaskPrLists(node: Root | Element, into: string[][]): string[][] {
+  for (const child of node.children) {
+    if (child.type !== "element") continue;
+    const taskPrs = child.properties.dataTaskPrs;
+    if (typeof taskPrs === "string") into.push(taskPrs.split(" "));
+    openTaskPrLists(child, into);
+  }
+  return into;
+}
+
+export function useMergedOpenTaskCount(hast: Root | null): number {
+  const statuses = useContext(PrStatusContext);
+  const lists = useMemo(() => (hast ? openTaskPrLists(hast, []) : []), [hast]);
+  return lists.filter((keys) => allMerged(statuses, keys)).length;
 }

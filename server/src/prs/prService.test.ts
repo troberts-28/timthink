@@ -46,7 +46,7 @@ function fakeGithub(prs: RawPr[], trunkHeadlines: string[] = []) {
       repository[alias ?? ""] = { nodes: prs.filter((pr) => pr.baseRefName === ref && pr.state === "OPEN") };
     }
     for (const [, alias] of query.matchAll(/(m\d+): object\(/g)) {
-      repository[alias ?? ""] = { history: { nodes: trunkHeadlines.map((messageHeadline) => ({ messageHeadline })) } };
+      repository[alias ?? ""] = { history: { nodes: trunkHeadlines.map((message) => ({ message })) } };
     }
     return { data: { repository } };
   };
@@ -220,6 +220,39 @@ describe("PrService", () => {
       [51, "open"],
       [52, "open"],
     ]);
+  });
+
+  it("offers completion once every linked PR merged, and only once per set of PRs", async () => {
+    const github = fakeGithub([rawPr({ number: 60, state: "MERGED", merged: true }), rawPr({ number: 61 })]);
+    const plan = doc({ prs: ["60", "61"] });
+    const { prs } = await service([plan], github.runner);
+    await prs.refresh();
+    expect(prs.completionMarker(plan)).toBeNull();
+    await prs.setUnlinked(plan.path, 61, true);
+    expect(prs.completionMarker(plan)).toBe("60");
+    await prs.markCompleted(plan.path, "60");
+    expect(prs.completionMarker(plan)).toBeNull();
+    expect(prs.completion(plan.path)).toEqual({ marker: "60", at: new Date(NOW).toISOString() });
+  });
+
+  it("raises inbox signals for failing CI, review feedback and closed PRs, and dismisses closed ones", async () => {
+    const failing = { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [] } } } }] };
+    const github = fakeGithub([
+      rawPr({ number: 70, commits: failing }),
+      rawPr({ number: 71, reviewThreads: { nodes: [{ isResolved: false }] } }),
+      rawPr({ number: 72, state: "CLOSED", closedAt: "2026-11-02T10:00:00Z" }),
+    ]);
+    const plan = doc({ prs: ["70", "71", "72"] });
+    const { prs } = await service([plan], github.runner);
+    await prs.refresh();
+    expect(prs.signalsFor(plan).map((signal) => [signal.reason, signal.numbers])).toEqual([
+      ["ci-failing", [70]],
+      ["review-comments", [71]],
+      ["pr-closed-unmerged", [72]],
+    ]);
+    expect(prs.attentionFor(plan)).toBe("ci-failing");
+    await prs.dismissClosed(plan.path, [72]);
+    expect(prs.signalsFor(plan).map((signal) => signal.reason)).not.toContain("pr-closed-unmerged");
   });
 
   it("reports when gh isn't available", async () => {

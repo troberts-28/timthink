@@ -3,7 +3,7 @@ import type { DocsStore } from "../docs/store.js";
 import { docHash } from "../reviews/paths.js";
 import { resolveInsideRoot } from "../safePath.js";
 import type { SessionRecord } from "../sessions/sessionStore.js";
-import { type Attribution, type SnapshotView, UNKNOWN_AUTHOR } from "./attribution.js";
+import { type Attribution, type SnapshotView, TIMTHINK_ACTOR, UNKNOWN_AUTHOR } from "./attribution.js";
 import { type HumanWrite, type SnapshotEntry, SnapshotStore, shortHash } from "./snapshotStore.js";
 
 export const SNAPSHOT_DEBOUNCE_MS = 800;
@@ -145,6 +145,9 @@ export class HistoryService {
 
   private async attribute(docPath: string, entry: SnapshotEntry): Promise<Attribution> {
     const human = await this.snapshots.humanWrite(docPath, entry.id);
+    if (human?.name.startsWith(`${TIMTHINK_ACTOR}:`)) {
+      return { kind: "timthink", reason: human.name.slice(TIMTHINK_ACTOR.length + 1) };
+    }
     if (human) return { kind: "human", name: human.name };
     const session = this.options.sessions.writerNear(docPath, Date.parse(entry.at), ATTRIBUTION_WINDOW_MS);
     return session ? { kind: "claude", sessionId: session.id, sessionTitle: session.title } : UNKNOWN_AUTHOR;

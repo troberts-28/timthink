@@ -1,7 +1,7 @@
 import type { Attribution } from "../history/attribution.js";
 import type { QuestionOption } from "../markdown/questionBlock.js";
 
-export type InboxSection = "review" | "replies" | "questions" | "waiting" | "changed";
+export type InboxSection = "review" | "replies" | "questions" | "prs" | "waiting" | "changed";
 
 export type InboxReason =
   | "review-requested"
@@ -10,7 +10,12 @@ export type InboxReason =
   | "open-question"
   | "waiting-on-claude"
   | "edited"
-  | "new";
+  | "new"
+  | "ci-failing"
+  | "changes-requested"
+  | "review-comments"
+  | "pr-closed-unmerged"
+  | "plan-completed";
 
 export interface InboxDoc {
   path: string;
@@ -47,6 +52,7 @@ export interface InboxItem {
   question: InboxQuestion | null;
   attribution: Attribution | null;
   session: InboxSessionHint | null;
+  prs: number[];
 }
 
 export interface InboxAttention {

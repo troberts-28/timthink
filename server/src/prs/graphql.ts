@@ -54,7 +54,8 @@ export interface RepoQueryResult {
   mergeHeadlines: Map<number, string[]>;
 }
 
-const MERGE_WINDOW_MS = 60 * 60 * 1000;
+const MERGE_LOOKBACK_MS = 6 * 60 * 60 * 1000;
+const MERGE_LOOKAHEAD_MS = 10 * 60 * 1000;
 const FAILED_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const FAILED_STATES = new Set(["FAILURE", "ERROR"]);
 
@@ -64,7 +65,7 @@ const PR_FIELDS = `fragment P on PullRequest {
   labels(first: 20) { nodes { name } }
   reviewDecision
   reviewThreads(first: 50) { nodes { isResolved } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes {
+  commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
     __typename
     ... on CheckRun { name conclusion status }
     ... on StatusContext { context state }
@@ -92,10 +93,10 @@ export function buildRepoQuery(query: RepoQuery): string {
   });
   const trunk = query.trunk ?? "HEAD";
   for (const { number, closedAt } of query.mergeChecks) {
-    const since = shiftIso(closedAt, -MERGE_WINDOW_MS);
-    const until = shiftIso(closedAt, MERGE_WINDOW_MS);
+    const since = shiftIso(closedAt, -MERGE_LOOKBACK_MS);
+    const until = shiftIso(closedAt, MERGE_LOOKAHEAD_MS);
     fields.push(
-      `m${number}: object(expression: ${literal(trunk)}) { ... on Commit { history(first: 100, since: ${literal(since)}, until: ${literal(until)}) { nodes { messageHeadline } } } }`,
+      `m${number}: object(expression: ${literal(trunk)}) { ... on Commit { history(first: 100, since: ${literal(since)}, until: ${literal(until)}) { nodes { message } } } }`,
     );
   }
   const usesFragment = query.numbers.length + query.parentsOf.length + query.childrenOf.length > 0;
@@ -126,7 +127,7 @@ export function parseRepoQuery(response: unknown): RepoQueryResult {
     } else if (/^m\d+$/.test(alias) && isRecord(value) && isRecord(value.history)) {
       const nodes = Array.isArray(value.history.nodes) ? value.history.nodes : [];
       const headlines = nodes.flatMap((node) =>
-        isRecord(node) && typeof node.messageHeadline === "string" ? [node.messageHeadline] : [],
+        isRecord(node) && typeof node.message === "string" ? [node.message.split("\n", 1)[0] ?? ""] : [],
       );
       result.mergeHeadlines.set(Number(alias.slice(1)), headlines);
     }

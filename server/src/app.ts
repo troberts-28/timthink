@@ -101,7 +101,12 @@ const buildBody = z.object({
   phase: z.number().refine(isValidPhase).nullable().optional(),
   branch: z.string().refine(isValidBranchName).nullable().optional(),
 });
-const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional(), build: buildBody.optional() });
+const RESUME_COMMANDS = ["fix-ci", "address-comments"] as const;
+const resumeBody = z.object({
+  reviewDoc: z.string().min(1).max(1024).optional(),
+  build: buildBody.optional(),
+  command: z.enum(RESUME_COMMANDS).optional(),
+});
 const revealBody = z.object({ path: z.string().min(1).max(1024) });
 const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
 
@@ -117,6 +122,10 @@ const prLookupQuery = z.object({
     .string()
     .regex(/^\d+(,\d+)*$/)
     .transform((value) => [...new Set(value.split(",").map(Number))].slice(0, MAX_LOOKUP_PRS)),
+});
+const prDismissBody = z.object({
+  path: z.string().min(1).max(1024),
+  numbers: z.array(z.number().int().positive()).min(1).max(50),
 });
 const prUnlinkBody = z.object({
   path: z.string().min(1).max(1024),
@@ -239,7 +248,7 @@ export function createApp(deps: AppDeps) {
 
   const resumeSession = async (
     session: SessionRecord,
-    { reviewDoc, build }: z.infer<typeof resumeBody>,
+    { reviewDoc, build, command }: z.infer<typeof resumeBody>,
   ): Promise<SessionActionResponse> => {
     if (!isSessionId(session.id)) return { status: "unavailable", message: "This session id can't be resumed" };
     if (!session.cwd || !(await isExistingDirectory(session.cwd))) {
@@ -251,7 +260,13 @@ export function createApp(deps: AppDeps) {
     if (build !== undefined && !store.getDoc(build.doc)) {
       return { status: "unavailable", message: "Unknown doc to build" };
     }
-    const prompt = build ? buildSlashCommand(build) : reviewDoc === undefined ? null : `/timthink review ${reviewDoc}`;
+    const prompt = build
+      ? buildSlashCommand(build)
+      : command
+        ? `/${command}`
+        : reviewDoc === undefined
+          ? null
+          : `/timthink review ${reviewDoc}`;
     await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd, prompt);
     await deps.openUrl(RESUME_TAB_CONFIG_URL);
     return { status: "resumed", cwd: session.cwd };
@@ -402,6 +417,12 @@ export function createApp(deps: AppDeps) {
       if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
       await deps.prs.setUnlinked(docPath, number, unlinked);
       return c.json(deps.prs.docPrs(docPath));
+    })
+    .post("/api/doc-prs/dismiss", zValidator("json", prDismissBody), async (c) => {
+      const { path: docPath, numbers } = c.req.valid("json");
+      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
+      await deps.prs.dismissClosed(docPath, numbers);
+      return c.json({ status: "ok" as const });
     })
     .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
       const { owner, repo, numbers } = c.req.valid("query");

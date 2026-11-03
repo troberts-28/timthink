@@ -10,15 +10,18 @@ import {
   type DocPrsResponse,
   isTerminal,
   type LinkedPr,
+  type PlanCompletion,
   type PrInfo,
   type PrLookupResponse,
+  type PrSignal,
+  type PrSignalReason,
   type PrSource,
   prKey,
   type StackItem,
 } from "./types.js";
 
 export const PRS_STATE_FILE = "prs.json";
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
 const ACTIVE_INTERVAL_MS = 2 * 60_000;
 const IDLE_INTERVAL_MS = 15 * 60_000;
 const TICK_MS = 30_000;
@@ -42,11 +45,21 @@ interface StateFile {
   prs: Record<string, CachedPr>;
   stacks: Record<string, number[]>;
   unlinked: Record<string, number[]>;
-  completed: Record<string, string>;
+  completed: Record<string, PlanCompletion>;
+  dismissed: Record<string, number[]>;
 }
 
 function emptyState(): StateFile {
-  return { version: STATE_VERSION, trunks: {}, refreshedAt: {}, prs: {}, stacks: {}, unlinked: {}, completed: {} };
+  return {
+    version: STATE_VERSION,
+    trunks: {},
+    refreshedAt: {},
+    prs: {},
+    stacks: {},
+    unlinked: {},
+    completed: {},
+    dismissed: {},
+  };
 }
 
 export interface PrServiceOptions {
@@ -193,13 +206,66 @@ export class PrService {
     return { status: this.lastError?.kind === "unavailable" ? "unavailable" : "ok", prs };
   }
 
-  completedMarker(docPath: string): string | null {
+  completion(docPath: string): PlanCompletion | null {
     return this.state.completed[docPath] ?? null;
   }
 
+  completionMarker(doc: DocSummary): string | null {
+    const github = this.options.githubFor(doc.repo);
+    const numbers = [...this.linkedNumbers(doc).keys()].sort((a, b) => a - b);
+    if (!github || numbers.length === 0) return null;
+    const allMerged = numbers.every((number) => this.cached(github, number)?.info.state === "merged");
+    if (!allMerged) return null;
+    const marker = numbers.join(",");
+    return this.state.completed[doc.path]?.marker === marker ? null : marker;
+  }
+
   async markCompleted(docPath: string, marker: string): Promise<void> {
-    this.state.completed[docPath] = marker;
+    this.state.completed[docPath] = { marker, at: new Date(this.now()).toISOString() };
     await this.save();
+  }
+
+  signalsFor(doc: DocSummary): PrSignal[] {
+    const github = this.options.githubFor(doc.repo);
+    if (!github || !this.options.settings.enabled) return [];
+    const dismissed = new Set(this.state.dismissed[doc.path] ?? []);
+    const infos = [...this.linkedNumbers(doc).keys()].flatMap((number) => this.cached(github, number)?.info ?? []);
+    const live = infos.filter((info) => !isTerminal(info));
+    const signal = (reason: PrSignalReason, matching: PrInfo[], detail: (info: PrInfo) => string): PrSignal[] =>
+      matching.length === 0
+        ? []
+        : [
+            {
+              reason,
+              numbers: matching.map((info) => info.number),
+              detail: matching.map(detail).join("; "),
+              at:
+                matching
+                  .map((info) => info.updatedAt)
+                  .sort()
+                  .at(-1) ?? new Date(this.now()).toISOString(),
+            },
+          ];
+    const failing = live.filter((info) => info.ci === "failing");
+    const changes = live.filter((info) => info.review === "changes_requested");
+    const comments = live.filter((info) => info.review !== "changes_requested" && info.unresolvedThreads > 0);
+    const closed = infos.filter((info) => info.state === "closed" && !dismissed.has(info.number));
+    return [
+      ...signal("ci-failing", failing, (info) =>
+        info.failingChecks.length > 0
+          ? `#${info.number}: ${info.failingChecks.slice(0, 2).join(", ")}`
+          : `#${info.number}`,
+      ),
+      ...signal("changes-requested", changes, (info) => `#${info.number}`),
+      ...signal("review-comments", comments, (info) => `#${info.number}: ${info.unresolvedThreads} unresolved`),
+      ...signal("pr-closed-unmerged", closed, (info) => `#${info.number} ${info.title}`),
+    ];
+  }
+
+  async dismissClosed(docPath: string, numbers: readonly number[]): Promise<void> {
+    this.state.dismissed[docPath] = [...new Set([...(this.state.dismissed[docPath] ?? []), ...numbers])];
+    await this.save();
+    this.options.onChange([docPath]);
   }
 
   async setUnlinked(docPath: string, number: number, unlinked: boolean): Promise<void> {

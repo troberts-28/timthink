@@ -2,11 +2,12 @@ import type { DocsStore } from "../docs/store.js";
 import type { DocSummary } from "../docs/types.js";
 import type { HistoryService } from "../history/historyService.js";
 import { shortHash } from "../history/snapshotStore.js";
+import type { PlanCompletion, PrSignal } from "../prs/types.js";
 import { unaddressedReviews } from "../reviews/operations.js";
 import type { ReviewStore } from "../reviews/reviewStore.js";
 import type { ReviewFile } from "../reviews/schema.js";
 import type { SeenEntry, SeenStore } from "../seen/seenStore.js";
-import type { SessionStore } from "../sessions/sessionStore.js";
+import type { SessionRecord, SessionStore } from "../sessions/sessionStore.js";
 import { isExistingDirectory, isSessionId, isWarpFocusUrl } from "../sessions/warp.js";
 import { buildInbox, CHANGED_WINDOW_DAYS, type InboxDocInput, type LatestChange } from "./buildInbox.js";
 import type { InboxResponse, InboxSessionHint } from "./types.js";
@@ -20,6 +21,8 @@ export interface InboxServiceDeps {
   history: HistoryService;
   sessions: SessionStore;
   isArchived?: (summary: DocSummary) => boolean;
+  prSignals?: (summary: DocSummary) => PrSignal[];
+  completion?: (docPath: string) => PlanCompletion | null;
   now?: () => Date;
 }
 
@@ -45,6 +48,7 @@ export class InboxService {
     if (!content) return null;
     const review = hasReview ? await this.deps.reviews.read(summary.path).catch(() => null) : null;
     const seen = this.deps.seen.get(summary.path);
+    const prSignals = this.deps.prSignals?.(summary) ?? [];
     const latestChange = this.mayHaveChanged(summary, content.hash, seen, now)
       ? await this.latestChange(summary, content.hash)
       : null;
@@ -57,6 +61,9 @@ export class InboxService {
       seen,
       latestChange,
       session: await this.sessionHint(summary.path, review),
+      prSignals,
+      completion: this.deps.completion?.(summary.path) ?? null,
+      buildSession: prSignals.length > 0 ? await this.buildSessionHint(summary.path) : null,
     };
   }
 
@@ -74,7 +81,19 @@ export class InboxService {
   private async sessionHint(docPath: string, review: ReviewFile | null): Promise<InboxSessionHint | null> {
     if (!review || unaddressedReviews(review).length === 0) return null;
     const [session] = this.deps.sessions.forDoc(docPath);
-    if (!session) return null;
+    return session ? this.hintFor(session) : null;
+  }
+
+  private async buildSessionHint(docPath: string): Promise<InboxSessionHint | null> {
+    const sessions = this.deps.sessions.forDoc(docPath);
+    const session =
+      sessions.find((candidate) => candidate.builtDocPaths.includes(docPath)) ??
+      sessions.find((candidate) => candidate.submittedPrs.length > 0) ??
+      sessions[0];
+    return session ? this.hintFor(session) : null;
+  }
+
+  private async hintFor(session: SessionRecord): Promise<InboxSessionHint> {
     return {
       id: session.id,
       title: session.title,

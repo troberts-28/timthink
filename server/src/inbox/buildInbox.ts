@@ -1,6 +1,7 @@
 import type { DocQuestion } from "../docs/content.js";
 import type { DocSummary } from "../docs/types.js";
 import type { Attribution } from "../history/attribution.js";
+import type { PlanCompletion, PrSignal } from "../prs/types.js";
 import { isDraftThread, unaddressedReviews } from "../reviews/operations.js";
 import type { Review, ReviewFile, Thread } from "../reviews/schema.js";
 import type { SeenEntry } from "../seen/seenStore.js";
@@ -34,6 +35,9 @@ export interface InboxDocInput {
   seen: SeenEntry | null;
   latestChange: LatestChange | null;
   session: InboxSessionHint | null;
+  prSignals: readonly PrSignal[];
+  completion: PlanCompletion | null;
+  buildSession: InboxSessionHint | null;
 }
 
 export interface InboxInput {
@@ -43,8 +47,13 @@ export interface InboxInput {
   now: Date;
 }
 
-const SECTION_ORDER: readonly InboxSection[] = ["review", "replies", "questions", "waiting", "changed"];
-const SURFACES_WHEN_ARCHIVED: ReadonlySet<InboxReason> = new Set(["claude-replied", "review-addressed"]);
+const SECTION_ORDER: readonly InboxSection[] = ["review", "replies", "questions", "prs", "waiting", "changed"];
+const SURFACES_WHEN_ARCHIVED: ReadonlySet<InboxReason> = new Set([
+  "claude-replied",
+  "review-addressed",
+  "plan-completed",
+]);
+const HAND_OFF_REASONS: ReadonlySet<InboxReason> = new Set(["ci-failing", "changes-requested", "review-comments"]);
 
 function later(a: string | null | undefined, b: string | null | undefined): string | null {
   if (!a) return b ?? null;
@@ -91,6 +100,7 @@ function item(
 ): InboxItem {
   return {
     id: `${fields.reason}:${input.summary.path}${fields.questionId ? `#${fields.questionId}` : ""}`,
+    prs: [],
     doc: inboxDoc(input.summary, input.hash),
     detail: null,
     count: 1,
@@ -154,9 +164,45 @@ function itemsForDoc(input: InboxDocInput, context: InboxInput): InboxItem[] {
     }
   }
 
+  items.push(...prItems(input));
+
   const change = changeSinceSeen(input, context);
   if (change && !items.some((entry) => entry.reason === "review-addressed")) items.push(change);
   return input.archived ? items.filter((entry) => SURFACES_WHEN_ARCHIVED.has(entry.reason)) : items;
+}
+
+function prItems(input: InboxDocInput): InboxItem[] {
+  const settled = input.summary.status !== null && SETTLED_STATUSES.has(input.summary.status);
+  const items = settled
+    ? []
+    : input.prSignals.map((signal) =>
+        item(input, {
+          section: "prs",
+          reason: signal.reason,
+          at: signal.at,
+          detail: clip(signal.detail),
+          count: signal.numbers.length,
+          prs: signal.numbers,
+          session: HAND_OFF_REASONS.has(signal.reason) ? input.buildSession : null,
+        }),
+      );
+  const { completion, seen } = input;
+  if (completion && (!seen || seen.at < completion.at)) {
+    const count = completion.marker.split(",").length;
+    items.push(
+      item(input, {
+        section: "prs",
+        reason: "plan-completed",
+        at: completion.at,
+        detail:
+          count === 1
+            ? "Its PR merged, so the plan is marked done"
+            : `All ${count} PRs merged, so the plan is marked done`,
+        count,
+      }),
+    );
+  }
+  return items;
 }
 
 function changeSinceSeen(input: InboxDocInput, context: InboxInput): InboxItem | null {

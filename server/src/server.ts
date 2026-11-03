@@ -14,6 +14,7 @@ import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
+import { completePlansWithMergedPrs } from "./prs/completion.js";
 import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
 import { PrService } from "./prs/prService.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
@@ -200,8 +201,20 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       hub.publish({ type: "index-changed", version: hub.nextVersion() });
     },
     hasViewers: () => hub.viewerCount > 0,
+    onPrsSettled: (paths) => {
+      completeMergedPlans(paths).catch((error: unknown) => log(`completing merged plans failed: ${String(error)}`));
+    },
     log,
   });
+  const completeMergedPlans = (paths: readonly string[]): Promise<void> =>
+    completePlansWithMergedPrs(paths, {
+      docsRoot: config.docsRoot,
+      readOnly: config.readOnly,
+      docs: store,
+      prs,
+      onDocWrite: onHubDocWrite,
+      log,
+    });
   const inbox = new InboxService({
     store,
     reviews: reviews.store,
@@ -209,6 +222,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     history,
     sessions,
     isArchived: (summary) => archive.isArchived(summary),
+    prSignals: (summary) => prs.signalsFor(summary),
+    completion: (docPath) => prs.completion(docPath),
   });
 
   await Promise.all([store.scanAll(), sessions.init()]);
