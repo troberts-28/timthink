@@ -13,10 +13,9 @@ export interface NavEntry {
 export function sidebarOrder(index: DocsIndex): NavEntry[] {
   const entries = (docs: readonly IndexedDoc[]) => docs.map((doc) => ({ path: doc.path, archived: isArchived(doc) }));
   return repoSections(index).flatMap((section) =>
-    section.repos.flatMap((repo) => [
-      ...repo.projects.flatMap((project) => entries(project.docs)),
-      ...entries(repo.ungrouped),
-    ]),
+    section.repos
+      .filter((repo) => !repo.hidden)
+      .flatMap((repo) => [...repo.projects.flatMap((project) => entries(project.docs)), ...entries(repo.ungrouped)]),
   );
 }
 

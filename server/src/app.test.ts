@@ -288,6 +288,17 @@ describe("sessions API", () => {
     expect(openUrl).not.toHaveBeenCalled();
   });
 
+  it("hides and shows repos in the index, and rejects unknown repos", async () => {
+    const hidden = await post("/api/repo-visibility", { repo: "acme-api", hidden: true });
+    expect(await hidden.json()).toEqual({ status: "ok", hidden: true });
+    const index = await json<DocsIndex>(await runtime.app.request(`${BASE}/api/index`));
+    expect(index.repos.find((repo) => repo.name === "acme-api")?.hidden).toBe(true);
+    await post("/api/repo-visibility", { repo: "acme-api", hidden: false });
+    const after = await json<DocsIndex>(await runtime.app.request(`${BASE}/api/index`));
+    expect(after.repos.find((repo) => repo.name === "acme-api")?.hidden).toBe(false);
+    expect((await post("/api/repo-visibility", { repo: "nope", hidden: true })).status).toBe(404);
+  });
+
   it("reveals a known plan in Finder and refuses anything else", async () => {
     const response = await post("/api/reveal", { path: RATE_LIMITER });
     expect(await response.json()).toEqual({ status: "revealed" });

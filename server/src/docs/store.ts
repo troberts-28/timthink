@@ -22,6 +22,7 @@ export interface RepoInfo {
   github: GithubRepo | null;
   prLinks: PrLinkHost;
   group: string | null;
+  hidden?: boolean;
 }
 
 export interface IndexOptions {
@@ -166,7 +167,7 @@ export class DocsStore {
 
   private buildRepoIndex(
     name: string,
-    { github, prLinks, group }: RepoInfo,
+    { github, prLinks, group, hidden = false }: RepoInfo,
     archiveOf: (doc: DocSummary) => DocArchive,
   ): RepoIndex {
     const repoDocs: IndexedDoc[] = [...this.docs.values()]
@@ -203,6 +204,7 @@ export class DocsStore {
       github,
       prLinks,
       group,
+      hidden,
       lastActivity,
       docCount: repoDocs.length,
       activeCount: repoDocs.length - archivedCount,

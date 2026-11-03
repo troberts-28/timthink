@@ -56,6 +56,7 @@ export interface RepoIndex {
   github: GithubRepo | null;
   prLinks: PrLinkHost;
   group: string | null;
+  hidden: boolean;
   lastActivity: number;
   docCount: number;
   activeCount: number;

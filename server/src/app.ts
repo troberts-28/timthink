@@ -18,6 +18,7 @@ import type { HistoryService } from "./history/historyService.js";
 import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
 import { mimeTypeFor } from "./mime.js";
+import type { PreferencesStore } from "./preferences/preferencesStore.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
@@ -52,6 +53,8 @@ export interface AppDeps {
   inbox: InboxService;
   archive: ArchiveService;
   onArchiveChange: (docPath: string) => void;
+  preferences: PreferencesStore;
+  onPreferencesChange: () => void;
   openUrl: OpenUrl;
   revealInFinder: RevealInFinder;
   getIndex: () => DocsIndex;
@@ -91,6 +94,7 @@ const repoQuery = z.object({ repo: z.string().min(1) });
 const sessionParams = z.object({ id: z.string().min(1).max(64) });
 const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional() });
 const revealBody = z.object({ path: z.string().min(1).max(1024) });
+const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
 
 const RECENT_SESSIONS_LIMIT = 50;
 
@@ -267,6 +271,12 @@ export function createApp(deps: AppDeps) {
       const { repo, ref, docPath } = c.req.valid("query");
       const resolution = await code.resolve({ repo, ref, ...checkoutContext(repo, docPath) });
       return c.json(toResolveResponse(resolution));
+    })
+    .post("/api/repo-visibility", zValidator("json", repoVisibilityBody), async (c) => {
+      const { repo, hidden } = c.req.valid("json");
+      if (!store.repoNames().includes(repo)) return c.json({ status: "not-found" as const }, 404);
+      if (await deps.preferences.setRepoHidden(repo, hidden)) deps.onPreferencesChange();
+      return c.json({ status: "ok" as const, hidden });
     })
     .post("/api/reveal", zValidator("json", revealBody), async (c) => {
       const { path: docPath } = c.req.valid("json");

@@ -114,3 +114,12 @@ export async function revealInFinder(path: string): Promise<boolean> {
   const result = await response.json();
   return result.status === "revealed";
 }
+
+export async function setRepoHidden(repo: string, hidden: boolean): Promise<boolean> {
+  const token = await sessionToken();
+  const response = await client.api["repo-visibility"].$post(
+    { json: { repo, hidden } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  return response.ok;
+}

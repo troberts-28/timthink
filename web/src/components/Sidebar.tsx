@@ -1,5 +1,5 @@
 import type { DocsIndex, IndexedDoc, ProjectIndex, RepoIndex } from "@timthink/server";
-import { ChevronRight, Folder, Inbox } from "lucide-react";
+import { Archive, ChevronRight, Eye, EyeOff, Folder, Inbox, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { useInbox } from "../api/queries";
@@ -7,7 +7,9 @@ import { isArchived, partitionArchived } from "../lib/archive";
 import { compactDate, pluralise } from "../lib/format";
 import { useLocalNameSet } from "../lib/localSetting";
 import { repoSections } from "../lib/repoGroups";
+import { useRepoVisibility } from "../lib/repoVisibility";
 import { docHref, projectHref, repoHref } from "../lib/routes";
+import { usePlanArchive } from "../plan/usePlanArchive";
 import { AttentionCount } from "./AttentionCount";
 import { StatusDot } from "./StatusChip";
 
@@ -33,6 +35,39 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+const ROW_ACTION_HIDES = "transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0";
+const PLAN_ACTION_HIDES =
+  "transition-opacity duration-150 group-hover/plan:opacity-0 group-focus-within/plan:opacity-0";
+const ROW_ACTION_SHOWS = "group-hover:opacity-100 group-focus-within:opacity-100";
+const PLAN_ACTION_SHOWS = "group-hover/plan:opacity-100 group-focus-within/plan:opacity-100";
+
+function RowAction({
+  label,
+  onClick,
+  disabled = false,
+  reveal,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  reveal: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-[6px] text-ink-32 opacity-0 transition-opacity duration-150 hover:bg-line-soft hover:text-ink focus-visible:opacity-100 disabled:opacity-50 ${reveal}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function PlanCount({ count, muted }: { count: number; muted: boolean }) {
   return (
     <span
@@ -47,31 +82,48 @@ function PlanCount({ count, muted }: { count: number; muted: boolean }) {
 function PlanRow({ doc, active, indent }: { doc: IndexedDoc; active: boolean; indent: number }) {
   const ref = useRef<HTMLAnchorElement>(null);
   const dimmed = isArchived(doc) && !active;
+  const plan = usePlanArchive(doc.path);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
   return (
-    <Link
-      ref={ref}
-      to={docHref(doc.path)}
-      aria-current={active ? "page" : undefined}
-      title={doc.title}
-      className={`relative flex h-8 items-center gap-2.5 rounded-[8px] pr-2.5 text-ui transition-colors duration-150 ${
-        active
-          ? "bg-surface font-medium text-ink"
-          : dimmed
-            ? "text-ink-32 hover:bg-surface/60 hover:text-ink-64"
-            : "text-ink-64 hover:bg-surface/60 hover:text-ink"
-      }`}
-      style={{ paddingLeft: indent }}
-    >
-      {active ? (
-        <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" aria-hidden />
-      ) : null}
-      <StatusDot status={doc.status} className={dimmed ? "opacity-50" : ""} />
-      <span className="min-w-0 flex-1 truncate">{doc.title}</span>
-      <span className="flex-none text-meta text-ink-32 tabular-nums">{compactDate(doc.date)}</span>
-    </Link>
+    <div className="group/plan relative">
+      <Link
+        ref={ref}
+        to={docHref(doc.path)}
+        aria-current={active ? "page" : undefined}
+        title={doc.title}
+        className={`relative flex h-8 items-center gap-2.5 rounded-[8px] pr-2.5 text-ui transition-colors duration-150 ${
+          active
+            ? "bg-surface font-medium text-ink"
+            : dimmed
+              ? "text-ink-32 hover:bg-surface/60 hover:text-ink-64"
+              : "text-ink-64 hover:bg-surface/60 hover:text-ink"
+        }`}
+        style={{ paddingLeft: indent }}
+      >
+        {active ? (
+          <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" aria-hidden />
+        ) : null}
+        <StatusDot status={doc.status} className={dimmed ? "opacity-50" : ""} />
+        <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+        <span className={`flex-none text-meta text-ink-32 tabular-nums ${PLAN_ACTION_HIDES}`}>
+          {compactDate(doc.date)}
+        </span>
+      </Link>
+      <RowAction
+        label={plan.archived ? "Restore plan" : "Archive plan"}
+        onClick={plan.archived ? plan.restorePlan : plan.archivePlan}
+        disabled={plan.pending}
+        reveal={PLAN_ACTION_SHOWS}
+      >
+        {plan.archived ? (
+          <RotateCcw className="size-3.5" strokeWidth={1.75} aria-hidden />
+        ) : (
+          <Archive className="size-3.5" strokeWidth={1.75} aria-hidden />
+        )}
+      </RowAction>
+    </div>
   );
 }
 
@@ -122,6 +174,7 @@ interface ToggleRowProps {
   attention?: number;
   strong?: boolean;
   dimmed?: boolean;
+  action?: ReactNode;
 }
 
 function ToggleRow({
@@ -136,6 +189,7 @@ function ToggleRow({
   attention = 0,
   strong = false,
   dimmed = false,
+  action,
 }: ToggleRowProps) {
   const labelTone = strong
     ? "font-semibold"
@@ -144,7 +198,7 @@ function ToggleRow({
       : "font-medium text-ink-64 group-hover:text-ink";
   return (
     <div
-      className={`group flex h-8 items-center rounded-[8px] pr-2.5 text-ui transition-colors duration-150 ${
+      className={`group relative flex h-8 items-center rounded-[8px] pr-2.5 text-ui transition-colors duration-150 ${
         active ? "bg-surface text-ink" : "text-ink hover:bg-surface/60"
       }`}
       style={{ paddingLeft: indent }}
@@ -169,13 +223,16 @@ function ToggleRow({
       >
         {icon}
         <span className={`min-w-0 truncate ${labelTone}`}>{label}</span>
-        <PlanCount count={count} muted={dimmed || count === 0} />
-        {attention > 0 ? (
-          <span title={`${attention} in your inbox`} className="flex-none pl-1.5">
-            <AttentionCount count={attention} />
-          </span>
-        ) : null}
+        <span className={`ml-auto flex flex-none items-center ${action ? ROW_ACTION_HIDES : ""}`}>
+          <PlanCount count={count} muted={dimmed || count === 0} />
+          {attention > 0 ? (
+            <span title={`${attention} in your inbox`} className="flex-none pl-1.5">
+              <AttentionCount count={attention} />
+            </span>
+          ) : null}
+        </span>
       </Link>
+      {action}
     </div>
   );
 }
@@ -295,6 +352,7 @@ function RepoNode({ repo, selection, attention }: { repo: RepoIndex; selection: 
   useEffect(() => {
     if (containsSelection) setOpen(true);
   }, [containsSelection]);
+  const setVisibility = useRepoVisibility();
   const isActive = containsSelection && !selection.project && !selection.docPath;
   const projectsWithPlans = repo.projects.filter(
     (project) => project.docs.length > 1 || selection.project === project.name,
@@ -324,6 +382,15 @@ function RepoNode({ repo, selection, attention }: { repo: RepoIndex; selection: 
         count={repo.docCount - archivedCount}
         attention={attention}
         strong
+        action={
+          <RowAction
+            label={`Hide ${repo.name}`}
+            onClick={() => setVisibility(repo.name, true)}
+            reveal={ROW_ACTION_SHOWS}
+          >
+            <EyeOff className="size-3.5" strokeWidth={1.75} aria-hidden />
+          </RowAction>
+        }
       />
       {open ? (
         <div className="pb-1.5">
@@ -401,13 +468,51 @@ function SidebarQuote({ quotes }: { quotes: readonly string[] }) {
   );
 }
 
+function HiddenRepos({ repos }: { repos: readonly RepoIndex[] }) {
+  const [open, setOpen] = useState(false);
+  const setVisibility = useRepoVisibility();
+  if (repos.length === 0) return null;
+  return (
+    <section aria-label="Hidden repos" className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="flex h-7 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-meta font-medium text-ink-32 transition-colors duration-150 hover:bg-surface/60 hover:text-ink-64"
+      >
+        <Chevron open={open} />
+        <span className="min-w-0 flex-1 truncate">Hidden repos</span>
+      </button>
+      {open
+        ? repos.map((repo) => (
+            <div
+              key={repo.name}
+              className="group relative flex h-8 items-center rounded-[8px] pr-9 pl-9 text-ui text-ink-32 transition-colors duration-150 hover:bg-surface/60"
+            >
+              <Link to={repoHref(repo.name)} className="min-w-0 flex-1 truncate hover:text-ink-64">
+                {repo.name}
+              </Link>
+              <RowAction
+                label={`Show ${repo.name}`}
+                onClick={() => setVisibility(repo.name, false)}
+                reveal={ROW_ACTION_SHOWS}
+              >
+                <Eye className="size-3.5" strokeWidth={1.75} aria-hidden />
+              </RowAction>
+            </div>
+          ))
+        : null}
+    </section>
+  );
+}
+
 function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSelection }) {
   const { data: inbox } = useInbox();
   const [collapsedGroups, setGroupCollapsed] = useLocalNameSet(COLLAPSED_GROUPS_KEY);
   const sections = repoSections(index);
   const repoNodes = (repos: RepoIndex[]) =>
     repos
-      .filter((repo) => repo.docCount > 0 || selection.repo === repo.name)
+      .filter((repo) => (repo.docCount > 0 && !repo.hidden) || selection.repo === repo.name)
       .map((repo) => (
         <RepoNode
           key={repo.name}
@@ -437,6 +542,7 @@ function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSe
           </GroupSection>
         ),
       )}
+      <HiddenRepos repos={index.repos.filter((repo) => repo.hidden && selection.repo !== repo.name)} />
     </>
   );
 }

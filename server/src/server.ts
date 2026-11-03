@@ -13,6 +13,7 @@ import { EventHub, type HubEvent } from "./events.js";
 import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
+import { PreferencesStore } from "./preferences/preferencesStore.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
@@ -129,6 +130,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const github = new GithubByRepo(code);
   const token = createSessionToken();
   const seen = new SeenStore({ stateDir: config.stateDir, log });
+  const preferences = new PreferencesStore(config.stateDir);
+  await preferences.load();
   const sessions = new SessionStore({
     docsRoot: config.docsRoot,
     stateDir: config.stateDir,
@@ -205,6 +208,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
             github: remote,
             prLinks: prLinkHostFor(config, repo),
             group: groupForRepo(config.groups, repo, remote),
+            hidden: preferences.isRepoHidden(repo),
           };
         },
         archiveOf: (summary) => archive.stateFor(summary),
@@ -214,6 +218,11 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       cachedAt = Date.now();
     }
     return cachedIndex;
+  };
+
+  const publishPreferencesChange = (): void => {
+    cachedIndex = null;
+    hub.publish({ type: "index-changed", version: hub.nextVersion() });
   };
 
   const publishArchiveChange = (paths: string[]): void => {
@@ -276,6 +285,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
+    preferences,
+    onPreferencesChange: publishPreferencesChange,
     openUrl: options.openUrl ?? createMacOpener(),
     revealInFinder: options.revealInFinder ?? createFinderRevealer(),
     getIndex,
