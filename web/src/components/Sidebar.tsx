@@ -165,7 +165,15 @@ function ToggleRow({
       >
         <Chevron open={open} />
       </button>
-      <Link to={to} onClick={() => !open && onToggle()} className="flex min-w-0 flex-1 items-center gap-2 pl-1">
+      <Link
+        to={to}
+        onClick={(event) => {
+          if (open) event.preventDefault();
+          onToggle();
+        }}
+        aria-expanded={open}
+        className="flex min-w-0 flex-1 items-center gap-2 self-stretch pl-1"
+      >
         {icon}
         <span className={`min-w-0 truncate ${labelTone}`}>{label}</span>
         <Counts active={count} archived={archivedCount} muted={dimmed || count === 0} />
