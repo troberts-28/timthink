@@ -33,18 +33,13 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function Counts({ active, archived, muted }: { active: number; archived: number; muted: boolean }) {
+function PlanCount({ count, muted }: { count: number; muted: boolean }) {
   return (
-    <span className="ml-auto flex flex-none items-center gap-2 pl-2 text-meta tabular-nums">
-      <span className={muted ? "text-ink-32" : "text-ink-64"} title={pluralise(active, "plan")}>
-        {active}
-      </span>
-      {archived > 0 ? (
-        <span className="flex items-center gap-0.5 text-ink-32" title={pluralise(archived, "archived plan")}>
-          <Archive className="size-3" strokeWidth={1.75} aria-hidden />
-          {archived}
-        </span>
-      ) : null}
+    <span
+      className={`ml-auto flex-none pl-2 text-meta tabular-nums ${muted ? "text-ink-32" : "text-ink-64"}`}
+      title={pluralise(count, "active plan")}
+    >
+      {count}
     </span>
   );
 }
@@ -124,7 +119,6 @@ interface ToggleRowProps {
   icon?: ReactNode;
   label: string;
   count: number;
-  archivedCount?: number;
   attention?: number;
   strong?: boolean;
   dimmed?: boolean;
@@ -139,14 +133,13 @@ function ToggleRow({
   icon,
   label,
   count,
-  archivedCount = 0,
   attention = 0,
   strong = false,
   dimmed = false,
 }: ToggleRowProps) {
   const labelTone = strong
     ? "font-semibold"
-    : dimmed || (count === 0 && archivedCount === 0)
+    : dimmed || count === 0
       ? "text-ink-32 group-hover:text-ink-64"
       : "font-medium text-ink-64 group-hover:text-ink";
   return (
@@ -176,7 +169,7 @@ function ToggleRow({
       >
         {icon}
         <span className={`min-w-0 truncate ${labelTone}`}>{label}</span>
-        <Counts active={count} archived={archivedCount} muted={dimmed || count === 0} />
+        <PlanCount count={count} muted={dimmed || count === 0} />
         {attention > 0 ? (
           <span title={`${attention} in your inbox`} className="flex-none pl-1.5">
             <AttentionCount count={attention} />
@@ -259,7 +252,6 @@ function ProjectNode({
         icon={<Folder className="size-3.5 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />}
         label={project.name}
         count={insideArchive ? archived.length : active.length}
-        archivedCount={inline ? 0 : archived.length}
         dimmed={insideArchive}
       />
       {open ? (
@@ -344,7 +336,6 @@ function RepoNode({
         indent={10}
         label={repo.name}
         count={repo.docCount - archivedCount}
-        archivedCount={showArchived ? 0 : archivedCount}
         attention={attention}
         strong
       />

@@ -43,7 +43,12 @@ describe("loadConfig", () => {
       { name: "Work", owners: ["acme-corp"], repos: [], default: false },
       { name: "Personal", owners: [], repos: [], default: true },
     ]);
-    expect(config.archive).toEqual({ auto: true, staleAfterDays: 30, finishedAfterDays: 3 });
+    expect(config.archive).toEqual({
+      auto: true,
+      staleAfterDays: 30,
+      inFlightStaleAfterDays: 60,
+      finishedAfterDays: 3,
+    });
     expect(config.readOnly).toBe(false);
     expect(loadConfig({ TIMTHINK_CONFIG: configPath, TIMTHINK_READONLY: "1" }).readOnly).toBe(true);
     expect(loadConfig({ TIMTHINK_CONFIG: path.join(path.dirname(configPath), "missing.json") }).groups).toBeNull();

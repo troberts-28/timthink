@@ -36,9 +36,12 @@ function autoArchive(input: ArchiveRuleInput): DocArchive | null {
   const { settings, now, mtime } = input;
   if (!settings.auto || input.needsUser) return null;
   const status = canonicalStatus(input.status);
-  if (status && IN_FLIGHT_STATUSES.has(status)) return null;
   const idleDays = wholeDays(now - mtime);
   const idleMs = now - mtime;
+  if (status && IN_FLIGHT_STATUSES.has(status)) {
+    if (idleMs <= settings.inFlightStaleAfterDays * DAY_MS) return null;
+    return { state: "auto", reason: `${capitalise(status)} but not edited for ${idleDays} days` };
+  }
   if (status && FINISHED_STATUSES.has(status) && idleMs > settings.finishedAfterDays * DAY_MS) {
     return { state: "auto", reason: `${capitalise(status)} ${daysPhrase(idleDays)}` };
   }

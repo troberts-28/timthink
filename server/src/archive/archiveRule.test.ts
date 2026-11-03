@@ -40,10 +40,14 @@ describe("archiveState", () => {
     expect(archiveState(input({ status: "done", mtime: NOW - 2 * DAY_MS })).state).toBe("active");
   });
 
-  it("never auto-archives docs in review or in progress", () => {
+  it("keeps docs in review or in progress active for longer, but not forever", () => {
     for (const status of ["review", "in-progress", "needs review", "wip", "active"]) {
-      expect(archiveState(input({ status, mtime: NOW - 90 * DAY_MS })).state).toBe("active");
+      expect(archiveState(input({ status, mtime: NOW - 59 * DAY_MS })).state).toBe("active");
+      expect(archiveState(input({ status, mtime: NOW - 61 * DAY_MS })).state).toBe("auto");
     }
+    expect(archiveState(input({ status: "active", mtime: NOW - 150 * DAY_MS })).reason).toBe(
+      "In-progress but not edited for 150 days",
+    );
   });
 
   it("keeps docs that need the user active", () => {
@@ -76,7 +80,7 @@ describe("archiveState", () => {
   });
 
   it("honours custom thresholds", () => {
-    const settings = { auto: true, staleAfterDays: 7, finishedAfterDays: 0 };
+    const settings = { auto: true, staleAfterDays: 7, inFlightStaleAfterDays: 14, finishedAfterDays: 0 };
     expect(archiveState(input({ settings, mtime: NOW - 8 * DAY_MS })).state).toBe("auto");
     expect(archiveState(input({ settings, status: "done", mtime: NOW - 60_000 })).state).toBe("auto");
   });

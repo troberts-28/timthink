@@ -27,6 +27,7 @@ const groupSchema = z.object({
 const archiveSchema = z.object({
   auto: z.boolean().optional(),
   staleAfterDays: z.number().positive().optional(),
+  inFlightStaleAfterDays: z.number().positive().optional(),
   finishedAfterDays: z.number().nonnegative().optional(),
 });
 
@@ -67,10 +68,16 @@ export interface RepoGroupConfig {
 export interface ArchiveSettings {
   auto: boolean;
   staleAfterDays: number;
+  inFlightStaleAfterDays: number;
   finishedAfterDays: number;
 }
 
-export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = { auto: true, staleAfterDays: 21, finishedAfterDays: 3 };
+export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = {
+  auto: true,
+  staleAfterDays: 21,
+  inFlightStaleAfterDays: 60,
+  finishedAfterDays: 3,
+};
 
 export interface TimthinkConfig {
   configPath: string;
