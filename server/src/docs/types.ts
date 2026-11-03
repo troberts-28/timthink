@@ -13,7 +13,7 @@ export interface DocSummary {
   mtime: number;
   status: string | null;
   branch: string | null;
-  pr: string | null;
+  prs: string[];
   linear: string | null;
   tasks: TaskProgress;
   frontmatterError: string | null;
@@ -73,8 +73,15 @@ export interface DocsIndex {
   repos: RepoIndex[];
 }
 
+export interface PhaseSummary {
+  number: number;
+  title: string;
+  tasks: TaskProgress;
+}
+
 export interface DocDetail {
   summary: DocSummary;
+  phases: PhaseSummary[];
   raw: string;
   hash: string;
   frontmatter: Record<string, unknown>;

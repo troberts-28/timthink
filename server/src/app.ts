@@ -6,10 +6,12 @@ import { stream, streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { ArchiveService } from "./archive/archiveService.js";
 import { archiveRoutes } from "./archive/routes.js";
+import { buildSlashCommand, isValidBranchName, isValidPhase } from "./build/buildCommand.js";
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
 import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
 import type { TimthinkConfig } from "./config.js";
+import { listPhases } from "./docs/phases.js";
 import type { DocsStore } from "./docs/store.js";
 import type { DocDetail, DocsIndex } from "./docs/types.js";
 import type { EventHub, HubEvent } from "./events.js";
@@ -92,7 +94,12 @@ const docPathQuery = z.object({ path: z.string().min(1) });
 const repoQuery = z.object({ repo: z.string().min(1) });
 
 const sessionParams = z.object({ id: z.string().min(1).max(64) });
-const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional() });
+const buildBody = z.object({
+  doc: z.string().min(1).max(1024),
+  phase: z.number().refine(isValidPhase).nullable().optional(),
+  branch: z.string().refine(isValidBranchName).nullable().optional(),
+});
+const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional(), build: buildBody.optional() });
 const revealBody = z.object({ path: z.string().min(1).max(1024) });
 const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
 
@@ -145,6 +152,8 @@ async function toSessionView(session: SessionRecord, docPath: string | null = nu
     canResume: isSessionId(session.id) && (await isExistingDirectory(session.cwd)),
     mayBeOpenUntracked: mayBeOpenUntracked(session),
     wroteDoc: docPath === null ? null : session.writtenDocPaths.includes(docPath),
+    plannedDoc: docPath === null ? null : session.plannedDocPaths.includes(docPath),
+    builtDoc: docPath === null ? null : session.builtDocPaths.includes(docPath),
   };
 }
 
@@ -209,7 +218,10 @@ export function createApp(deps: AppDeps) {
     return { status: "focused" };
   };
 
-  const resumeSession = async (session: SessionRecord, reviewDoc?: string): Promise<SessionActionResponse> => {
+  const resumeSession = async (
+    session: SessionRecord,
+    { reviewDoc, build }: z.infer<typeof resumeBody>,
+  ): Promise<SessionActionResponse> => {
     if (!isSessionId(session.id)) return { status: "unavailable", message: "This session id can't be resumed" };
     if (!session.cwd || !(await isExistingDirectory(session.cwd))) {
       return { status: "unavailable", message: "The session's directory no longer exists" };
@@ -217,7 +229,10 @@ export function createApp(deps: AppDeps) {
     if (reviewDoc !== undefined && !store.getDoc(reviewDoc)) {
       return { status: "unavailable", message: "Unknown doc to review" };
     }
-    const prompt = reviewDoc === undefined ? null : `/timthink review ${reviewDoc}`;
+    if (build !== undefined && !store.getDoc(build.doc)) {
+      return { status: "unavailable", message: "Unknown doc to build" };
+    }
+    const prompt = build ? buildSlashCommand(build) : reviewDoc === undefined ? null : `/timthink review ${reviewDoc}`;
     await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd, prompt);
     await deps.openUrl(RESUME_TAB_CONFIG_URL);
     return { status: "resumed", cwd: session.cwd };
@@ -255,6 +270,7 @@ export function createApp(deps: AppDeps) {
         raw,
         hash: docHash(raw),
         frontmatter: parseFrontmatter(raw).data,
+        phases: listPhases(parseFrontmatter(raw).body),
         attachments: store.attachmentsFor(summary),
       };
       return c.json(detail);
@@ -334,8 +350,8 @@ export function createApp(deps: AppDeps) {
       return c.json<SessionActionResponse>(body, status);
     })
     .post("/api/sessions/:id/resume", zValidator("param", sessionParams), zValidator("json", resumeBody), async (c) => {
-      const { reviewDoc } = c.req.valid("json");
-      const resume = (session: SessionRecord) => resumeSession(session, reviewDoc);
+      const request = c.req.valid("json");
+      const resume = (session: SessionRecord) => resumeSession(session, request);
       const { body, status } = await runSessionAction(c.req.valid("param").id, resume);
       return c.json<SessionActionResponse>(body, status);
     })

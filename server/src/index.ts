@@ -16,6 +16,7 @@ export {
 } from "./archive/archiveStore.js";
 export { type OfflineArchive, type OfflineArchiveConfig, openArchive } from "./archive/offline.js";
 export type { ArchiveResponse } from "./archive/routes.js";
+export type { BuildRequest } from "./build/buildCommand.js";
 export {
   type CheckProblem,
   type CheckResult,
@@ -48,6 +49,7 @@ export type {
   DocsIndex,
   GithubRepo,
   IndexedDoc,
+  PhaseSummary,
   PrLinkHost,
   ProjectIndex,
   RepoIndex,

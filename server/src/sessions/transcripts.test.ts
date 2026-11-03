@@ -67,9 +67,11 @@ describe("scanTranscript", () => {
         {
           filePath: `${DOCS_ROOT}/acme-api/2026-10-01-rate-limiter-plan.md`,
           at: "2026-10-01T10:30:00.000Z",
+          firstAt: "2026-10-01T09:02:00.000Z",
           kind: "write",
         },
       ],
+      buildRequests: [],
     });
   });
 

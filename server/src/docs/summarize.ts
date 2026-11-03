@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type FrontmatterData, frontmatterString, parseFrontmatter } from "../frontmatter.js";
+import { type FrontmatterData, frontmatterList, frontmatterString, parseFrontmatter } from "../frontmatter.js";
 import type { DocSummary, TaskProgress } from "./types.js";
 
 const DATE_PREFIX = /^(\d{4}-\d{2}-\d{2})(?:[-_ ]|$)/;
@@ -27,7 +27,7 @@ export function locateDoc(docPath: string): DocLocation | null {
   };
 }
 
-function* linesOutsideFences(body: string): Generator<string> {
+export function* linesOutsideFences(body: string): Generator<string> {
   let fence: string | null = null;
   for (const line of body.split(/\r?\n/)) {
     const fenceMatch = FENCE.exec(line);
@@ -83,6 +83,13 @@ function resolveDate(data: FrontmatterData, fileName: string, mtime: number): st
   );
 }
 
+const PR_NUMBER = /^#?(\d+)$/;
+const PR_URL = /\/(?:pull|pr\/[^/]+\/[^/]+)\/(\d+)\/?$/;
+
+function prNumber(value: string): string | null {
+  return PR_NUMBER.exec(value.trim())?.[1] ?? PR_URL.exec(value.trim())?.[1] ?? null;
+}
+
 export interface SummarizeInput {
   path: string;
   raw: string;
@@ -105,7 +112,7 @@ export function summarizeDoc({ path: docPath, raw, mtime }: SummarizeInput): Doc
     mtime,
     status: frontmatterString(data, "status")?.toLowerCase() ?? null,
     branch: frontmatterString(data, "branch"),
-    pr: frontmatterString(data, "pr"),
+    prs: frontmatterList(data, "pr").flatMap((value) => prNumber(value) ?? []),
     linear: frontmatterString(data, "linear"),
     tasks: countTasks(body),
     frontmatterError: error,

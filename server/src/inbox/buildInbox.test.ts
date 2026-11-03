@@ -20,7 +20,7 @@ function summary(path: string, overrides: Partial<DocSummary> = {}): DocSummary 
     mtime: Date.parse("2026-11-01T10:00:00.000Z"),
     status: null,
     branch: null,
-    pr: null,
+    prs: [],
     linear: null,
     tasks: { done: 0, total: 0 },
     frontmatterError: null,

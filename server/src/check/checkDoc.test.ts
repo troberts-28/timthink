@@ -69,8 +69,15 @@ describe("checkDoc", () => {
   it("validates known frontmatter fields", async () => {
     expect(await problems("---\ntitle: Feed\nstatus: completed\npr: soon\ndate: next week\n---\n")).toEqual([
       "3 error status must be one of draft, review, approved, in-progress, done, abandoned (did you mean done?)",
-      "4 error pr must be a pull request number",
+      "4 error pr must be a pull request number, or a list of them",
       "5 warning date should be YYYY-MM-DD",
+    ]);
+  });
+
+  it("accepts a list of pull requests but not a list with junk in it", async () => {
+    expect(await problems('---\ntitle: Feed\npr: [27269, "#27270"]\n---\n')).toEqual([]);
+    expect(await problems("---\ntitle: Feed\npr:\n  - 27269\n  - soon\n---\n")).toEqual([
+      "3 error pr must be a pull request number, or a list of them",
     ]);
   });
 

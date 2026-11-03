@@ -36,3 +36,13 @@ export function frontmatterString(data: FrontmatterData, key: string): string | 
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return null;
 }
+
+export function frontmatterList(data: FrontmatterData, key: string): string[] {
+  const value = data[key];
+  const items = Array.isArray(value) ? value : [value];
+  return items.flatMap((item) => {
+    if (typeof item === "number") return [String(item)];
+    if (typeof item === "string") return item.split(/[\s,]+/).filter(Boolean);
+    return [];
+  });
+}

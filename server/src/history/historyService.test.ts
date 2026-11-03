@@ -22,6 +22,8 @@ function session(id: string, title: string): SessionRecord {
     transcriptPath: null,
     docPaths: [DOC],
     writtenDocPaths: [DOC],
+    plannedDocPaths: [DOC],
+    builtDocPaths: [],
   };
 }
 

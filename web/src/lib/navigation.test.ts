@@ -14,7 +14,7 @@ function doc(path: string, title: string, overrides: Partial<IndexedDoc> = {}): 
     mtime: 1,
     status: null,
     branch: null,
-    pr: null,
+    prs: [],
     linear: null,
     tasks: { done: 0, total: 0 },
     frontmatterError: null,

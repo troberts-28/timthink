@@ -17,7 +17,7 @@ describe("summarizeDoc", () => {
       title: "Hello",
       status: "review",
       date: "2026-09-30",
-      pr: "4211",
+      prs: ["4211"],
       branch: "feat/x",
       linear: "API-1",
       frontmatterError: null,
@@ -54,6 +54,16 @@ describe("summarizeDoc", () => {
     expect(atRoot?.project).toBeNull();
     const inFolder = summarizeDoc({ path: "timthink/ui/plan.md", raw: "---\nproject: timthink\n---\n", mtime: MTIME });
     expect(inFolder?.project).toBe("ui");
+  });
+
+  it("reads pr as a number, a list, or PR URLs", () => {
+    const prs = (value: string) => summarizeDoc({ path: "acme/p.md", raw: `---\npr: ${value}\n---\n`, mtime: 0 })?.prs;
+    expect(prs("4211")).toEqual(["4211"]);
+    expect(prs("[27269, '#27270']")).toEqual(["27269", "27270"]);
+    expect(prs("https://github.com/o/r/pull/12")).toEqual(["12"]);
+    expect(prs("https://app.graphite.com/github/pr/o/r/34")).toEqual(["34"]);
+    expect(prs('""')).toEqual([]);
+    expect(prs("soon")).toEqual([]);
   });
 
   it("rejects files outside a repo folder", () => {

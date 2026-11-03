@@ -1,6 +1,6 @@
 ---
 name: timthink
-description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, and act on reviews submitted from it. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", or runs "/timthink review" (with or without a doc path), or asks you to address, answer or work through review comments on a plan.
+description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, act on reviews submitted from it, and build approved plans. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", runs "/timthink review" (with or without a doc path) or "/timthink build <doc>", asks you to address, answer or work through review comments on a plan, or asks you to implement a plan.
 ---
 
 # timthink
@@ -26,7 +26,7 @@ linear: ABC-123
 ---
 ```
 
-Leave out fields you don't know. `status` is one of `draft`, `review`, `approved`, `in-progress`, `done`, `abandoned`.
+Leave out fields you don't know. `pr` can be a list (`pr: [1234, 1235]`) when the plan ships as several PRs. `status` is one of `draft`, `review`, `approved`, `in-progress`, `done`, `abandoned`.
 
 **Status rules.**
 - Set `status: review` when you want the user's input.
@@ -89,3 +89,14 @@ Rules:
 - Only act on what `review show` prints. Never invent comments or answers.
 - Don't change `status` to `approved`. After addressing a "Request changes" review, set `status: review` if you want another look.
 - `<doc>` can be absolute, `~`-relative, or relative to the docs root.
+
+## `/timthink build <doc> [--phase N] [--branch name]`
+
+The user approved a plan and wants it built, usually in a fresh session with nothing but the plan in context. Build it.
+
+1. **Read the plan** in full, then run `timthink review show <doc>`. If a submitted review hasn't been addressed (exit code 0 with threads or answers), work through it first with the review steps above, then carry on. If `status` isn't `approved`, say so in one line and carry on.
+2. **Branch.** The branch is `--branch` if given, else the plan's `branch:`. If the current branch already matches, build on it. Otherwise create it from the repo's trunk (`gt create <branch>` in Graphite repos, else `git switch -c <branch>`). If neither names a branch, pick a short `feat/<slug>`. Write it to `branch:` in the frontmatter.
+3. **Mark it started.** Set `status: in-progress`.
+4. **Build.** Work phase by phase, in order, through every phase with open tasks, or only phase N with `--phase N`. Tick each task (`- [x]`) in the plan as it lands, not in a batch at the end. Follow the repo's own conventions for tests, lint and commits. When the plan's decisions turn out to be wrong in practice, follow the code, note the deviation in the plan under the phase, and mention it in your summary.
+5. **PRs.** After `gt submit`, `gh pr create` or similar, add every PR number to the plan's `pr:` list. Don't open PRs or push unless the user's instructions for the repo say to; ask if unsure.
+6. **Finish.** Leave `status: in-progress` while any phase has open tasks. Set `status: done` only when every task is ticked and the work is merged or the user says it's done. Summarise what's built, what's left, and any deviations, and end with the URL from `timthink url <doc>`.
