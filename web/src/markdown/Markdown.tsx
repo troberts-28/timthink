@@ -5,6 +5,7 @@ import { Children, type ComponentProps, createElement, isValidElement, memo, typ
 import { Link } from "react-router";
 import { RemovedGhost } from "../changes/RemovedGhost";
 import { docHref, rawFileHref, resolveRelative } from "../lib/routes";
+import { PrLink } from "../prs/PrLink";
 import { SectionMenu } from "../review/SectionMenu";
 import { CodeBlock } from "./CodeBlock";
 import { CodeRef } from "./CodeRef";
@@ -97,6 +98,13 @@ function Anchor({ href, children, ...rest }: ComponentProps<"a">) {
       <Link to={href} {...rest}>
         {children}
       </Link>
+    );
+  }
+  if ("data-pr" in rest) {
+    return (
+      <PrLink href={href} {...rest}>
+        {children}
+      </PrLink>
     );
   }
   if (EXTERNAL_SCHEME.test(href)) {

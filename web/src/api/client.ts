@@ -12,7 +12,7 @@ import type {
 import { hc } from "hono/client";
 
 const TOKEN_META_NAME = "timthink-token";
-const TOKEN_HEADER = "x-timthink-token";
+export const TOKEN_HEADER = "x-timthink-token";
 
 const client = hc<AppType>("/");
 

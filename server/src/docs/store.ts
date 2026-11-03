@@ -13,6 +13,7 @@ import type {
   DocsIndex,
   GithubRepo,
   IndexedDoc,
+  PrAttention,
   PrLinkHost,
   ProjectIndex,
   RepoIndex,
@@ -28,6 +29,7 @@ export interface RepoInfo {
 export interface IndexOptions {
   repoInfo: (repo: string) => RepoInfo;
   archiveOf: (doc: DocSummary) => DocArchive;
+  prAttentionOf?: (doc: DocSummary) => PrAttention | null;
   groupOrder: (assigned: Array<string | null>) => string[] | null;
   sidebarQuotes?: readonly string[];
 }
@@ -155,7 +157,9 @@ export class DocsStore {
 
   buildIndex(options: IndexOptions): DocsIndex {
     const repos = this.repoNames()
-      .map((name) => this.buildRepoIndex(name, options.repoInfo(name), options.archiveOf))
+      .map((name) =>
+        this.buildRepoIndex(name, options.repoInfo(name), options.archiveOf, options.prAttentionOf ?? (() => null)),
+      )
       .sort((a, b) => b.lastActivity - a.lastActivity || a.name.localeCompare(b.name));
     return {
       generatedAt: new Date().toISOString(),
@@ -169,11 +173,12 @@ export class DocsStore {
     name: string,
     { github, prLinks, group, hidden = false }: RepoInfo,
     archiveOf: (doc: DocSummary) => DocArchive,
+    prAttentionOf: (doc: DocSummary) => PrAttention | null,
   ): RepoIndex {
     const repoDocs: IndexedDoc[] = [...this.docs.values()]
       .filter((doc) => doc.repo === name)
       .sort(newestFirst)
-      .map((doc) => ({ ...doc, archive: archiveOf(doc) }));
+      .map((doc) => ({ ...doc, archive: archiveOf(doc), prAttention: prAttentionOf(doc) }));
     const repoAttachments = [...this.attachments.values()].filter((entry) => entry.repo === name);
     const projects = new Map<string, ProjectIndex>();
     const projectFor = (projectName: string): ProjectIndex => {

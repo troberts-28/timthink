@@ -182,6 +182,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     settings: config.archive,
     log,
   });
+  let lastPrAttention = "";
   const prs: PrService = new PrService({
     settings: config.prs,
     stateDir: config.stateDir,
@@ -190,7 +191,14 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     githubFor: (repo) => github.get(repo),
     isArchived: (summary) => archive.isArchived(summary),
     runner: options.graphqlRunner ?? createGhRunner(() => findGh(config.prs.ghPath)),
-    onChange: (paths) => hub.publish({ type: "prs-changed", paths, version: hub.nextVersion() }),
+    onChange: (paths) => {
+      hub.publish({ type: "prs-changed", paths, version: hub.nextVersion() });
+      const attention = JSON.stringify(store.allDocs().map((doc) => prs.attentionFor(doc)));
+      if (attention === lastPrAttention) return;
+      lastPrAttention = attention;
+      cachedIndex = null;
+      hub.publish({ type: "index-changed", version: hub.nextVersion() });
+    },
     hasViewers: () => hub.viewerCount > 0,
     log,
   });
@@ -230,6 +238,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
           };
         },
         archiveOf: (summary) => archive.stateFor(summary),
+        prAttentionOf: (summary) => prs.attentionFor(summary),
         groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),
         sidebarQuotes: config.sidebarQuotes,
       });

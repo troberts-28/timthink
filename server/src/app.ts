@@ -108,8 +108,11 @@ const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: 
 const RECENT_SESSIONS_LIMIT = 50;
 const MAX_LOOKUP_PRS = 50;
 
+const GITHUB_NAME = /^[\w.-]+$/;
+
 const prLookupQuery = z.object({
-  repo: z.string().min(1),
+  owner: z.string().regex(GITHUB_NAME),
+  repo: z.string().regex(GITHUB_NAME),
   numbers: z
     .string()
     .regex(/^\d+(,\d+)*$/)
@@ -401,8 +404,8 @@ export function createApp(deps: AppDeps) {
       return c.json(deps.prs.docPrs(docPath));
     })
     .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
-      const { repo, numbers } = c.req.valid("query");
-      return c.json(deps.prs.lookup(repo, numbers));
+      const { owner, repo, numbers } = c.req.valid("query");
+      return c.json(deps.prs.lookup({ owner, repo }, numbers));
     })
     .get("/api/inbox", async (c) => c.json(await deps.inbox.build()))
     .get("/api/events", (c) =>

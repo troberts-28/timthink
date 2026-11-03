@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PrSettings } from "../config.js";
-import type { DocSummary, GithubRepo } from "../docs/types.js";
+import type { DocSummary, GithubRepo, PrAttention } from "../docs/types.js";
 import type { SessionRecord } from "../sessions/sessionStore.js";
 import type { SubmittedPr } from "../sessions/types.js";
 import { GhUnavailableError, type GraphqlRunner } from "./ghClient.js";
@@ -25,6 +25,8 @@ const TICK_MS = 30_000;
 const DOC_STALE_MS = 2 * 60_000;
 const LOOKUP_STALE_MS = 10 * 60_000;
 const MAX_ROUNDS = 4;
+const PRS_PER_QUERY = 8;
+const REFS_PER_QUERY = 8;
 const MAX_STACK = 30;
 
 interface CachedPr {
@@ -165,10 +167,20 @@ export class PrService {
     return { ...base, status, message: this.lastError?.message ?? null, linked, stack };
   }
 
-  lookup(repo: string, numbers: readonly number[]): PrLookupResponse {
-    const github = this.options.githubFor(repo);
+  attentionFor(doc: DocSummary): PrAttention | null {
+    const github = this.options.githubFor(doc.repo);
+    if (!github || !this.options.settings.enabled) return null;
+    const open = [...this.linkedNumbers(doc).keys()].flatMap((number) => {
+      const info = this.cached(github, number)?.info;
+      return info && !isTerminal(info) ? [info] : [];
+    });
+    if (open.some((info) => info.ci === "failing")) return "ci-failing";
+    if (open.some((info) => info.review === "changes_requested")) return "changes-requested";
+    return null;
+  }
+
+  lookup(github: GithubRepo, numbers: readonly number[]): PrLookupResponse {
     if (!this.options.settings.enabled) return { status: "disabled", prs: [] };
-    if (!github) return { status: "no-github", prs: [] };
     const prs = numbers.flatMap((number) => {
       const cached = this.cached(github, number);
       return cached ? [cached.info] : [];
@@ -177,7 +189,7 @@ export class PrService {
       const cached = this.cached(github, number);
       return !cached || (!isTerminal(cached.info) && this.ageMs(cached.fetchedAt) > LOOKUP_STALE_MS);
     });
-    if (wanted.length > 0) void this.refresh({ docPaths: [], extra: new Map([[repo, new Set(wanted)]]) });
+    if (wanted.length > 0) void this.refresh({ docPaths: [], extra: new Map([[repoKey(github), new Set(wanted)]]) });
     return { status: this.lastError?.kind === "unavailable" ? "unavailable" : "ok", prs };
   }
 
@@ -253,9 +265,10 @@ export class PrService {
       entry.docs.push(doc);
       for (const number of [...linked.keys(), ...(this.state.stacks[doc.path] ?? [])]) entry.numbers.add(number);
     }
-    for (const [repo, numbers] of extra) {
-      const github = this.options.githubFor(repo);
-      if (github) for (const number of numbers) entryFor(github).numbers.add(number);
+    for (const [key, numbers] of extra) {
+      const [owner = "", repo = ""] = key.split("/");
+      const github = byRepo.get(key)?.github ?? { owner, repo };
+      for (const number of numbers) entryFor(github).numbers.add(number);
     }
     if (!docPaths) this.lastFullRefresh = this.now();
     try {
@@ -288,24 +301,43 @@ export class PrService {
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
       const { parentsOf, childrenOf } = this.neighbourRefs(github, seeds, visitedRefs);
       if (toFetch.length === 0 && parentsOf.length === 0 && childrenOf.length === 0 && mergeChecks.length === 0) break;
-      const query: RepoQuery = {
-        owner: github.owner,
-        repo: github.repo,
-        numbers: toFetch,
-        parentsOf,
-        childrenOf,
-        mergeChecks,
-        trunk: this.state.trunks[key] ?? null,
-      };
-      const result = parseRepoQuery(await this.options.runner(buildRepoQuery(query)));
-      if (result.trunk) this.state.trunks[key] = result.trunk;
-      this.applyResult(github, result);
-      const fetched = result.prs.map((raw) => raw.number);
+      const fetched: number[] = [];
+      for (const query of this.chunkQueries(github, { toFetch, parentsOf, childrenOf, mergeChecks })) {
+        const result = parseRepoQuery(await this.options.runner(buildRepoQuery(query)));
+        if (result.trunk) this.state.trunks[key] = result.trunk;
+        this.applyResult(github, result);
+        fetched.push(...result.prs.map((raw) => raw.number));
+      }
       mergeChecks = this.pendingMergeChecks(github, fetched);
       seeds = fetched;
       toFetch = [];
     }
     this.state.refreshedAt[key] = new Date(this.now()).toISOString();
+  }
+
+  private *chunkQueries(
+    github: GithubRepo,
+    work: { toFetch: number[]; parentsOf: string[]; childrenOf: string[]; mergeChecks: MergeCheck[] },
+  ): Generator<RepoQuery> {
+    const trunk = this.state.trunks[repoKey(github)] ?? null;
+    const slice = <T>(items: T[], index: number, size: number) => items.slice(index * size, (index + 1) * size);
+    const chunks = Math.max(
+      Math.ceil(work.toFetch.length / PRS_PER_QUERY),
+      Math.ceil(work.parentsOf.length / REFS_PER_QUERY),
+      Math.ceil(work.childrenOf.length / REFS_PER_QUERY),
+      Math.ceil(work.mergeChecks.length / PRS_PER_QUERY),
+    );
+    for (let index = 0; index < chunks; index += 1) {
+      yield {
+        owner: github.owner,
+        repo: github.repo,
+        numbers: slice(work.toFetch, index, PRS_PER_QUERY),
+        parentsOf: slice(work.parentsOf, index, REFS_PER_QUERY),
+        childrenOf: slice(work.childrenOf, index, REFS_PER_QUERY),
+        mergeChecks: slice(work.mergeChecks, index, PRS_PER_QUERY),
+        trunk,
+      };
+    }
   }
 
   private applyResult(github: GithubRepo, result: ReturnType<typeof parseRepoQuery>): void {

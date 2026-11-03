@@ -55,7 +55,7 @@ export interface RepoQueryResult {
 }
 
 const MERGE_WINDOW_MS = 60 * 60 * 1000;
-const FAILED_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
+const FAILED_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 const FAILED_STATES = new Set(["FAILURE", "ERROR"]);
 
 const PR_FIELDS = `fragment P on PullRequest {
@@ -63,8 +63,8 @@ const PR_FIELDS = `fragment P on PullRequest {
   author { login }
   labels(first: 20) { nodes { name } }
   reviewDecision
-  reviewThreads(first: 100) { nodes { isResolved } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
+  reviewThreads(first: 50) { nodes { isResolved } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes {
     __typename
     ... on CheckRun { name conclusion status }
     ... on StatusContext { context state }
@@ -98,7 +98,9 @@ export function buildRepoQuery(query: RepoQuery): string {
       `m${number}: object(expression: ${literal(trunk)}) { ... on Commit { history(first: 100, since: ${literal(since)}, until: ${literal(until)}) { nodes { messageHeadline } } } }`,
     );
   }
-  return `query { repository(owner: ${literal(query.owner)}, name: ${literal(query.repo)}) {\n  ${fields.join("\n  ")}\n} }\n${PR_FIELDS}`;
+  const usesFragment = query.numbers.length + query.parentsOf.length + query.childrenOf.length > 0;
+  const body = `query { repository(owner: ${literal(query.owner)}, name: ${literal(query.repo)}) {\n  ${fields.join("\n  ")}\n} }`;
+  return usesFragment ? `${body}\n${PR_FIELDS}` : body;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

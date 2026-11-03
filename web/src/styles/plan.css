@@ -541,3 +541,88 @@
 .paper-full {
   --paper-max: 1200px;
 }
+
+.pr-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 4px;
+  margin-top: 12px;
+}
+
+.pr-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  transition: border-color 150ms ease-in-out;
+}
+
+.pr-pill:hover,
+.pr-pill:focus-within {
+  border-color: var(--ink-32);
+}
+
+.pr-pill-context {
+  border-style: dashed;
+  color: var(--ink-64);
+}
+
+.pr-pill-unlink {
+  display: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  border-radius: 4px;
+  color: var(--ink-32);
+}
+
+.pr-pill:hover .pr-pill-unlink,
+.pr-pill:focus-within .pr-pill-unlink {
+  display: grid;
+}
+
+.pr-pill-unlink:hover {
+  color: var(--bad-ink);
+  background: var(--bad-soft);
+}
+
+.pr-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: none;
+  width: max-content;
+  max-width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.pr-pill:hover > .pr-card,
+.pr-pill:focus-within > .pr-card {
+  display: grid;
+  gap: 2px;
+}
+
+.pr-card.pr-card-floating {
+  position: fixed;
+  display: grid;
+  gap: 2px;
+}

@@ -29,6 +29,7 @@ import { useActiveHeading } from "../plan/useActiveHeading";
 import { useArchiveShortcut } from "../plan/useArchiveShortcut";
 import { usePlanArchive } from "../plan/usePlanArchive";
 import { useRenderedMarkdown } from "../plan/useRenderedMarkdown";
+import { PrStatusProvider } from "../prs/PrStatusContext";
 import { ReviewButton, ReviewChip } from "../review/ReviewChip";
 import { ReviewProvider } from "../review/ReviewContext";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
@@ -150,7 +151,11 @@ function PlanPaper({
   useScrollToHash(rendered !== null);
   const archive = usePlanArchive(doc.summary.path);
   useArchiveShortcut(archive);
-  const body = rendered ? <ChangesAwareBody hast={rendered.hast} /> : null;
+  const body = rendered ? (
+    <PrStatusProvider hast={rendered.hast}>
+      <ChangesAwareBody hast={rendered.hast} />
+    </PrStatusProvider>
+  ) : null;
   const [buildOpen, setBuildOpen] = useState(false);
   const openBuild = useCallback(() => setBuildOpen(true), []);
   const closeBuild = useCallback(() => setBuildOpen(false), []);

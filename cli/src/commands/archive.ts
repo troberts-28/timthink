@@ -59,7 +59,7 @@ async function indexedDocs(config: OfflineArchiveConfig, repo: string | undefine
   return docs
     .allDocs()
     .filter((doc) => !repo || doc.repo === repo)
-    .map((doc) => ({ ...doc, archive: archive.stateFor(doc) }));
+    .map((doc) => ({ ...doc, archive: archive.stateFor(doc), prAttention: null }));
 }
 
 async function list(config: OfflineArchiveConfig, options: ArchiveOptions, io: ArchiveIo): Promise<number> {
