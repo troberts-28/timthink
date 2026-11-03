@@ -63,9 +63,8 @@ export function RepoPage() {
   ) : null;
   const archived = partitionArchived(repoDocs(repo)).archived;
   const activePlans = partitionArchived(repo.ungrouped).active;
-  const liveProjects = repo.projects.filter(
-    (project) => project.docs.length === 0 || partitionArchived(project.docs).active.length > 0,
-  );
+  const liveProjects = repo.projects.filter((project) => partitionArchived(project.docs).active.length > 0);
+  const fileOnlyFolders = repo.projects.filter((project) => project.docs.length === 0);
   return (
     <PageContainer>
       <PageHeader
@@ -101,6 +100,29 @@ export function RepoPage() {
         </div>
       ) : null}
       <ArchivedDocs docs={archived} />
+      {fileOnlyFolders.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading aside="No plans, just files">Other folders</SectionHeading>
+          <ul className="divide-y divide-line-soft rounded-card border border-line bg-surface">
+            {fileOnlyFolders.map((folder) => (
+              <li key={folder.name}>
+                <Link
+                  to={projectHref(repo.name, folder.name)}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-ui text-ink-64 transition-colors duration-150 hover:text-ink"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Folder className="size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
+                    <span className="truncate">{folder.name}</span>
+                  </span>
+                  <span className="text-meta text-ink-32 tabular-nums">
+                    {pluralise(folder.attachmentCount, "file")}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {repo.rootAttachmentCount > 0 ? (
         <section>
           <SectionHeading aside={pluralise(repo.rootAttachmentCount, "file")}>Files</SectionHeading>

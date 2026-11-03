@@ -232,7 +232,7 @@ function ProjectNode({
 }) {
   const containsActive = containsDoc(project.docs, selection.docPath);
   const isActive = selection.repo === repo && selection.project === project.name && !selection.docPath;
-  const [open, setOpen] = useState(containsActive);
+  const [open, setOpen] = useState(containsActive || !insideArchive);
   useEffect(() => {
     if (containsActive) setOpen(true);
   }, [containsActive]);
@@ -306,7 +306,10 @@ function RepoNode({
     if (containsSelection) setOpen(true);
   }, [containsSelection]);
   const isActive = containsSelection && !selection.project && !selection.docPath;
-  const { live, settled } = splitProjects(repo.projects);
+  const projectsWithPlans = repo.projects.filter(
+    (project) => project.docs.length > 0 || selection.project === project.name,
+  );
+  const { live, settled } = splitProjects(projectsWithPlans);
   const ungrouped = partitionArchived(repo.ungrouped);
   const archivedHere = settled.reduce((sum, project) => sum + project.docs.length, ungrouped.archived.length);
   const archivedSelected =
@@ -329,7 +332,7 @@ function RepoNode({
       />
       {open ? (
         <div className="pb-1.5">
-          {(showArchived ? repo.projects : live).map((project) => (
+          {(showArchived ? projectsWithPlans : live).map((project) => (
             <ProjectNode
               key={project.name}
               repo={repo.name}
@@ -441,15 +444,17 @@ function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSe
   const [collapsedGroups, setGroupCollapsed] = useLocalNameSet(COLLAPSED_GROUPS_KEY);
   const sections = repoSections(index);
   const repoNodes = (repos: RepoIndex[]) =>
-    repos.map((repo) => (
-      <RepoNode
-        key={repo.name}
-        repo={repo}
-        selection={selection}
-        attention={inbox?.attention.byRepo[repo.name] ?? 0}
-        showArchived={showArchived}
-      />
-    ));
+    repos
+      .filter((repo) => repo.docCount > 0 || selection.repo === repo.name)
+      .map((repo) => (
+        <RepoNode
+          key={repo.name}
+          repo={repo}
+          selection={selection}
+          attention={inbox?.attention.byRepo[repo.name] ?? 0}
+          showArchived={showArchived}
+        />
+      ));
   return (
     <>
       {sections.map(({ name, repos }) =>
