@@ -10,6 +10,7 @@ import { buildSlashCommand, isValidBranchName, isValidPhase } from "./build/buil
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
 import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
+import type { WorktreeIndex } from "./code/worktrees.js";
 import type { TimthinkConfig } from "./config.js";
 import { listPhases } from "./docs/phases.js";
 import type { DocsStore } from "./docs/store.js";
@@ -56,6 +57,7 @@ export interface AppDeps {
   inbox: InboxService;
   archive: ArchiveService;
   prs: PrService;
+  worktrees: WorktreeIndex;
   onArchiveChange: (docPath: string) => void;
   preferences: PreferencesStore;
   onPreferencesChange: () => void;
@@ -123,6 +125,7 @@ const prLookupQuery = z.object({
     .regex(/^\d+(,\d+)*$/)
     .transform((value) => [...new Set(value.split(",").map(Number))].slice(0, MAX_LOOKUP_PRS)),
 });
+const openWorktreeBody = z.object({ path: z.string().min(1).max(1024), app: z.enum(["zed", "warp"]) });
 const prDismissBody = z.object({
   path: z.string().min(1).max(1024),
   numbers: z.array(z.number().int().positive()).min(1).max(50),
@@ -401,6 +404,25 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .get("/api/doc-worktree", zValidator("query", docPathQuery), async (c) => {
+      const doc = store.getDoc(c.req.valid("query").path);
+      if (!doc) return c.json({ error: "Not found" }, 404);
+      const worktree = doc.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      return c.json({ worktree });
+    })
+    .post("/api/open-worktree", zValidator("json", openWorktreeBody), async (c) => {
+      const { path: docPath, app } = c.req.valid("json");
+      const doc = store.getDoc(docPath);
+      const worktree = doc?.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      if (!worktree) return c.json({ status: "not-found" as const }, 404);
+      try {
+        if (app === "zed") await deps.openInEditor(worktree.path);
+        else await deps.openUrl(`warp://action/new_tab?path=${encodeURIComponent(worktree.path)}`);
+        return c.json({ status: "opened" as const });
+      } catch (error) {
+        return c.json({ status: "error" as const, message: errorMessage(error, "Couldn't open it") });
+      }
+    })
     .get("/api/doc-prs", zValidator("query", docPathQuery), (c) => {
       const { path: docPath } = c.req.valid("query");
       if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);

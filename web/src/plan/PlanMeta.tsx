@@ -5,6 +5,7 @@ import { StatusChip } from "../components/StatusChip";
 import { longDate, relativeTime } from "../lib/format";
 import { prUrl, prUrlForGithubPull } from "../markdown/linkPatterns";
 import { PrStack } from "../prs/PrStack";
+import { WorktreeChip } from "./WorktreeChip";
 
 const PR_HOST_TITLES: Record<PrLinkHost, string> = { graphite: "Open in Graphite", github: "Open on GitHub" };
 
@@ -74,6 +75,7 @@ export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
           {doc.branch}
         </MetaChip>
       ) : null}
+      <WorktreeChip docPath={doc.path} branch={doc.branch} />
       {prs.length > 0 && !showStack ? prChips : null}
       {doc.linear ? (
         <MetaChip icon={<Ticket className="size-3" aria-hidden />} title="Linear issue">
