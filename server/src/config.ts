@@ -31,6 +31,12 @@ const archiveSchema = z.object({
   finishedAfterDays: z.number().nonnegative().optional(),
 });
 
+const prsSchema = z.object({
+  enabled: z.boolean().optional(),
+  ghPath: z.string().optional(),
+  mergeQueueLabels: z.array(z.string().min(1)).optional(),
+});
+
 const configFileSchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
   docsRoot: z.string().optional(),
@@ -48,6 +54,7 @@ const configFileSchema = z.object({
   groups: z.array(groupSchema).optional(),
   sidebarQuotes: z.array(z.string().trim().min(1).max(280)).max(200).optional(),
   archive: archiveSchema.optional(),
+  prs: prsSchema.optional(),
   readOnly: z.boolean().optional(),
 });
 
@@ -81,6 +88,14 @@ export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = {
   finishedAfterDays: 3,
 };
 
+export interface PrSettings {
+  enabled: boolean;
+  ghPath: string | null;
+  mergeQueueLabels: string[];
+}
+
+export const DEFAULT_PR_SETTINGS: PrSettings = { enabled: true, ghPath: null, mergeQueueLabels: [] };
+
 export interface TimthinkConfig {
   configPath: string;
   configFound: boolean;
@@ -97,6 +112,7 @@ export interface TimthinkConfig {
   groups: RepoGroupConfig[] | null;
   sidebarQuotes: string[];
   archive: ArchiveSettings;
+  prs: PrSettings;
   readOnly: boolean;
 }
 
@@ -180,6 +196,11 @@ export function loadConfig(env: Env = process.env): TimthinkConfig {
     groups: resolveGroups(file?.groups),
     sidebarQuotes: file?.sidebarQuotes ?? [],
     archive: { ...DEFAULT_ARCHIVE_SETTINGS, ...file?.archive },
+    prs: {
+      enabled: file?.prs?.enabled ?? DEFAULT_PR_SETTINGS.enabled,
+      ghPath: file?.prs?.ghPath ? path.resolve(expandHome(file.prs.ghPath)) : null,
+      mergeQueueLabels: file?.prs?.mergeQueueLabels ?? DEFAULT_PR_SETTINGS.mergeQueueLabels,
+    },
     readOnly: isTruthyFlag(env.TIMTHINK_READONLY) || (file?.readOnly ?? false),
   };
 }

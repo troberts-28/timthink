@@ -14,6 +14,8 @@ import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
+import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
+import { PrService } from "./prs/prService.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
@@ -36,6 +38,7 @@ export interface StartOptions {
   revealInFinder?: RevealInFinder;
   watch?: boolean;
   scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
+  graphqlRunner?: GraphqlRunner;
   log?: (message: string) => void;
 }
 
@@ -72,11 +75,13 @@ export interface Runtime {
   seen: SeenStore;
   inbox: InboxService;
   archive: ArchiveService;
+  prs: PrService;
   hub: EventHub;
   token: string;
   startHistory(): Promise<void>;
   startWatching(): DocsWatcher;
   startSessionTracking(): DocsWatcher;
+  startPrTracking(): () => void;
 }
 
 const BACKFILL_INTERVAL_MS = 5 * 60_000;
@@ -139,6 +144,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     scanLiveProcesses:
       options.scanLiveProcesses ?? (() => scanLiveClaudeProcesses(config.claudeSessionsDir, createPsRunner())),
     onChange: (change: SessionChange) => {
+      prs.invalidateSessions();
       hub.publish({ type: "sessions-changed", ...change, version: hub.nextVersion() });
     },
   });
@@ -176,6 +182,18 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     settings: config.archive,
     log,
   });
+  const prs: PrService = new PrService({
+    settings: config.prs,
+    stateDir: config.stateDir,
+    docs: store,
+    sessions,
+    githubFor: (repo) => github.get(repo),
+    isArchived: (summary) => archive.isArchived(summary),
+    runner: options.graphqlRunner ?? createGhRunner(() => findGh(config.prs.ghPath)),
+    onChange: (paths) => hub.publish({ type: "prs-changed", paths, version: hub.nextVersion() }),
+    hasViewers: () => hub.viewerCount > 0,
+    log,
+  });
   const inbox = new InboxService({
     store,
     reviews: reviews.store,
@@ -193,7 +211,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     }),
   );
   if (seenInit.created) log(`initialised seen.json with ${store.allDocs().length} doc(s)`);
-  await archive.init();
+  await Promise.all([archive.init(), prs.init()]);
   let cachedIndex: DocsIndex | null = null;
   let cachedAt = 0;
   const repoNames = (): string[] => [...new Set(store.allDocs().map((doc) => doc.repo))];
@@ -284,6 +302,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     seen,
     inbox,
     archive,
+    prs,
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     preferences,
     onPreferencesChange: publishPreferencesChange,
@@ -306,8 +325,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     seen,
     inbox,
     archive,
+    prs,
     hub,
     token,
+    startPrTracking: () => prs.start(),
     startHistory: async () => {
       const stats = await history.snapshotAll();
       if (stats.saved > 0) {
@@ -330,6 +351,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   const runtime = await createRuntime(options);
   const watcher = options.watch === false ? null : runtime.startWatching();
   const sessionTracking = options.watch === false ? null : runtime.startSessionTracking();
+  const stopPrTracking = options.watch === false ? null : runtime.startPrTracking();
   if (options.watch !== false) {
     runtime.startHistory().catch((error: unknown) => options.log?.(`snapshotting docs failed: ${String(error)}`));
   }
@@ -346,6 +368,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
       new Promise<void>((resolve) => {
         watcher?.close();
         sessionTracking?.close();
+        stopPrTracking?.();
         runtime.history.close();
         server.close(() => resolve());
         if ("closeAllConnections" in server) server.closeAllConnections();

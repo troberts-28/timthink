@@ -70,6 +70,19 @@ export type {
   InboxSection,
   InboxSessionHint,
 } from "./inbox/types.js";
+export { findGh } from "./prs/ghClient.js";
+export type {
+  CiState,
+  DocPrsResponse,
+  DocPrsStatus,
+  LinkedPr,
+  PrInfo,
+  PrLookupResponse,
+  PrSource,
+  PrState,
+  ReviewDecision,
+  StackItem,
+} from "./prs/types.js";
 export { ReadOnlyError } from "./readOnly.js";
 export { type AnchorMatch, createAnchor, locateAnchor } from "./reviews/anchor.js";
 export { FrontmatterEditError, setFrontmatterStatus } from "./reviews/frontmatterStatus.js";

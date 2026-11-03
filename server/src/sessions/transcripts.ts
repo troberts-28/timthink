@@ -3,7 +3,8 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promi
 import { homedir } from "node:os";
 import path from "node:path";
 import { buildRequestInPrompt } from "../build/buildCommand.js";
-import type { TranscriptBuildRequest, TranscriptDocTouch, TranscriptSummary } from "./types.js";
+import { submitCommandIds, submittedPrsIn } from "./submittedPrs.js";
+import type { SubmittedPr, TranscriptBuildRequest, TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 const DOC_WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
 const SESSION_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
@@ -47,6 +48,7 @@ export function lastStringField(line: string, key: string): string | null {
   }
 }
 
+const SUBMIT_HINT = /\bgt\s+(?:submit|ss)\b|\bgh\s+pr\s+create\b/;
 const BUILD_MARKERS = ["<command-name>/timthink</command-name>", "/timthink build"];
 
 function userContent(entry: Record<string, unknown>): string | null {
@@ -136,6 +138,8 @@ class TranscriptAccumulator {
   lineSessionId: string | null = null;
   private readonly touches = new Map<string, TranscriptDocTouch>();
   readonly buildRequests: TranscriptBuildRequest[] = [];
+  private readonly submittedPrs = new Map<string, SubmittedPr>();
+  private readonly pendingSubmits = new Set<string>();
   private readonly spellings: RootSpelling[];
 
   constructor(docsRoots: readonly string[]) {
@@ -161,10 +165,21 @@ class TranscriptAccumulator {
     const mayTouchDoc = line.includes('"tool_use"') && this.spellings.some(({ spelling }) => line.includes(spelling));
     const mayBuild =
       line.length < FIRST_PROMPT_MAX_LINE && line.includes('"user"') && BUILD_MARKERS.some((m) => line.includes(m));
-    if (!wantsPrompt && !mayTouchDoc && !mayBuild) return;
+    const maySubmit = line.includes('"tool_use"') && SUBMIT_HINT.test(line);
+    const mayBeSubmitResult =
+      this.pendingSubmits.size > 0 &&
+      line.includes('"tool_result"') &&
+      [...this.pendingSubmits].some((id) => line.includes(id));
+    if (!wantsPrompt && !mayTouchDoc && !mayBuild && !maySubmit && !mayBeSubmitResult) return;
     const entry = parseLine(line);
     if (!entry) return;
     if (wantsPrompt) this.firstPrompt = promptText(entry);
+    if (maySubmit) for (const id of submitCommandIds(entry)) this.pendingSubmits.add(id);
+    if (mayBeSubmitResult) {
+      for (const pr of submittedPrsIn(entry, this.pendingSubmits, timestamp)) {
+        this.submittedPrs.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+      }
+    }
     if (mayBuild) {
       const content = userContent(entry);
       const request = content ? buildRequestInPrompt(content) : null;
@@ -177,6 +192,10 @@ class TranscriptAccumulator {
         this.touches.set(key, { filePath, at: timestamp, firstAt, kind });
       }
     }
+  }
+
+  prs(): SubmittedPr[] {
+    return [...this.submittedPrs.values()];
   }
 
   docTouches(): TranscriptDocTouch[] {
@@ -227,6 +246,7 @@ export async function scanTranscript(
     firstPrompt: accumulator.firstPrompt,
     docTouches: accumulator.docTouches(),
     buildRequests: accumulator.buildRequests,
+    submittedPrs: accumulator.prs(),
   };
 }
 

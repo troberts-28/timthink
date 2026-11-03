@@ -72,6 +72,7 @@ describe("scanTranscript", () => {
         },
       ],
       buildRequests: [],
+      submittedPrs: [],
     });
   });
 
