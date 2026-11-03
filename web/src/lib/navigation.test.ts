@@ -19,6 +19,7 @@ function doc(path: string, title: string, overrides: Partial<IndexedDoc> = {}): 
     tasks: { done: 0, total: 0 },
     frontmatterError: null,
     archive: { state: "active" },
+    prAttention: null,
     ...overrides,
   };
 }

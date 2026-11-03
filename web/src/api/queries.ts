@@ -3,6 +3,7 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
+import { fetchDocPrs, lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 
 export const queryKeys = {
@@ -19,6 +20,10 @@ export const queryKeys = {
   history: (path: string) => ["history", path] as const,
   snapshot: (path: string, id: string) => ["snapshot", path, id] as const,
   inbox: ["inbox"] as const,
+  docPrsRoot: ["doc-prs"] as const,
+  docPrs: (path: string) => ["doc-prs", path] as const,
+  prLookupRoot: ["pr-lookup"] as const,
+  prLookup: (owner: string, repo: string, numbers: string) => ["pr-lookup", owner, repo, numbers] as const,
 };
 
 export function useDocHistory(path: string) {
@@ -93,6 +98,25 @@ export function useDocSessions(docPath: string) {
   });
 }
 
+export function useDocPrs(docPath: string) {
+  return useQuery({
+    queryKey: queryKeys.docPrs(docPath),
+    queryFn: () => fetchDocPrs(docPath),
+    staleTime: 60_000,
+    refetchInterval: (query) => (query.state.data?.refreshing ? 3_000 : false),
+  });
+}
+
+export function usePrLookup(owner: string, repo: string, numbers: readonly number[]) {
+  const key = [...numbers].sort((a, b) => a - b).join(",");
+  return useQuery({
+    queryKey: queryKeys.prLookup(owner, repo, key),
+    queryFn: () => lookupPrs(owner, repo, numbers),
+    staleTime: 60_000,
+    enabled: numbers.length > 0,
+  });
+}
+
 function parseEvent(data: string): HubEvent | null {
   try {
     return JSON.parse(data) as HubEvent;
@@ -149,6 +173,14 @@ export function useLiveUpdates(): void {
         void queryClient.invalidateQueries({ queryKey: queryKeys.history(docPath) });
       }
     };
+    const onPrsChanged = (message: MessageEvent<string>) => {
+      const event = parseEvent(message.data);
+      if (event?.type !== "prs-changed") return;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prLookupRoot });
+      invalidateInbox();
+      for (const docPath of event.paths) void queryClient.invalidateQueries({ queryKey: queryKeys.docPrs(docPath) });
+    };
+    source.addEventListener("prs-changed", onPrsChanged);
     source.addEventListener("index-changed", onIndexChanged);
     source.addEventListener("archive-changed", onIndexChanged);
     source.addEventListener("doc-changed", onDocChanged);

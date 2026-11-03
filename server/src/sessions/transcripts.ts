@@ -11,7 +11,7 @@ const SESSION_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 const FIRST_PROMPT_MAX_LINE = 256 * 1024;
 const FIRST_PROMPT_MAX_CHARS = 140;
 const SCAN_CONCURRENCY = 4;
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 export const BACKFILL_CACHE_FILE = "backfill-cache.json";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

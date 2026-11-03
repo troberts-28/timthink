@@ -50,6 +50,7 @@ export type {
   GithubRepo,
   IndexedDoc,
   PhaseSummary,
+  PrAttention,
   PrLinkHost,
   ProjectIndex,
   RepoIndex,

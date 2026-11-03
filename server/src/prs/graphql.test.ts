@@ -20,6 +20,20 @@ describe("buildRepoQuery", () => {
       'm13: object(expression: "main") { ... on Commit { history(first: 100, since: "2026-11-02T16:00:00.000Z", until: "2026-11-02T18:00:00.000Z")',
     );
   });
+
+  it("leaves the PR fragment out of a query that only checks the trunk", () => {
+    const query = buildRepoQuery({
+      owner: "acme",
+      repo: "api",
+      numbers: [],
+      parentsOf: [],
+      childrenOf: [],
+      mergeChecks: [{ number: 13, closedAt: "2026-11-02T17:00:00Z" }],
+      trunk: null,
+    });
+    expect(query).toContain('m13: object(expression: "HEAD")');
+    expect(query).not.toContain("fragment P");
+  });
 });
 
 describe("parseRepoQuery", () => {

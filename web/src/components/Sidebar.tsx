@@ -10,6 +10,7 @@ import { repoSections } from "../lib/repoGroups";
 import { useRepoVisibility } from "../lib/repoVisibility";
 import { docHref, projectHref, repoHref } from "../lib/routes";
 import { usePlanArchive } from "../plan/usePlanArchive";
+import { PrAttentionIcon } from "../prs/PrVisuals";
 import { AttentionCount } from "./AttentionCount";
 import { StatusDot } from "./StatusChip";
 
@@ -107,6 +108,7 @@ function PlanRow({ doc, active, indent }: { doc: IndexedDoc; active: boolean; in
         ) : null}
         <StatusDot status={doc.status} className={dimmed ? "opacity-50" : ""} />
         <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+        <PrAttentionIcon attention={doc.prAttention} />
         <span className={`flex-none text-meta text-ink-32 tabular-nums ${PLAN_ACTION_HIDES}`}>
           {compactDate(doc.date)}
         </span>

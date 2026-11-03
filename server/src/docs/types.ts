@@ -26,8 +26,11 @@ export interface DocArchive {
   reason?: string;
 }
 
+export type PrAttention = "ci-failing" | "changes-requested";
+
 export interface IndexedDoc extends DocSummary {
   archive: DocArchive;
+  prAttention: PrAttention | null;
 }
 
 export interface AttachmentSummary {
