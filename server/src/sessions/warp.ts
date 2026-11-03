@@ -46,7 +46,16 @@ export function tomlString(value: string): string {
   return `"${escaped}"`;
 }
 
-export function resumeTabConfig(sessionId: string, cwd: string): string {
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export function resumeCommand(sessionId: string, prompt: string | null = null): string {
+  const resume = `claude --resume ${sessionId}`;
+  return prompt ? `${resume} ${shellQuote(prompt)}` : resume;
+}
+
+export function resumeTabConfig(sessionId: string, cwd: string, prompt: string | null = null): string {
   if (!isSessionId(sessionId)) throw new Error("Invalid session id");
   if (!path.isAbsolute(cwd)) throw new Error("The session's directory must be an absolute path");
   return `name = ${tomlString(RESUME_TAB_CONFIG_NAME)}
@@ -56,7 +65,7 @@ id = "main"
 type = "terminal"
 directory = ${tomlString(cwd)}
 is_focused = true
-commands = [${tomlString(`claude --resume ${sessionId}`)}]
+commands = [${tomlString(resumeCommand(sessionId, prompt))}]
 `;
 }
 
@@ -65,8 +74,13 @@ export async function isExistingDirectory(candidate: string | null): Promise<boo
   return (await stat(candidate).catch(() => null))?.isDirectory() ?? false;
 }
 
-export async function writeResumeTabConfig(tabConfigDir: string, sessionId: string, cwd: string): Promise<string> {
-  const contents = resumeTabConfig(sessionId, cwd);
+export async function writeResumeTabConfig(
+  tabConfigDir: string,
+  sessionId: string,
+  cwd: string,
+  prompt: string | null = null,
+): Promise<string> {
+  const contents = resumeTabConfig(sessionId, cwd, prompt);
   await mkdir(tabConfigDir, { recursive: true });
   const target = path.join(tabConfigDir, `${RESUME_TAB_CONFIG_NAME}.toml`);
   await writeFile(target, contents);

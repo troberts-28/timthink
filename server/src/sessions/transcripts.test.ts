@@ -2,7 +2,14 @@ import { appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { copyClaudeProjects, makeTempDir } from "../test/fixtures.js";
-import { BACKFILL_CACHE_FILE, lastStringField, scanTranscript, TranscriptBackfill } from "./transcripts.js";
+import {
+  BACKFILL_CACHE_FILE,
+  docPathsMentioned,
+  lastStringField,
+  rootSpellings,
+  scanTranscript,
+  TranscriptBackfill,
+} from "./transcripts.js";
 
 const DOCS_ROOT = "/fixture/agent-docs";
 const CODE_ROOT = "/fixture/code";
@@ -16,6 +23,25 @@ describe("lastStringField", () => {
     expect(lastStringField(line, "cwd")).toBe('/top "level"');
     expect(lastStringField(line, "timestamp")).toBe("2026-01-01T00:00:00Z");
     expect(lastStringField(line, "gitBranch")).toBeNull();
+  });
+});
+
+describe("docPathsMentioned", () => {
+  const spellings = rootSpellings(["/Users/me/docs"], "/Users/me");
+
+  it("finds absolute and ~ plan paths inside commands", () => {
+    expect(
+      docPathsMentioned(
+        "sed -n 1,40p /Users/me/docs/acme/a-plan.md && timthink review show ~/docs/acme/sub/b.md; cat '/Users/me/docs/acme/c.md'",
+        spellings,
+      ),
+    ).toEqual(["/Users/me/docs/acme/a-plan.md", "/Users/me/docs/acme/c.md", "/Users/me/docs/acme/sub/b.md"]);
+  });
+
+  it("ignores non-markdown files, other roots and trailing punctuation", () => {
+    expect(
+      docPathsMentioned("see /Users/me/docs/acme/plan.md, /Users/me/docs/acme/data.tsv and /tmp/x.md", spellings),
+    ).toEqual(["/Users/me/docs/acme/plan.md"]);
   });
 });
 
@@ -37,8 +63,12 @@ describe("scanTranscript", () => {
       lastActivity: "2026-10-01T10:30:00.000Z",
       title: "Rate limiter plan",
       firstPrompt: "Plan a token-bucket rate limiter for the public API.",
-      docWrites: [
-        { filePath: `${DOCS_ROOT}/acme-api/2026-10-01-rate-limiter-plan.md`, at: "2026-10-01T10:30:00.000Z" },
+      docTouches: [
+        {
+          filePath: `${DOCS_ROOT}/acme-api/2026-10-01-rate-limiter-plan.md`,
+          at: "2026-10-01T10:30:00.000Z",
+          kind: "write",
+        },
       ],
     });
   });
@@ -47,7 +77,7 @@ describe("scanTranscript", () => {
     const summary = await scanTranscript(path.join(projectsDir, "-code-acme-api-2", `${SESSION_B}.jsonl`), [DOCS_ROOT]);
     expect(summary?.title).toBeNull();
     expect(summary?.firstPrompt).toBe("Draft the billing migration plan and list open questions");
-    expect(summary?.docWrites.map((write) => write.filePath)).toEqual([
+    expect(summary?.docTouches.map((write) => write.filePath)).toEqual([
       `${DOCS_ROOT}/acme-api/billing-migration/2026-10-20-billing-migration-plan.md`,
       `${DOCS_ROOT}/acme-api/billing-migration/notes/2026-10-21-open-questions.md`,
     ]);
@@ -57,7 +87,7 @@ describe("scanTranscript", () => {
     const summary = await scanTranscript(path.join(projectsDir, "-code-acme-api", `${SESSION_A}.jsonl`), [
       "/other/docs",
     ]);
-    expect(summary?.docWrites).toEqual([]);
+    expect(summary?.docTouches).toEqual([]);
   });
 });
 

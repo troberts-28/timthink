@@ -279,6 +279,10 @@ function ProjectNode({
   );
 }
 
+function newestFirst(a: IndexedDoc, b: IndexedDoc): number {
+  return b.date.localeCompare(a.date) || b.mtime - a.mtime;
+}
+
 function splitProjects(projects: readonly ProjectIndex[]): { live: ProjectIndex[]; settled: ProjectIndex[] } {
   const live: ProjectIndex[] = [];
   const settled: ProjectIndex[] = [];
@@ -307,10 +311,16 @@ function RepoNode({
   }, [containsSelection]);
   const isActive = containsSelection && !selection.project && !selection.docPath;
   const projectsWithPlans = repo.projects.filter(
-    (project) => project.docs.length > 0 || selection.project === project.name,
+    (project) => project.docs.length > 1 || selection.project === project.name,
   );
+  const loosePlans = [
+    ...repo.ungrouped,
+    ...repo.projects
+      .filter((project) => project.docs.length === 1 && selection.project !== project.name)
+      .flatMap((project) => project.docs),
+  ].sort(newestFirst);
   const { live, settled } = splitProjects(projectsWithPlans);
-  const ungrouped = partitionArchived(repo.ungrouped);
+  const ungrouped = partitionArchived(loosePlans);
   const archivedHere = settled.reduce((sum, project) => sum + project.docs.length, ungrouped.archived.length);
   const archivedSelected =
     containsDoc(ungrouped.archived, selection.docPath) ||
@@ -342,7 +352,7 @@ function RepoNode({
             />
           ))}
           <DocRows
-            docs={showArchived ? repo.ungrouped : ungrouped.active}
+            docs={showArchived ? loosePlans : ungrouped.active}
             selection={selection}
             indent={26}
             preview={UNGROUPED_PREVIEW}

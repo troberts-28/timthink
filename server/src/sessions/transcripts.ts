@@ -1,14 +1,15 @@
 import { createReadStream, type Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
-import type { TranscriptDocWrite, TranscriptSummary } from "./types.js";
+import type { TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 const DOC_WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
 const SESSION_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
 const FIRST_PROMPT_MAX_LINE = 256 * 1024;
 const FIRST_PROMPT_MAX_CHARS = 140;
 const SCAN_CONCURRENCY = 4;
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 export const BACKFILL_CACHE_FILE = "backfill-cache.json";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,18 +55,57 @@ function promptText(entry: Record<string, unknown>): string | null {
   return firstLine.length > FIRST_PROMPT_MAX_CHARS ? `${firstLine.slice(0, FIRST_PROMPT_MAX_CHARS - 1)}…` : firstLine;
 }
 
-function docWritesIn(entry: Record<string, unknown>, docsRoots: readonly string[]): string[] {
-  if (entry.type !== "assistant" || !isRecord(entry.message) || !Array.isArray(entry.message.content)) return [];
-  const paths: string[] = [];
-  for (const item of entry.message.content) {
-    if (!isRecord(item) || item.type !== "tool_use" || typeof item.name !== "string") continue;
-    if (!DOC_WRITE_TOOLS.has(item.name) || !isRecord(item.input)) continue;
-    const filePath = item.input.file_path;
-    if (typeof filePath === "string" && docsRoots.some((root) => filePath.startsWith(`${root}/`))) {
-      paths.push(filePath);
+interface RootSpelling {
+  spelling: string;
+  root: string;
+}
+
+export function rootSpellings(docsRoots: readonly string[], home = homedir()): RootSpelling[] {
+  return docsRoots.flatMap((root) => {
+    const spellings = [{ spelling: root, root }];
+    if (root.startsWith(`${home}/`)) spellings.push({ spelling: `~${root.slice(home.length)}`, root });
+    return spellings;
+  });
+}
+
+const PATH_TERMINATOR = /[\s"'`<>|;&(){}\\]/;
+const TRAILING_PUNCTUATION = /[.,:]+$/;
+
+function stringsIn(value: unknown, into: string[] = []): string[] {
+  if (typeof value === "string") into.push(value);
+  else if (Array.isArray(value)) for (const item of value) stringsIn(item, into);
+  else if (isRecord(value)) for (const item of Object.values(value)) stringsIn(item, into);
+  return into;
+}
+
+export function docPathsMentioned(text: string, spellings: readonly RootSpelling[]): string[] {
+  const found = new Set<string>();
+  for (const { spelling, root } of spellings) {
+    const prefix = `${spelling}/`;
+    for (let start = text.indexOf(prefix); start !== -1; start = text.indexOf(prefix, start + prefix.length)) {
+      let end = start + prefix.length;
+      while (end < text.length && !PATH_TERMINATOR.test(text[end] ?? "")) end += 1;
+      const relative = text.slice(start + prefix.length, end).replace(TRAILING_PUNCTUATION, "");
+      if (relative.endsWith(".md")) found.add(`${root}/${relative}`);
     }
   }
-  return paths;
+  return [...found];
+}
+
+function docTouchesIn(
+  entry: Record<string, unknown>,
+  spellings: readonly RootSpelling[],
+): { filePath: string; kind: TranscriptDocTouch["kind"] }[] {
+  if (entry.type !== "assistant" || !isRecord(entry.message) || !Array.isArray(entry.message.content)) return [];
+  const touches: { filePath: string; kind: TranscriptDocTouch["kind"] }[] = [];
+  for (const item of entry.message.content) {
+    if (!isRecord(item) || item.type !== "tool_use" || typeof item.name !== "string") continue;
+    const kind = DOC_WRITE_TOOLS.has(item.name) ? "write" : "use";
+    for (const text of stringsIn(item.input)) {
+      for (const filePath of docPathsMentioned(text, spellings)) touches.push({ filePath, kind });
+    }
+  }
+  return touches;
 }
 
 class TranscriptAccumulator {
@@ -76,9 +116,12 @@ class TranscriptAccumulator {
   title: string | null = null;
   firstPrompt: string | null = null;
   lineSessionId: string | null = null;
-  private readonly writes = new Map<string, string | null>();
+  private readonly touches = new Map<string, TranscriptDocTouch>();
+  private readonly spellings: RootSpelling[];
 
-  constructor(private readonly docsRoots: readonly string[]) {}
+  constructor(docsRoots: readonly string[]) {
+    this.spellings = rootSpellings(docsRoots);
+  }
 
   addLine(line: string): void {
     if (line.startsWith('{"type":"ai-title"')) {
@@ -96,18 +139,20 @@ class TranscriptAccumulator {
       if (!this.lastActivity || timestamp > this.lastActivity) this.lastActivity = timestamp;
     }
     const wantsPrompt = this.firstPrompt === null && line.length < FIRST_PROMPT_MAX_LINE && line.includes('"user"');
-    const mayWriteDoc = line.includes('"tool_use"') && this.docsRoots.some((root) => line.includes(root));
-    if (!wantsPrompt && !mayWriteDoc) return;
+    const mayTouchDoc = line.includes('"tool_use"') && this.spellings.some(({ spelling }) => line.includes(spelling));
+    if (!wantsPrompt && !mayTouchDoc) return;
     const entry = parseLine(line);
     if (!entry) return;
     if (wantsPrompt) this.firstPrompt = promptText(entry);
-    if (mayWriteDoc) {
-      for (const filePath of docWritesIn(entry, this.docsRoots)) this.writes.set(filePath, timestamp);
+    if (mayTouchDoc) {
+      for (const { filePath, kind } of docTouchesIn(entry, this.spellings)) {
+        this.touches.set(`${kind}:${filePath}`, { filePath, at: timestamp, kind });
+      }
     }
   }
 
-  docWrites(): TranscriptDocWrite[] {
-    return [...this.writes].map(([filePath, at]) => ({ filePath, at }));
+  docTouches(): TranscriptDocTouch[] {
+    return [...this.touches.values()];
   }
 }
 
@@ -152,7 +197,7 @@ export async function scanTranscript(
     lastActivity: accumulator.lastActivity,
     title: accumulator.title,
     firstPrompt: accumulator.firstPrompt,
-    docWrites: accumulator.docWrites(),
+    docTouches: accumulator.docTouches(),
   };
 }
 

@@ -182,10 +182,11 @@ describe("sessions API", () => {
   const openUrl = vi.fn<OpenUrl>(async () => {});
   const events: HubEvent[] = [];
 
-  const post = (url: string) =>
+  const post = (url: string, body: unknown = {}) =>
     runtime.app.request(`${BASE}${url}`, {
       method: "POST",
-      headers: { origin: ORIGIN, [TOKEN_HEADER]: runtime.token },
+      body: JSON.stringify(body),
+      headers: { origin: ORIGIN, [TOKEN_HEADER]: runtime.token, "content-type": "application/json" },
     });
 
   beforeAll(async () => {
@@ -228,6 +229,8 @@ describe("sessions API", () => {
         live: false,
         warpFocusUrl: null,
         canResume: true,
+        mayBeOpenUntracked: false,
+        wroteDoc: true,
       },
     ]);
   });
@@ -294,6 +297,30 @@ describe("sessions API", () => {
     expect(config).toContain(`directory = "${path.join(codeRoot, "acme-api-2")}"`);
     expect(config).toContain(`commands = ["claude --resume ${SESSION_B}"]`);
     expect(openUrl).toHaveBeenCalledWith("warp://tab_config/timthink-resume");
+  });
+
+  it("resumes straight into the review when given the doc that was reviewed", async () => {
+    openUrl.mockClear();
+    const response = await post(`/api/sessions/${SESSION_B}/resume`, { reviewDoc: RATE_LIMITER });
+    expect(await json<SessionActionResponse>(response)).toMatchObject({ status: "resumed" });
+    const config = await readFile(path.join(warpTabConfigDir, "timthink-resume.toml"), "utf8");
+    expect(config).toContain(`commands = ["claude --resume ${SESSION_B} '/timthink review ${RATE_LIMITER}'"]`);
+
+    const unknown = await post(`/api/sessions/${SESSION_B}/resume`, { reviewDoc: "acme-api/missing.md" });
+    expect(await json<SessionActionResponse>(unknown)).toMatchObject({ status: "unavailable" });
+  });
+
+  it("flags recently active sessions the hooks never saw as possibly open elsewhere", async () => {
+    const recent = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    await appendFile(
+      path.join(stateDir, "doc-sessions.jsonl"),
+      `${JSON.stringify({ sessionId: recent, filePath: path.join(await realpath(runtime.store.docsRoot), RATE_LIMITER), cwd: codeRoot, at: new Date().toISOString() })}\n`,
+    );
+    await runtime.sessions.readHookLogs();
+    const response = await runtime.app.request(`${BASE}/api/doc-sessions?path=${encodeURIComponent(RATE_LIMITER)}`);
+    const body = await json<SessionsResponse>(response);
+    expect(body.sessions.find((session) => session.id === recent)).toMatchObject({ mayBeOpenUntracked: true });
+    expect(body.sessions.find((session) => session.id === SESSION_A)).toMatchObject({ mayBeOpenUntracked: false });
   });
 
   it("rejects unknown sessions, missing directories and unauthenticated calls", async () => {

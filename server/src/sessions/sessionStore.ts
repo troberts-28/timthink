@@ -3,10 +3,12 @@ import path from "node:path";
 import { isInside, toPosix } from "../safePath.js";
 import { DOC_SESSIONS_LOG, JsonlFollower, parseDocWrite, parseSessionEvent, SESSIONS_LOG } from "./hookLog.js";
 import { BACKFILL_CACHE_FILE, type BackfillStats, TranscriptBackfill } from "./transcripts.js";
-import type { HookDocWrite, HookSessionEvent, TranscriptSummary } from "./types.js";
+import type { HookDocWrite, HookSessionEvent, TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHORT_ID_LENGTH = 8;
+const ANY_TOUCH: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write", "use"]);
+const WRITES_ONLY: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write"]);
 
 export interface SessionRecord {
   id: string;
@@ -16,9 +18,11 @@ export interface SessionRecord {
   firstSeen: string | null;
   lastActivity: string | null;
   live: boolean;
+  tracked: boolean;
   warpFocusUrl: string | null;
   transcriptPath: string | null;
   docPaths: string[];
+  writtenDocPaths: string[];
 }
 
 interface SessionState {
@@ -179,7 +183,9 @@ export class SessionStore {
     };
     for (const state of this.states.values()) {
       for (const write of state.hookDocWrites) add(write.docPath, state.id, write.at);
-      for (const write of state.transcript?.docWrites ?? []) add(this.docPathFor(write.filePath), state.id, write.at);
+      for (const touch of state.transcript?.docTouches ?? []) {
+        if (touch.kind === "write") add(this.docPathFor(touch.filePath), state.id, touch.at);
+      }
     }
     this.writeTimes = index;
     return index;
@@ -301,10 +307,10 @@ export class SessionStore {
     return !start.warpFocusUrl || owners.get(start.warpFocusUrl)?.id === state.id;
   }
 
-  private docPathsOf(state: SessionState): string[] {
+  private docPathsOf(state: SessionState, kinds: ReadonlySet<TranscriptDocTouch["kind"]>): string[] {
     const paths = new Set(state.hookDocPaths);
-    for (const write of state.transcript?.docWrites ?? []) {
-      const docPath = this.docPathFor(write.filePath);
+    for (const touch of state.transcript?.docTouches ?? []) {
+      const docPath = kinds.has(touch.kind) ? this.docPathFor(touch.filePath) : null;
       if (docPath) paths.add(docPath);
     }
     return [...paths];
@@ -312,7 +318,7 @@ export class SessionStore {
 
   private toRecord(state: SessionState, owners: Map<string, { id: string }>): SessionRecord {
     const { transcript, latestStart } = state;
-    const lastDocWrite = (transcript?.docWrites ?? []).reduce<string | null>(
+    const lastDocTouch = (transcript?.docTouches ?? []).reduce<string | null>(
       (latest, write) => later(latest, write.at),
       null,
     );
@@ -322,11 +328,13 @@ export class SessionStore {
       cwd: state.hookCwd ?? transcript?.cwd ?? null,
       branch: transcript?.gitBranch ?? latestStart?.gitBranch ?? null,
       firstSeen: earlier(transcript?.firstSeen ?? null, state.firstHookAt),
-      lastActivity: later(later(transcript?.lastActivity ?? null, lastDocWrite), state.lastHookAt),
+      lastActivity: later(later(transcript?.lastActivity ?? null, lastDocTouch), state.lastHookAt),
       live: this.isLive(state, owners),
+      tracked: latestStart !== null,
       warpFocusUrl: latestStart?.warpFocusUrl ?? null,
       transcriptPath: state.hookTranscriptPath ?? transcript?.transcriptPath ?? null,
-      docPaths: this.docPathsOf(state),
+      docPaths: this.docPathsOf(state, ANY_TOUCH),
+      writtenDocPaths: this.docPathsOf(state, WRITES_ONLY),
     };
   }
 }

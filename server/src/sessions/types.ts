@@ -16,9 +16,10 @@ export interface HookDocWrite {
   at: string;
 }
 
-export interface TranscriptDocWrite {
+export interface TranscriptDocTouch {
   filePath: string;
   at: string | null;
+  kind: "write" | "use";
 }
 
 export interface TranscriptSummary {
@@ -30,7 +31,7 @@ export interface TranscriptSummary {
   lastActivity: string | null;
   title: string | null;
   firstPrompt: string | null;
-  docWrites: TranscriptDocWrite[];
+  docTouches: TranscriptDocTouch[];
 }
 
 export interface SessionView {
@@ -43,6 +44,8 @@ export interface SessionView {
   live: boolean;
   warpFocusUrl: string | null;
   canResume: boolean;
+  mayBeOpenUntracked: boolean;
+  wroteDoc: boolean | null;
 }
 
 export interface SessionsResponse {

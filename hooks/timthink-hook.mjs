@@ -6,7 +6,7 @@ import { appendFileSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const GIT_TIMEOUT_MS = 300;
+const GIT_TIMEOUT_MS = 1000;
 const DOC_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
 const EVENT_ALIASES = {
   "session-start": "SessionStart",

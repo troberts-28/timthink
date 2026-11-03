@@ -1,9 +1,11 @@
 import type { Verdict } from "@timthink/server";
 import { CircleCheck, CircleDot, MessageSquare, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
+import { useDocSessions } from "../api/queries";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
 import { useToast } from "../lib/toast";
+import { defaultHandOffTarget, HandOffTarget } from "./HandOffTarget";
 import { type HandOffOutcome, handOffToClaude } from "./handOff";
 import { useRequiredReview } from "./ReviewContext";
 import { pendingCounts } from "./reviewModel";
@@ -41,6 +43,9 @@ function CommandCode({ command }: { command: string }) {
 }
 
 function handOffMessage(outcome: HandOffOutcome): ReactNode {
+  if (outcome.kind === "resumed") {
+    return "Resuming the session in a new Warp tab. Claude starts on your review straight away.";
+  }
   if (!outcome.copied) {
     return (
       <>
@@ -51,18 +56,23 @@ function handOffMessage(outcome: HandOffOutcome): ReactNode {
   if (outcome.kind === "focused") {
     return (
       <>
-        Copied <CommandCode command={outcome.command} /> — jumping to Warp
+        Jumped to the Claude tab. Paste (⌘V) and press Enter to send <CommandCode command={outcome.command} />
       </>
     );
   }
-  if (outcome.kind === "resumed") {
+  if (outcome.kind === "possibly-open") {
     return (
       <>
-        Copied <CommandCode command={outcome.command} /> — resuming the session in a new Warp tab
+        “{outcome.title}” may already be open in a Warp tab that timthink can't see, so it wasn't resumed. Paste the
+        copied <CommandCode command={outcome.command} /> into that tab, or use Resume in the Sessions panel.
       </>
     );
   }
-  return "Copied — paste into a Claude session";
+  return (
+    <>
+      Copied <CommandCode command={outcome.command} />. Paste it into a Claude session.
+    </>
+  );
 }
 
 function useEscape(open: boolean, close: () => void): void {
@@ -82,8 +92,15 @@ export function SubmitReviewDialog() {
   const [verdict, setVerdict] = useState<Verdict>("comment");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [chosenTarget, setChosenTarget] = useState<string | null>(null);
+  const { data: sessionsData } = useDocSessions(docPath);
+  const sessions = sessionsData?.sessions ?? [];
+  const target = chosenTarget ?? defaultHandOffTarget(sessions);
   const titleId = useId();
-  const close = () => setSubmitOpen(false);
+  const close = () => {
+    setSubmitOpen(false);
+    setChosenTarget(null);
+  };
   useEscape(submitOpen, close);
   if (!submitOpen) return null;
   const counts = pendingCounts(review);
@@ -93,13 +110,14 @@ export function SubmitReviewDialog() {
     const result = await actions.submit(verdict, body);
     setSubmitting(false);
     if (!result) return;
-    setSubmitOpen(false);
+    const session = sessions.find((candidate) => candidate.id === target) ?? null;
+    close();
     setBody("");
     setVerdict("comment");
     if (result.statusUpdate.status === "failed") {
       toast(`Review submitted, but the status wasn't changed: ${result.statusUpdate.message}`, "bad");
     }
-    toast(handOffMessage(await handOffToClaude(docPath)));
+    toast(handOffMessage(await handOffToClaude(docPath, session)));
   };
 
   return (
@@ -169,10 +187,8 @@ export function SubmitReviewDialog() {
             </label>
           ))}
         </fieldset>
-        <footer className="flex items-center justify-between gap-3">
-          <p className="m-0 text-meta text-ink-32">
-            Copies <code className="font-mono">/timthink review</code> and opens the plan's Claude session.
-          </p>
+        <HandOffTarget sessions={sessions} selectedId={target} onSelect={setChosenTarget} />
+        <footer className="flex items-center justify-end gap-3">
           <div className="flex gap-2">
             <Button size="lg" tone="ghost" onClick={close}>
               Cancel

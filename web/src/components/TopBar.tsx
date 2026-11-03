@@ -1,11 +1,12 @@
 import type { DocsIndex } from "@timthink/server";
-import { Inbox } from "lucide-react";
+import { Inbox, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Fragment } from "react";
 import { Link, NavLink } from "react-router";
 import { useInbox } from "../api/queries";
 import { findDoc } from "../lib/indexNav";
 import { projectHref, repoHref } from "../lib/routes";
 import { useSelection } from "../lib/selection";
+import { useSidebarCollapsed } from "../lib/sidebar";
 import { AttentionCount } from "./AttentionCount";
 import { ThemeToggle } from "./ThemeToggle";
 import { TOP_BAR_SLOT_ID } from "./TopBarSlot";
@@ -51,17 +52,52 @@ function InboxLink() {
   );
 }
 
+function SidebarToggle() {
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const label = `${collapsed ? "Show" : "Hide"} sidebar ([)`;
+  return (
+    <button
+      type="button"
+      onClick={() => setCollapsed(!collapsed)}
+      aria-label={label}
+      aria-pressed={!collapsed}
+      title={label}
+      className="grid size-8 flex-none place-items-center rounded-button text-ink-64 transition-colors duration-150 hover:bg-surface hover:text-ink"
+    >
+      {collapsed ? (
+        <PanelLeftOpen className="size-4" strokeWidth={1.75} aria-hidden />
+      ) : (
+        <PanelLeftClose className="size-4" strokeWidth={1.75} aria-hidden />
+      )}
+    </button>
+  );
+}
+
 export function TopBar({ index }: { index: DocsIndex | undefined }) {
   const crumbs = useCrumbs(index);
+  const [sidebarCollapsed] = useSidebarCollapsed();
   return (
-    <header className="col-span-2 grid h-12 grid-cols-[272px_minmax(0,1fr)] border-b border-line-soft">
-      <div className="flex items-center gap-2.5 border-r border-line-soft bg-bg-sunken px-5">
-        <Link to="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ink">
+    <header
+      className={`col-span-2 grid h-12 border-b border-line-soft ${
+        sidebarCollapsed ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[272px_minmax(0,1fr)]"
+      }`}
+    >
+      <div
+        className={`flex items-center gap-2.5 border-r border-line-soft bg-bg-sunken ${
+          sidebarCollapsed ? "px-2.5" : "justify-between pr-2.5 pl-5"
+        }`}
+      >
+        <Link
+          to="/"
+          aria-label="timthink inbox"
+          className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ink"
+        >
           <span className="grid size-5 place-items-center rounded-[6px] bg-ink" aria-hidden>
             <span className="size-2 rounded-full bg-accent" />
           </span>
-          timthink
+          {sidebarCollapsed ? null : "timthink"}
         </Link>
+        <SidebarToggle />
       </div>
       <div className="flex min-w-0 items-center gap-4 bg-bg px-6">
         <nav aria-label="Breadcrumb" className="min-w-0 flex-1">

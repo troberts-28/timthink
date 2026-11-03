@@ -557,3 +557,42 @@
 .plan-body .question-details section[data-question-section="recommendation"] > :is(h1, h2, h3, h4, h5, h6) {
   color: var(--accent-ink);
 }
+
+.handoff-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-in-out,
+    background-color 150ms ease-in-out;
+}
+
+.handoff-option:hover {
+  border-color: var(--ink-32);
+}
+
+.handoff-option.is-checked {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.handoff-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.handoff-tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--ink-64);
+  background: var(--bg-sunken);
+}

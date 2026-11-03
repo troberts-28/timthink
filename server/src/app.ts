@@ -87,6 +87,7 @@ const docPathQuery = z.object({ path: z.string().min(1) });
 const repoQuery = z.object({ repo: z.string().min(1) });
 
 const sessionParams = z.object({ id: z.string().min(1).max(64) });
+const resumeBody = z.object({ reviewDoc: z.string().min(1).max(1024).optional() });
 
 const RECENT_SESSIONS_LIMIT = 50;
 
@@ -117,7 +118,14 @@ function eventPayload(event: HubEvent): { event: string; data: string } {
   return { event: event.type, data: JSON.stringify(event) };
 }
 
-async function toSessionView(session: SessionRecord): Promise<SessionView> {
+const UNTRACKED_OPEN_WINDOW_MS = 12 * 60 * 60 * 1000;
+
+function mayBeOpenUntracked(session: SessionRecord, now = Date.now()): boolean {
+  if (session.tracked || !session.lastActivity) return false;
+  return now - Date.parse(session.lastActivity) < UNTRACKED_OPEN_WINDOW_MS;
+}
+
+async function toSessionView(session: SessionRecord, docPath: string | null = null): Promise<SessionView> {
   return {
     id: session.id,
     title: session.title,
@@ -128,11 +136,17 @@ async function toSessionView(session: SessionRecord): Promise<SessionView> {
     live: session.live,
     warpFocusUrl: isWarpFocusUrl(session.warpFocusUrl) ? session.warpFocusUrl : null,
     canResume: isSessionId(session.id) && (await isExistingDirectory(session.cwd)),
+    mayBeOpenUntracked: mayBeOpenUntracked(session),
+    wroteDoc: docPath === null ? null : session.writtenDocPaths.includes(docPath),
   };
 }
 
-async function sessionsResponse(sessions: readonly SessionRecord[], scanning: boolean): Promise<SessionsResponse> {
-  return { sessions: await Promise.all(sessions.map(toSessionView)), scanning };
+async function sessionsResponse(
+  sessions: readonly SessionRecord[],
+  scanning: boolean,
+  docPath: string | null = null,
+): Promise<SessionsResponse> {
+  return { sessions: await Promise.all(sessions.map((session) => toSessionView(session, docPath))), scanning };
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -188,27 +202,32 @@ export function createApp(deps: AppDeps) {
     return { status: "focused" };
   };
 
-  const resumeSession = async (session: SessionRecord): Promise<SessionActionResponse> => {
+  const resumeSession = async (session: SessionRecord, reviewDoc?: string): Promise<SessionActionResponse> => {
     if (!isSessionId(session.id)) return { status: "unavailable", message: "This session id can't be resumed" };
     if (!session.cwd || !(await isExistingDirectory(session.cwd))) {
       return { status: "unavailable", message: "The session's directory no longer exists" };
     }
-    await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd);
+    if (reviewDoc !== undefined && !store.getDoc(reviewDoc)) {
+      return { status: "unavailable", message: "Unknown doc to review" };
+    }
+    const prompt = reviewDoc === undefined ? null : `/timthink review ${reviewDoc}`;
+    await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd, prompt);
     await deps.openUrl(RESUME_TAB_CONFIG_URL);
     return { status: "resumed", cwd: session.cwd };
   };
 
-  const sessionAction =
-    (action: (session: SessionRecord) => Promise<SessionActionResponse>) =>
-    async (c: Context<never, string, { out: { param: { id: string } } }>) => {
-      const session = sessions.get(c.req.valid("param").id);
-      if (!session) return c.json<SessionActionResponse>({ status: "unavailable", message: "Unknown session" }, 404);
-      try {
-        return c.json<SessionActionResponse>(await action(session));
-      } catch (error) {
-        return c.json<SessionActionResponse>({ status: "error", message: errorMessage(error, "Couldn't open Warp") });
-      }
-    };
+  const runSessionAction = async (
+    id: string,
+    action: (session: SessionRecord) => Promise<SessionActionResponse>,
+  ): Promise<{ body: SessionActionResponse; status: 200 | 404 }> => {
+    const session = sessions.get(id);
+    if (!session) return { body: { status: "unavailable", message: "Unknown session" }, status: 404 };
+    try {
+      return { body: await action(session), status: 200 };
+    } catch (error) {
+      return { body: { status: "error", message: errorMessage(error, "Couldn't open Warp") }, status: 200 };
+    }
+  };
 
   return new Hono()
     .use("*", loopbackHostGuard())
@@ -267,7 +286,7 @@ export function createApp(deps: AppDeps) {
     })
     .get("/api/doc-sessions", zValidator("query", docPathQuery), async (c) => {
       const { path: docPath } = c.req.valid("query");
-      return c.json(await sessionsResponse(sessions.forDoc(docPath), sessions.scanning));
+      return c.json(await sessionsResponse(sessions.forDoc(docPath), sessions.scanning, docPath));
     })
     .get("/api/sessions", zValidator("query", repoQuery), async (c) => {
       const { repo } = c.req.valid("query");
@@ -282,8 +301,16 @@ export function createApp(deps: AppDeps) {
         .slice(0, RECENT_SESSIONS_LIMIT);
       return c.json(await sessionsResponse(matching, sessions.scanning));
     })
-    .post("/api/sessions/:id/focus", zValidator("param", sessionParams), sessionAction(focusSession))
-    .post("/api/sessions/:id/resume", zValidator("param", sessionParams), sessionAction(resumeSession))
+    .post("/api/sessions/:id/focus", zValidator("param", sessionParams), async (c) => {
+      const { body, status } = await runSessionAction(c.req.valid("param").id, focusSession);
+      return c.json<SessionActionResponse>(body, status);
+    })
+    .post("/api/sessions/:id/resume", zValidator("param", sessionParams), zValidator("json", resumeBody), async (c) => {
+      const { reviewDoc } = c.req.valid("json");
+      const resume = (session: SessionRecord) => resumeSession(session, reviewDoc);
+      const { body, status } = await runSessionAction(c.req.valid("param").id, resume);
+      return c.json<SessionActionResponse>(body, status);
+    })
     .route("/api/review", reviewRoutes(deps.reviews))
     .route("/api/history", historyRoutes(store, deps.history, deps.seen))
     .route(

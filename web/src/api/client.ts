@@ -83,19 +83,26 @@ export async function fetchDocSessions(path: string): Promise<SessionsResponse> 
   return response.json();
 }
 
-async function postSessionAction(id: string, action: "focus" | "resume"): Promise<SessionActionResponse> {
-  const token = await sessionToken();
-  const route = client.api.sessions[":id"][action];
-  const response = await route.$post({ param: { id } }, { headers: { [TOKEN_HEADER]: token } });
+async function sessionActionResult(response: Response): Promise<SessionActionResponse> {
   if (response.status === 404) return { status: "unavailable", message: "This session is no longer known" };
   if (!response.ok) throw new Error(`Session request failed (${response.status})`);
   return response.json();
 }
 
-export function focusSession(id: string): Promise<SessionActionResponse> {
-  return postSessionAction(id, "focus");
+export async function focusSession(id: string): Promise<SessionActionResponse> {
+  const token = await sessionToken();
+  const response = await client.api.sessions[":id"].focus.$post(
+    { param: { id } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  return sessionActionResult(response);
 }
 
-export function resumeSession(id: string): Promise<SessionActionResponse> {
-  return postSessionAction(id, "resume");
+export async function resumeSession(id: string, reviewDoc?: string): Promise<SessionActionResponse> {
+  const token = await sessionToken();
+  const response = await client.api.sessions[":id"].resume.$post(
+    { param: { id }, json: reviewDoc === undefined ? {} : { reviewDoc } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  return sessionActionResult(response);
 }

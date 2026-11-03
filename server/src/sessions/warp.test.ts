@@ -2,7 +2,16 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../test/fixtures.js";
-import { isWarpFocusUrl, resumeTabConfig, tomlString, writeResumeTabConfig } from "./warp.js";
+import { isWarpFocusUrl, resumeCommand, resumeTabConfig, tomlString, writeResumeTabConfig } from "./warp.js";
+
+describe("resumeCommand", () => {
+  it("passes the prompt as a single shell-quoted argument", () => {
+    expect(resumeCommand("s-1", "/timthink review acme/it's plan.md")).toBe(
+      `claude --resume s-1 '/timthink review acme/it'\\''s plan.md'`,
+    );
+    expect(resumeCommand("s-1")).toBe("claude --resume s-1");
+  });
+});
 
 const SESSION_ID = "7b0b102e-5bdb-4073-a3d3-b16a23b5a701";
 

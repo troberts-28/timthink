@@ -1,6 +1,6 @@
 import type { PublicCodeMatch } from "@timthink/server";
 import { ExternalLink } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { openCode } from "../api/client";
 import { useCodeResolution } from "../api/queries";
 import { useToast } from "../lib/toast";
@@ -82,14 +82,29 @@ export function CodeRef({ value, sourceProps, children }: CodeRefProps) {
   const githubUrl = matches.length === 1 ? single?.githubUrl : null;
   const title = matches.length === 1 ? `Open ${single?.relPath} in editor` : `${matches.length} matching files`;
 
+  const onKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onClick();
+  };
+
   return (
     <span ref={containerRef} className="code-ref-wrap relative inline">
-      <button type="button" className="code-ref" title={title} aria-expanded={pickerOpen} onClick={onClick}>
+      {/* biome-ignore lint/a11y/useSemanticElements: a <button> is an atomic inline box, so a long path couldn't wrap inside a paragraph. */}
+      <span
+        role="button"
+        tabIndex={0}
+        className="code-ref"
+        title={title}
+        aria-expanded={pickerOpen}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+      >
         <code {...sourceProps}>{children}</code>
         <span className="code-ref-arrow" aria-hidden>
           ↗
         </span>
-      </button>
+      </span>
       {githubUrl ? (
         <a className="code-ref-github" href={githubUrl} target="_blank" rel="noreferrer" title="View on GitHub">
           <ExternalLink className="size-3" aria-hidden />

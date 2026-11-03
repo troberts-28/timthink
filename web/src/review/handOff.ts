@@ -1,9 +1,10 @@
-import type { SessionActionResponse } from "@timthink/server";
-import { fetchDocSessions, focusSession, resumeSession } from "../api/client";
+import type { SessionActionResponse, SessionView } from "@timthink/server";
+import { focusSession, resumeSession } from "../api/client";
 
 export type HandOffOutcome =
   | { kind: "focused"; command: string; copied: boolean }
   | { kind: "resumed"; command: string; copied: boolean }
+  | { kind: "possibly-open"; command: string; copied: boolean; title: string }
   | { kind: "copied-only"; command: string; copied: boolean; reason: string | null };
 
 export function reviewCommand(docPath: string): string {
@@ -23,18 +24,19 @@ function failureReason(result: SessionActionResponse): string | null {
   return result.status === "unavailable" || result.status === "error" ? result.message : null;
 }
 
-export async function handOffToClaude(docPath: string): Promise<HandOffOutcome> {
+export async function handOffToClaude(docPath: string, session: SessionView | null): Promise<HandOffOutcome> {
   const command = reviewCommand(docPath);
   const copied = await copy(command);
+  if (!session) return { kind: "copied-only", command, copied, reason: null };
   try {
-    const [latest] = (await fetchDocSessions(docPath)).sessions;
-    if (latest?.live && latest.warpFocusUrl) {
-      const result = await focusSession(latest.id);
+    if (session.live && session.warpFocusUrl) {
+      const result = await focusSession(session.id);
       if (result.status === "focused") return { kind: "focused", command, copied };
       return { kind: "copied-only", command, copied, reason: failureReason(result) };
     }
-    if (latest?.canResume) {
-      const result = await resumeSession(latest.id);
+    if (session.mayBeOpenUntracked) return { kind: "possibly-open", command, copied, title: session.title };
+    if (session.canResume) {
+      const result = await resumeSession(session.id, docPath);
       if (result.status === "resumed") return { kind: "resumed", command, copied };
       return { kind: "copied-only", command, copied, reason: failureReason(result) };
     }
