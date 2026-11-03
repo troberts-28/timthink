@@ -22,6 +22,7 @@ import {
 } from "./commands/install.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
 import { serve } from "./commands/serve.js";
+import { runStatus, STATUS_USAGE } from "./commands/status.js";
 import { docUrlForRelative } from "./commands/url.js";
 
 const USAGE = `Usage: timthink <command>
@@ -32,10 +33,9 @@ Commands:
   docs-dir [--cwd dir]  Print the docs folder for the git repo containing dir (default: current directory)
   docs-root             Print the docs root
   check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
+  status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
   archive <doc>         Archive a plan; also --list and --dry-run-auto (see \`timthink archive --help\`)
-  unarchive <doc>       Keep a plan active, even when the auto rule would archive it
-  archive <doc>         Archive a plan; also --list, --dry-run-auto (see \`timthink archive --help\`)
   unarchive <doc>       Keep a plan active, even when the auto rule would archive it
   doctor                Check every installed component and print fixes
   install [--apply] [--docs-root dir] [--code-root dir]
@@ -146,6 +146,12 @@ async function main(argv: string[]): Promise<number> {
       }
       return runCheck(config, docPath, { out: (text) => console.log(text), err: (text) => console.error(text) });
     }
+    case "status":
+      if (values.help) {
+        console.log(STATUS_USAGE);
+        return 0;
+      }
+      return runStatus(config, rest, { out: (text) => console.log(text), err: (text) => console.error(text) });
     case "review":
       return runReview(config, rest, values.message === undefined ? {} : { message: values.message }, consoleIo);
     case "archive":

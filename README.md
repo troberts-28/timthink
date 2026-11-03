@@ -145,6 +145,7 @@ A plan is archived when you archive it, or automatically when its file hasn't ch
 | `timthink url <doc>`                            | Print the hub URL for a plan                                                      |
 | `timthink docs-dir [--cwd dir]`                 | Print the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links          |
+| `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
 | `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active whatever the auto rule says (`--clear` forgets either) |
 | `timthink archive --list \| --dry-run-auto [--repo name]` | List archived plans, or preview what the auto rule archives and why     |

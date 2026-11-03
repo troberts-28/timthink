@@ -43,8 +43,14 @@ describe("findTextLinks", () => {
     expect(link && text.slice(link.start, link.end)).toBe(matched);
   });
 
-  it("leaves single-digit stack positions like PR 3 alone", () => {
-    expect(findTextLinks("PR 3: wire polling", noPlans)).toEqual([]);
+  it.each(["PR 3: wire polling", "PR 10 is its own stack", "the pr-12 branch"])(
+    "leaves stack positions alone: %s",
+    (text) => expect(findTextLinks(text, noPlans)).toEqual([]),
+  );
+
+  it("links short numbers when written with #", () => {
+    const [link] = findTextLinks("see PR #10", noPlans);
+    expect(link?.kind === "pr" && link.url).toBe("https://app.graphite.com/github/pr/acme/api/10");
   });
 
   it("uses the owner and repo from a GitHub pull URL", () => {

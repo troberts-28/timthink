@@ -29,6 +29,7 @@ linear: ABC-123
 Leave out fields you don't know. `pr` can be a list (`pr: [1234, 1235]`) when the plan ships as several PRs. `status` is one of `draft`, `review`, `approved`, `in-progress`, `done`, `abandoned`.
 
 **Status rules.**
+- Change status with `timthink status <doc> <status>` rather than editing the line by hand; it maps synonyms (wip, pending, complete…) to the six values and refuses `approved`.
 - Set `status: review` when you want the user's input.
 - Never set `approved` yourself. Only the user approves, by submitting a review.
 
@@ -96,7 +97,7 @@ The user approved a plan and wants it built, usually in a fresh session with not
 
 1. **Read the plan** in full, then run `timthink review show <doc>`. If a submitted review hasn't been addressed (exit code 0 with threads or answers), work through it first with the review steps above, then carry on. If `status` isn't `approved`, say so in one line and carry on.
 2. **Branch.** The branch is `--branch` if given, else the plan's `branch:`. If the current branch already matches, build on it. Otherwise create it from the repo's trunk (`gt create <branch>` in Graphite repos, else `git switch -c <branch>`). If neither names a branch, pick a short `feat/<slug>`. Write it to `branch:` in the frontmatter.
-3. **Mark it started.** Set `status: in-progress`.
+3. **Mark it started.** `timthink status <doc> in-progress`.
 4. **Build.** Work phase by phase, in order, through every phase with open tasks, or only phase N with `--phase N`. Tick each task (`- [x]`) in the plan as it lands, not in a batch at the end. Follow the repo's own conventions for tests, lint and commits. When the plan's decisions turn out to be wrong in practice, follow the code, note the deviation in the plan under the phase, and mention it in your summary.
 5. **PRs.** After `gt submit`, `gh pr create` or similar, add every PR number to the plan's `pr:` list. Don't open PRs or push unless the user's instructions for the repo say to; ask if unsure.
 6. **Finish.** Leave `status: in-progress` while any phase has open tasks. Set `status: done` only when every task is ticked and the work is merged or the user says it's done. Summarise what's built, what's left, and any deviations, and end with the URL from `timthink url <doc>`.

@@ -40,6 +40,7 @@ export {
   type TimthinkConfig,
 } from "./config.js";
 export type { DocContent, DocQuestion } from "./docs/content.js";
+export { canonicalStatus } from "./docs/status.js";
 export type {
   ArchiveState,
   AttachmentSummary,
@@ -86,6 +87,7 @@ export type {
 } from "./prs/types.js";
 export { ReadOnlyError } from "./readOnly.js";
 export { type AnchorMatch, createAnchor, locateAnchor } from "./reviews/anchor.js";
+export { writeFileAtomic } from "./reviews/atomicWrite.js";
 export { FrontmatterEditError, setFrontmatterStatus } from "./reviews/frontmatterStatus.js";
 export {
   type Actor,

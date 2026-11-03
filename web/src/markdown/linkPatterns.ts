@@ -132,7 +132,11 @@ const PR_PATTERNS: ReadonlyArray<{
     },
   },
   {
-    pattern: /\b[Pp][Rr](?:[ -]#?|#)(\d{2,})\b/g,
+    pattern: /\b[Pp][Rr] ?#(\d+)\b/g,
+    toUrl: (match, { github, prLinks }) => (github && match[1] ? prUrl(github, match[1], prLinks) : null),
+  },
+  {
+    pattern: /\b[Pp][Rr][ -](\d{4,})\b/g,
     toUrl: (match, { github, prLinks }) => (github && match[1] ? prUrl(github, match[1], prLinks) : null),
   },
   {
