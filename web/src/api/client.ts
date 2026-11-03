@@ -1,6 +1,7 @@
 import type {
   AppType,
   AttachmentSummary,
+  BuildRequest,
   DocDetail,
   DocsIndex,
   OpenCodeResponse,
@@ -98,10 +99,12 @@ export async function focusSession(id: string): Promise<SessionActionResponse> {
   return sessionActionResult(response);
 }
 
-export async function resumeSession(id: string, reviewDoc?: string): Promise<SessionActionResponse> {
+export type ResumeWith = { reviewDoc: string } | { build: BuildRequest } | Record<string, never>;
+
+export async function resumeSession(id: string, resumeWith: ResumeWith = {}): Promise<SessionActionResponse> {
   const token = await sessionToken();
   const response = await client.api.sessions[":id"].resume.$post(
-    { param: { id }, json: reviewDoc === undefined ? {} : { reviewDoc } },
+    { param: { id }, json: resumeWith },
     { headers: { [TOKEN_HEADER]: token } },
   );
   return sessionActionResult(response);

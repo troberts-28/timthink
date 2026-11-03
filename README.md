@@ -12,7 +12,8 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
 - **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
-- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one.
+- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**.
+- **Build.** Approving a plan (or pressing `b`) copies a command that starts a fresh Claude on `/timthink build <doc>` in the planner's directory and brings the planning tab forward, so you split a pane and paste. Or send the build to an existing session. The build skill works phase by phase, ticks tasks and records the branch and PRs back into the plan.
 
 Inspired by [Plannotator](https://github.com/backnotprop/plannotator) and [Kacper-Lubisz/pages](https://github.com/Kacper-Lubisz/pages).
 
@@ -61,7 +62,7 @@ If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS 
       data/sample.json        # non-markdown files are attachments
 ```
 
-Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` and `linear` are used when present. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
+Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` (a number or a list) and `linear` are used when present. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
 
 ### Markdown that isn't a plan
 

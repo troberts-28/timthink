@@ -17,7 +17,7 @@ async function jumpToSession(session: SessionView): Promise<string | null> {
   return problemOf(await resumeSession(session.id));
 }
 
-export function PlanShortcuts({ docPath, raw }: { docPath: string; raw: string }) {
+export function PlanShortcuts({ docPath, raw, onBuild }: { docPath: string; raw: string; onBuild: () => void }) {
   const toast = useToast();
   const changes = useChanges();
   const { data: sessionsData } = useDocSessions(docPath);
@@ -36,6 +36,8 @@ export function PlanShortcuts({ docPath, raw }: { docPath: string; raw: string }
     }
     changes.setShowChanges(!changes.showChanges);
   });
+
+  useKeyShortcut("b", onBuild);
 
   useKeyShortcut("w", () => {
     const sessions = sessionsData?.sessions ?? [];

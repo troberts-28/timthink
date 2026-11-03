@@ -50,7 +50,7 @@ interface PlanMetaProps {
 }
 
 export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
-  const pr = doc.pr ? prLink(doc.pr, github, prLinks) : null;
+  const prs = doc.prs.map((pr) => prLink(pr, github, prLinks));
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 text-meta text-ink-64">
       <StatusChip status={doc.status} />
@@ -62,15 +62,16 @@ export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
           {doc.branch}
         </MetaChip>
       ) : null}
-      {pr ? (
+      {prs.map((pr) => (
         <MetaChip
+          key={pr.label}
           icon={<GitPullRequest className="size-3" aria-hidden />}
           href={pr.href}
           title={PR_HOST_TITLES[prLinks]}
         >
           {pr.label}
         </MetaChip>
-      ) : null}
+      ))}
       {doc.linear ? (
         <MetaChip icon={<Ticket className="size-3" aria-hidden />} title="Linear issue">
           {doc.linear}

@@ -1,4 +1,5 @@
 import { mkdir, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { isInside, toPosix } from "../safePath.js";
 import { DOC_SESSIONS_LOG, JsonlFollower, parseDocWrite, parseSessionEvent, SESSIONS_LOG } from "./hookLog.js";
@@ -25,6 +26,8 @@ export interface SessionRecord {
   transcriptPath: string | null;
   docPaths: string[];
   writtenDocPaths: string[];
+  plannedDocPaths: string[];
+  builtDocPaths: string[];
 }
 
 interface SessionState {
@@ -232,6 +235,13 @@ export class SessionStore {
     return index;
   }
 
+  docPathForArgument(argument: string): string | null {
+    if (argument.startsWith("~/")) return this.docPathFor(path.join(homedir(), argument.slice(2)));
+    if (path.isAbsolute(argument)) return this.docPathFor(argument);
+    const normalised = path.posix.normalize(argument);
+    return normalised.startsWith("../") || normalised === ".." || normalised === "." ? null : normalised;
+  }
+
   docPathFor(filePath: string): string | null {
     if (!path.isAbsolute(filePath)) return null;
     for (const root of this.docsRoots) {
@@ -354,12 +364,46 @@ export class SessionStore {
       const docPath = kinds.has(touch.kind) ? this.docPathFor(touch.filePath) : null;
       if (docPath) paths.add(docPath);
     }
+    if (kinds === ANY_TOUCH) for (const docPath of this.firstBuilds(state).keys()) paths.add(docPath);
     return [...paths];
+  }
+
+  private firstBuilds(state: SessionState): Map<string, string | null> {
+    const builds = new Map<string, string | null>();
+    for (const { request, at } of state.transcript?.buildRequests ?? []) {
+      const docPath = this.docPathForArgument(request.doc);
+      if (docPath && !builds.has(docPath)) builds.set(docPath, at);
+    }
+    return builds;
+  }
+
+  private firstWrites(state: SessionState): Map<string, string | null> {
+    const writes = new Map<string, string | null>();
+    const add = (docPath: string | null, at: string | null) => {
+      if (!docPath) return;
+      const current = writes.get(docPath);
+      writes.set(docPath, current === undefined ? at : earlier(current, at));
+    };
+    for (const write of state.hookDocWrites) add(write.docPath, write.at);
+    for (const docPath of state.hookDocPaths) add(docPath, null);
+    for (const touch of state.transcript?.docTouches ?? []) {
+      if (touch.kind === "write") add(this.docPathFor(touch.filePath), touch.firstAt ?? touch.at);
+    }
+    return writes;
+  }
+
+  private plannedDocPathsOf(state: SessionState, builds: Map<string, string | null>): string[] {
+    return [...this.firstWrites(state)].flatMap(([docPath, firstWrite]) => {
+      if (!builds.has(docPath)) return [docPath];
+      const builtAt = builds.get(docPath) ?? null;
+      return firstWrite && builtAt && firstWrite < builtAt ? [docPath] : [];
+    });
   }
 
   private toRecord(state: SessionState, owners: Map<string, { id: string }>): SessionRecord {
     const { transcript, latestStart } = state;
     const liveProcess = this.liveProcesses?.get(state.id);
+    const builds = this.firstBuilds(state);
     const lastDocTouch = (transcript?.docTouches ?? []).reduce<string | null>(
       (latest, write) => later(latest, write.at),
       null,
@@ -377,6 +421,8 @@ export class SessionStore {
       transcriptPath: state.hookTranscriptPath ?? transcript?.transcriptPath ?? null,
       docPaths: this.docPathsOf(state, ANY_TOUCH),
       writtenDocPaths: this.docPathsOf(state, WRITES_ONLY),
+      plannedDocPaths: this.plannedDocPathsOf(state, builds),
+      builtDocPaths: [...builds.keys()],
     };
   }
 }

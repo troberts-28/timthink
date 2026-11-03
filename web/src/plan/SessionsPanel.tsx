@@ -127,6 +127,8 @@ function SessionRow({ session }: { session: SessionView }) {
         <p className="m-0 line-clamp-2 min-w-0 flex-1 text-ui font-medium text-ink" title={session.title}>
           {session.title}
         </p>
+        {session.plannedDoc ? <span className="chip chip-neutral flex-none">Planned</span> : null}
+        {session.builtDoc ? <span className="chip chip-info flex-none">Built</span> : null}
         {session.live ? (
           <span className="chip chip-ok-soft flex-none gap-1.5">
             <LiveDot />

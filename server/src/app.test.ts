@@ -233,6 +233,8 @@ describe("sessions API", () => {
         canResume: true,
         mayBeOpenUntracked: false,
         wroteDoc: true,
+        plannedDoc: true,
+        builtDoc: false,
       },
     ]);
   });

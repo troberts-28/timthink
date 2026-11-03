@@ -1,10 +1,11 @@
 import type { DocDetail, DocsIndex, RepoIndex } from "@timthink/server";
 import type { Root } from "hast";
 import { FileQuestion } from "lucide-react";
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router";
 import { NotFoundError } from "../api/client";
 import { useDoc, useDocsIndex } from "../api/queries";
+import { BuildButton, BuildDialog } from "../build/BuildDialog";
 import { ChangesBanner } from "../changes/ChangesBanner";
 import { ChangesProvider, useChanges } from "../changes/ChangesContext";
 import { ChangesLayer } from "../changes/ChangesLayer";
@@ -150,11 +151,15 @@ function PlanPaper({
   const archive = usePlanArchive(doc.summary.path);
   useArchiveShortcut(archive);
   const body = rendered ? <ChangesAwareBody hast={rendered.hast} /> : null;
+  const [buildOpen, setBuildOpen] = useState(false);
+  const openBuild = useCallback(() => setBuildOpen(true), []);
+  const closeBuild = useCallback(() => setBuildOpen(false), []);
   return (
     <PlanContext.Provider value={{ repo: doc.summary.repo, docPath: doc.summary.path }}>
       <ReviewProvider docPath={doc.summary.path} raw={doc.raw} docHash={doc.hash}>
         <ChangesProvider doc={doc}>
-          <PlanShortcuts docPath={doc.summary.path} raw={doc.raw} />
+          <PlanShortcuts docPath={doc.summary.path} raw={doc.raw} onBuild={openBuild} />
+          <BuildDialog doc={doc} open={buildOpen} onClose={closeBuild} />
           <TopBarSlot>
             <ContentsMenu toc={toc} activeId={activeId} />
           </TopBarSlot>
@@ -163,6 +168,7 @@ function PlanPaper({
               <>
                 <HistoryMenu currentHash={doc.hash} />
                 <ReviewButton />
+                <BuildButton status={doc.summary.status} onClick={openBuild} />
                 <PlanFileActions docPath={doc.summary.path} raw={doc.raw} />
                 <ArchiveButton plan={archive} />
               </>

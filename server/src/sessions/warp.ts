@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { shellQuote } from "../build/buildCommand.js";
 import { SESSION_ID_PATTERN } from "./sessionStore.js";
 
 export type OpenUrl = (url: string) => Promise<void>;
@@ -44,10 +45,6 @@ export function tomlString(value: string): string {
     else escaped += char;
   }
   return `"${escaped}"`;
-}
-
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 export function resumeCommand(sessionId: string, prompt: string | null = null): string {

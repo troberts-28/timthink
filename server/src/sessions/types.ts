@@ -1,3 +1,5 @@
+import type { BuildRequest } from "../build/buildCommand.js";
+
 export interface HookSessionEvent {
   event: "SessionStart" | "SessionEnd";
   sessionId: string;
@@ -19,7 +21,13 @@ export interface HookDocWrite {
 export interface TranscriptDocTouch {
   filePath: string;
   at: string | null;
+  firstAt: string | null;
   kind: "write" | "use";
+}
+
+export interface TranscriptBuildRequest {
+  request: BuildRequest;
+  at: string | null;
 }
 
 export interface TranscriptSummary {
@@ -32,6 +40,7 @@ export interface TranscriptSummary {
   title: string | null;
   firstPrompt: string | null;
   docTouches: TranscriptDocTouch[];
+  buildRequests: TranscriptBuildRequest[];
 }
 
 export interface SessionView {
@@ -46,6 +55,8 @@ export interface SessionView {
   canResume: boolean;
   mayBeOpenUntracked: boolean;
   wroteDoc: boolean | null;
+  plannedDoc: boolean | null;
+  builtDoc: boolean | null;
 }
 
 export interface SessionsResponse {

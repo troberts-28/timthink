@@ -37,6 +37,7 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "On a plan",
     shortcuts: [
+      { keys: ["b"], action: "Build it in a new or existing Claude session" },
       { keys: ["w"], action: "Jump to its Claude session in Warp" },
       { keys: ["d"], action: "Show or hide changes since you last looked" },
       { keys: ["y"], action: "Copy the markdown" },

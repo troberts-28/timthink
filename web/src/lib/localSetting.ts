@@ -25,7 +25,7 @@ function subscribe(key: string, listener: () => void): () => void {
   return () => forKey.delete(listener);
 }
 
-function useLocalString(key: string): [string | null, (value: string | null) => void] {
+export function useLocalString(key: string): [string | null, (value: string | null) => void] {
   const value = useSyncExternalStore(
     useCallback((listener: () => void) => subscribe(key, listener), [key]),
     () => readLocal(key),

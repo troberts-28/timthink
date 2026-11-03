@@ -1,5 +1,5 @@
 import path from "node:path";
-import { isMap, isScalar, LineCounter, parseDocument } from "yaml";
+import { isMap, isScalar, isSeq, LineCounter, parseDocument } from "yaml";
 import { type Fence, parseInfoString, scanFences } from "../markdown/fences.js";
 import { detailsSections, parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
 
@@ -78,11 +78,22 @@ function checkFrontmatter(raw: string): CheckProblem[] {
     if (!isScalar(pair.key)) continue;
     const key = String(pair.key.value);
     const line = firstLine + (lineCounter.linePos(pair.key.range?.[0] ?? 0).line - 1);
-    const value = isScalar(pair.value) ? pair.value.value : pair.value === null ? null : undefined;
+    const value = isScalar(pair.value)
+      ? pair.value.value
+      : isSeq(pair.value)
+        ? pair.value.items.map((item) => (isScalar(item) ? item.value : undefined))
+        : pair.value === null
+          ? null
+          : undefined;
     const problem = fieldProblem(key, value);
     if (problem) problems.push({ line, ...problem });
   }
   return problems;
+}
+
+function isPrNumber(value: unknown): boolean {
+  if (typeof value === "number") return Number.isInteger(value);
+  return typeof value === "string" && PR_NUMBER.test(value.trim());
 }
 
 function fieldProblem(key: string, value: unknown): Omit<CheckProblem, "line"> | null {
@@ -93,10 +104,11 @@ function fieldProblem(key: string, value: unknown): Omit<CheckProblem, "line"> |
       const hint = suggestion ? ` (did you mean ${suggestion}?)` : "";
       return { severity: "error", message: `status must be one of ${KNOWN_STATUSES.join(", ")}${hint}` };
     }
-    case "pr":
-      if (typeof value === "number" && Number.isInteger(value)) return null;
-      if (typeof value === "string" && PR_NUMBER.test(value.trim())) return null;
-      return { severity: "error", message: "pr must be a pull request number" };
+    case "pr": {
+      const values = Array.isArray(value) ? value : [value];
+      if (values.length > 0 && values.every(isPrNumber)) return null;
+      return { severity: "error", message: "pr must be a pull request number, or a list of them" };
+    }
     case "title":
     case "project":
     case "branch":

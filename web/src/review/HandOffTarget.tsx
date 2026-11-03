@@ -51,7 +51,11 @@ function TargetOption({
       <span className="flex min-w-0 items-center gap-2">
         {session.live ? <span className="size-1.5 flex-none rounded-full bg-ok" title="Live" aria-hidden /> : null}
         <span className="truncate text-ui font-medium text-ink">{session.title}</span>
-        {session.wroteDoc ? <span className="handoff-tag">Wrote this plan</span> : null}
+        {session.plannedDoc ? <span className="handoff-tag">Planned</span> : null}
+        {session.builtDoc ? <span className="handoff-tag">Built</span> : null}
+        {session.wroteDoc && !session.plannedDoc && !session.builtDoc ? (
+          <span className="handoff-tag">Wrote this plan</span>
+        ) : null}
       </span>
       <span className="flex min-w-0 items-center justify-between gap-3 text-meta text-ink-64">
         <span className="truncate">{whatHappens(session)}</span>

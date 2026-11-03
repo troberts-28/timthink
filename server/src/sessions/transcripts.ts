@@ -2,14 +2,15 @@ import { createReadStream, type Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { TranscriptDocTouch, TranscriptSummary } from "./types.js";
+import { buildRequestInPrompt } from "../build/buildCommand.js";
+import type { TranscriptBuildRequest, TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 const DOC_WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
 const SESSION_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
 const FIRST_PROMPT_MAX_LINE = 256 * 1024;
 const FIRST_PROMPT_MAX_CHARS = 140;
 const SCAN_CONCURRENCY = 4;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 export const BACKFILL_CACHE_FILE = "backfill-cache.json";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,11 +47,28 @@ export function lastStringField(line: string, key: string): string | null {
   }
 }
 
-function promptText(entry: Record<string, unknown>): string | null {
+const BUILD_MARKERS = ["<command-name>/timthink</command-name>", "/timthink build"];
+
+function userContent(entry: Record<string, unknown>): string | null {
   if (entry.type !== "user" || entry.isMeta === true || !isRecord(entry.message)) return null;
   const { content } = entry.message;
-  const text = typeof content === "string" ? content.trim() : null;
-  if (!text || text.startsWith("<") || text.startsWith("Caveat:")) return null;
+  return typeof content === "string" ? content : null;
+}
+
+const SLASH_COMMAND =
+  /^<command-message>[\s\S]*?<command-name>([^<]+)<\/command-name>(?:\s*<command-args>([^<]*)<\/command-args>)?/;
+
+function slashCommandText(text: string): string | null {
+  const match = SLASH_COMMAND.exec(text);
+  if (!match?.[1]) return null;
+  const args = match[2]?.trim();
+  return args ? `${match[1].trim()} ${args}` : null;
+}
+
+function promptText(entry: Record<string, unknown>): string | null {
+  const text = userContent(entry)?.trim() ?? null;
+  if (!text || text.startsWith("Caveat:")) return null;
+  if (text.startsWith("<")) return slashCommandText(text);
   const firstLine = text.split("\n", 1)[0] ?? text;
   return firstLine.length > FIRST_PROMPT_MAX_CHARS ? `${firstLine.slice(0, FIRST_PROMPT_MAX_CHARS - 1)}…` : firstLine;
 }
@@ -117,6 +135,7 @@ class TranscriptAccumulator {
   firstPrompt: string | null = null;
   lineSessionId: string | null = null;
   private readonly touches = new Map<string, TranscriptDocTouch>();
+  readonly buildRequests: TranscriptBuildRequest[] = [];
   private readonly spellings: RootSpelling[];
 
   constructor(docsRoots: readonly string[]) {
@@ -140,13 +159,22 @@ class TranscriptAccumulator {
     }
     const wantsPrompt = this.firstPrompt === null && line.length < FIRST_PROMPT_MAX_LINE && line.includes('"user"');
     const mayTouchDoc = line.includes('"tool_use"') && this.spellings.some(({ spelling }) => line.includes(spelling));
-    if (!wantsPrompt && !mayTouchDoc) return;
+    const mayBuild =
+      line.length < FIRST_PROMPT_MAX_LINE && line.includes('"user"') && BUILD_MARKERS.some((m) => line.includes(m));
+    if (!wantsPrompt && !mayTouchDoc && !mayBuild) return;
     const entry = parseLine(line);
     if (!entry) return;
     if (wantsPrompt) this.firstPrompt = promptText(entry);
+    if (mayBuild) {
+      const content = userContent(entry);
+      const request = content ? buildRequestInPrompt(content) : null;
+      if (request) this.buildRequests.push({ request, at: timestamp });
+    }
     if (mayTouchDoc) {
       for (const { filePath, kind } of docTouchesIn(entry, this.spellings)) {
-        this.touches.set(`${kind}:${filePath}`, { filePath, at: timestamp, kind });
+        const key = `${kind}:${filePath}`;
+        const firstAt = this.touches.get(key)?.firstAt ?? timestamp;
+        this.touches.set(key, { filePath, at: timestamp, firstAt, kind });
       }
     }
   }
@@ -198,6 +226,7 @@ export async function scanTranscript(
     title: accumulator.title,
     firstPrompt: accumulator.firstPrompt,
     docTouches: accumulator.docTouches(),
+    buildRequests: accumulator.buildRequests,
   };
 }
 

@@ -8,6 +8,7 @@ import { type SessionChange, SessionStore } from "./sessionStore.js";
 const SESSION_A = "11111111-1111-4111-8111-111111111111";
 const SESSION_B = "22222222-2222-4222-8222-222222222222";
 const SESSION_E = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const SESSION_F = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const PANE_1 = "warp://session/11111111111111111111111111111111";
 const PANE_2 = "warp://session/22222222222222222222222222222222";
 const RATE_LIMITER = "acme-api/2026-10-01-rate-limiter-plan.md";
@@ -25,6 +26,7 @@ describe("SessionStore", () => {
   let stateDir: string;
   let store: SessionStore;
   let changes: SessionChange[];
+  let claudeProjectsDir: string;
 
   const appendLines = (file: string, records: readonly object[]) =>
     appendFile(path.join(stateDir, file), records.map((record) => `${JSON.stringify(record)}\n`).join(""));
@@ -40,7 +42,7 @@ describe("SessionStore", () => {
   beforeEach(async () => {
     docsRoot = await copyFixtureDocs();
     stateDir = await makeTempDir("timthink-state-");
-    const claudeProjectsDir = await copyClaudeProjects({ docsRoot, codeRoot: "/code" });
+    claudeProjectsDir = await copyClaudeProjects({ docsRoot, codeRoot: "/code" });
     changes = [];
     store = new SessionStore({ docsRoot, stateDir, claudeProjectsDir, onChange: (change) => changes.push(change) });
     await store.init();
@@ -66,6 +68,47 @@ describe("SessionStore", () => {
       { id: SESSION_B, title: "Draft the billing migration plan and list open questions" },
     ]);
     expect(store.forDoc("garden-app/plans/2026-07-04-watering-schedule-plan.md")).toEqual([]);
+  });
+
+  it("labels a session that ran /timthink build as the plan's builder, not its planner", async () => {
+    const lines = [
+      {
+        type: "user",
+        message: {
+          role: "user",
+          content: `<command-message>timthink</command-message>\n<command-name>/timthink</command-name>\n<command-args>build ${RATE_LIMITER} --phase 1</command-args>`,
+        },
+        cwd: "/code/acme-api-3",
+        sessionId: SESSION_F,
+        timestamp: "2026-10-02T09:00:00.000Z",
+      },
+      {
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Edit", input: { file_path: path.join(docsRoot, RATE_LIMITER) } }],
+        },
+        cwd: "/code/acme-api-3",
+        sessionId: SESSION_F,
+        timestamp: "2026-10-02T09:05:00.000Z",
+      },
+    ];
+    const projectDir = path.join(claudeProjectsDir, "-code-acme-api-3");
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, `${SESSION_F}.jsonl`),
+      lines.map((line) => `${JSON.stringify(line)}\n`).join(""),
+    );
+    await store.runBackfill();
+    const sessions = store.forDoc(RATE_LIMITER);
+    const builder = sessions.find((session) => session.id === SESSION_F);
+    const planner = sessions.find((session) => session.id === SESSION_A);
+    expect(builder).toMatchObject({
+      title: `/timthink build ${RATE_LIMITER} --phase 1`,
+      builtDocPaths: [RATE_LIMITER],
+      plannedDocPaths: [],
+      writtenDocPaths: [RATE_LIMITER],
+    });
+    expect(planner).toMatchObject({ builtDocPaths: [], plannedDocPaths: [RATE_LIMITER] });
   });
 
   it("tracks liveness and the newest focus URL from hook records", async () => {

@@ -1,12 +1,15 @@
 import type { Verdict } from "@timthink/server";
 import { CircleCheck, CircleDot, MessageSquare, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { useDocSessions } from "../api/queries";
+import { useDoc, useDocSessions } from "../api/queries";
+import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "../build/BuildOptions";
+import { handOffBuild, NOT_NOW } from "../build/buildHandOff";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
 import { useToast } from "../lib/toast";
 import { defaultHandOffTarget, HandOffTarget } from "./HandOffTarget";
-import { type HandOffOutcome, handOffToClaude } from "./handOff";
+import { handOffToClaude } from "./handOff";
+import { handOffMessage } from "./handOffMessage";
 import { useRequiredReview } from "./ReviewContext";
 import { pendingCounts } from "./reviewModel";
 
@@ -38,43 +41,6 @@ const VERDICTS: readonly VerdictOption[] = [
   },
 ];
 
-function CommandCode({ command }: { command: string }) {
-  return <code className="font-mono text-[12.5px]">{command}</code>;
-}
-
-function handOffMessage(outcome: HandOffOutcome): ReactNode {
-  if (outcome.kind === "resumed") {
-    return "Resuming the session in a new Warp tab. Claude starts on your review straight away.";
-  }
-  if (!outcome.copied) {
-    return (
-      <>
-        Couldn't copy to the clipboard. Run <CommandCode command={outcome.command} /> in a Claude session.
-      </>
-    );
-  }
-  if (outcome.kind === "focused") {
-    return (
-      <>
-        Jumped to the Claude tab. Paste and press Enter to send <CommandCode command={outcome.command} />
-      </>
-    );
-  }
-  if (outcome.kind === "possibly-open") {
-    return (
-      <>
-        “{outcome.title}” may already be open in a Warp tab that timthink can't see, so it wasn't resumed. Paste the
-        copied <CommandCode command={outcome.command} /> into that tab, or use Resume in the Sessions panel.
-      </>
-    );
-  }
-  return (
-    <>
-      Copied <CommandCode command={outcome.command} />. Paste it into a Claude session.
-    </>
-  );
-}
-
 function useEscape(open: boolean, close: () => void): void {
   useEffect(() => {
     if (!open) return;
@@ -96,10 +62,13 @@ export function SubmitReviewDialog() {
   const { data: sessionsData } = useDocSessions(docPath);
   const sessions = sessionsData?.sessions ?? [];
   const target = chosenTarget ?? defaultHandOffTarget(sessions);
+  const { data: doc } = useDoc(docPath);
+  const build = useBuildOptions(planForBuild(docPath, doc), sessions, { allowNotNow: true });
   const titleId = useId();
   const close = () => {
     setSubmitOpen(false);
     setChosenTarget(null);
+    build.reset();
   };
   useEscape(submitOpen, close);
   useEffect(() => {
@@ -108,19 +77,35 @@ export function SubmitReviewDialog() {
   if (!submitOpen) return null;
   const counts = pendingCounts(review);
 
+  const building = verdict === "approve" && build.target !== NOT_NOW;
+  const sendsFeedback = counts.total > 0 || body.trim() !== "";
+
   const submit = async () => {
+    if (building && !build.branchValid) return;
     setSubmitting(true);
     const result = await actions.submit(verdict, body);
     setSubmitting(false);
     if (!result) return;
     const session = sessions.find((candidate) => candidate.id === target) ?? null;
+    const buildTarget = build.target;
+    const buildRequest = build.request;
     close();
     setBody("");
     setVerdict("approve");
     if (result.statusUpdate.status === "failed") {
       toast(`Review submitted, but the status wasn't changed: ${result.statusUpdate.message}`, "bad");
     }
-    toast(handOffMessage(await handOffToClaude(docPath, session)));
+    if (verdict !== "approve") {
+      toast(handOffMessage(await handOffToClaude(docPath, session)));
+      return;
+    }
+    if (buildTarget !== NOT_NOW) {
+      toast(buildMessage(await handOffBuild(buildTarget, buildRequest, sessions)));
+      return;
+    }
+    const fallback = sessions.find((candidate) => candidate.id === defaultHandOffTarget(sessions)) ?? null;
+    if (sendsFeedback) toast(handOffMessage(await handOffToClaude(docPath, fallback)));
+    else toast("Approved");
   };
 
   return (
@@ -190,14 +175,23 @@ export function SubmitReviewDialog() {
             </label>
           ))}
         </fieldset>
-        <HandOffTarget sessions={sessions} selectedId={target} onSelect={setChosenTarget} />
+        {verdict === "approve" ? (
+          <BuildOptions state={build} />
+        ) : (
+          <HandOffTarget sessions={sessions} selectedId={target} onSelect={setChosenTarget} />
+        )}
         <footer className="flex items-center justify-end gap-3">
           <div className="flex gap-2">
             <Button size="lg" tone="ghost" onClick={close}>
               Cancel
             </Button>
-            <Button size="lg" tone="primary" disabled={submitting} onClick={() => void submit()}>
-              Submit review
+            <Button
+              size="lg"
+              tone="primary"
+              disabled={submitting || (building && !build.branchValid)}
+              onClick={() => void submit()}
+            >
+              {building ? "Approve and build" : "Submit review"}
             </Button>
           </div>
         </footer>
