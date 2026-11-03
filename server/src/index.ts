@@ -40,6 +40,7 @@ export {
   type TimthinkConfig,
 } from "./config.js";
 export type { DocContent, DocQuestion } from "./docs/content.js";
+export type { SearchHit } from "./docs/search.js";
 export { canonicalStatus } from "./docs/status.js";
 export type {
   ArchiveState,

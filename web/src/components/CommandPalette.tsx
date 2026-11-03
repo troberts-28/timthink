@@ -1,18 +1,40 @@
+import { useQuery } from "@tanstack/react-query";
 import type { DocsIndex } from "@timthink/server";
-import { FileText, FolderGit2, Search } from "lucide-react";
+import { FileText, FolderGit2, Search, TextSearch } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { searchPlans } from "../api/search";
 import { isArchived } from "../lib/archive";
 import { compactDate } from "../lib/format";
-import { type SearchResult, searchIndex } from "../lib/navigation";
+import { type SearchResult, searchIndex, withTextHits } from "../lib/navigation";
 import { docHref, repoHref } from "../lib/routes";
 
 function resultHref(result: SearchResult): string {
-  return result.kind === "repo" ? repoHref(result.repo) : docHref(result.doc.path);
+  if (result.kind === "repo") return repoHref(result.repo);
+  return docHref(result.kind === "plan" ? result.doc.path : result.hit.path);
 }
 
 function resultKey(result: SearchResult): string {
-  return result.kind === "repo" ? `repo:${result.repo}` : result.doc.path;
+  if (result.kind === "repo") return `repo:${result.repo}`;
+  return result.kind === "plan" ? result.doc.path : `text:${result.hit.path}`;
+}
+
+const TEXT_SEARCH_MIN_LENGTH = 3;
+const TEXT_SEARCH_DEBOUNCE_MS = 180;
+
+function useTextSearch(query: string) {
+  const [debounced, setDebounced] = useState(query);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(query.trim()), TEXT_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const { data } = useQuery({
+    queryKey: ["search", debounced],
+    queryFn: () => searchPlans(debounced),
+    enabled: debounced.length >= TEXT_SEARCH_MIN_LENGTH,
+    staleTime: 30_000,
+  });
+  return debounced.length >= TEXT_SEARCH_MIN_LENGTH ? (data ?? []) : [];
 }
 
 function ResultRow({ result }: { result: SearchResult }) {
@@ -22,6 +44,21 @@ function ResultRow({ result }: { result: SearchResult }) {
         <FolderGit2 className="size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
         <span className="min-w-0 flex-1 truncate font-medium text-ink">{result.repo}</span>
         <span className="flex-none text-meta text-ink-32">Repo</span>
+      </>
+    );
+  }
+  if (result.kind === "text") {
+    const { hit } = result;
+    return (
+      <>
+        <TextSearch className="size-4 flex-none self-start mt-0.5 text-ink-32" strokeWidth={1.75} aria-hidden />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-ink">{hit.title}</span>
+          <span className="line-clamp-2 text-meta text-ink-64">{hit.snippet || hit.path}</span>
+        </span>
+        <span className="flex-none text-meta text-ink-32 tabular-nums">
+          {hit.matches > 1 ? `${hit.matches} matches` : "In text"}
+        </span>
       </>
     );
   }
@@ -47,7 +84,9 @@ function PaletteBody({ index, onClose }: { index: DocsIndex; onClose: () => void
   const [highlighted, setHighlighted] = useState(0);
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
-  const results = useMemo(() => searchIndex(index, query), [index, query]);
+  const titleResults = useMemo(() => searchIndex(index, query), [index, query]);
+  const textHits = useTextSearch(query);
+  const results = useMemo(() => withTextHits(titleResults, textHits), [titleResults, textHits]);
   const current = Math.min(highlighted, Math.max(results.length - 1, 0));
 
   useEffect(() => {
@@ -87,7 +126,7 @@ function PaletteBody({ index, onClose }: { index: DocsIndex; onClose: () => void
             setHighlighted(0);
           }}
           onKeyDown={onKeyDown}
-          placeholder="Jump to a plan or repo"
+          placeholder="Jump to a plan or repo, or search plan text (repo:name status:done)"
           role="combobox"
           aria-expanded="true"
           aria-controls={listId}
