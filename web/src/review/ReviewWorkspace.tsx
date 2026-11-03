@@ -106,7 +106,6 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
   useKeyShortcut("n", () => stepThread(1));
   useKeyShortcut("p", () => stepThread(-1));
   useKeyShortcut("r", () => openSubmit());
-  useKeyShortcut("a", () => openSubmit("approve"));
 
   const onBodyClick = (event: MouseEvent) => {
     if (!window.getSelection()?.isCollapsed) return;

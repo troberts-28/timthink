@@ -68,8 +68,7 @@ export interface ReviewContextValue {
   setShowResolved(show: boolean): void;
   submitOpen: boolean;
   setSubmitOpen(open: boolean): void;
-  requestedVerdict: Verdict | null;
-  openSubmit(verdict?: Verdict): void;
+  openSubmit(): void;
   actions: ReviewActions;
 }
 
@@ -179,16 +178,8 @@ export function ReviewProvider({ docPath, raw, docHash, children }: ReviewProvid
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [composer, setComposer] = useState<ComposerRequest | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  const [submitOpen, setSubmitOpenState] = useState(false);
-  const [requestedVerdict, setRequestedVerdict] = useState<Verdict | null>(null);
-  const setSubmitOpen = useCallback((open: boolean) => {
-    setSubmitOpenState(open);
-    if (!open) setRequestedVerdict(null);
-  }, []);
-  const openSubmit = useCallback((verdict?: Verdict) => {
-    setRequestedVerdict(verdict ?? null);
-    setSubmitOpenState(true);
-  }, []);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const openSubmit = useCallback(() => setSubmitOpen(true), []);
   const closeComposer = useCallback(() => setComposer(null), []);
   const activateThread = useCallback(
     (id: string | null) => {
@@ -214,7 +205,6 @@ export function ReviewProvider({ docPath, raw, docHash, children }: ReviewProvid
       setShowResolved,
       submitOpen,
       setSubmitOpen,
-      requestedVerdict,
       openSubmit,
       actions,
     }),
@@ -229,8 +219,6 @@ export function ReviewProvider({ docPath, raw, docHash, children }: ReviewProvid
       closeComposer,
       showResolved,
       submitOpen,
-      setSubmitOpen,
-      requestedVerdict,
       openSubmit,
       actions,
     ],

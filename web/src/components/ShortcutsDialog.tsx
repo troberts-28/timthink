@@ -32,7 +32,6 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: ["n"], action: "Next open thread" },
       { keys: ["p"], action: "Previous open thread" },
       { keys: ["r"], action: "Submit review" },
-      { keys: ["a"], action: "Approve (opens Submit review)" },
     ],
   },
   {
