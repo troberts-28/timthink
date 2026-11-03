@@ -1,5 +1,6 @@
 import path from "node:path";
 import { isMap, isScalar, isSeq, LineCounter, parseDocument } from "yaml";
+import { canonicalStatus } from "../docs/status.js";
 import { type Fence, parseInfoString, scanFences } from "../markdown/fences.js";
 import { detailsSections, parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
 
@@ -38,15 +39,6 @@ const LINK_DEFINITION = /^ {0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)/;
 const INLINE_CODE = /(`+)[\s\S]*?\1/g;
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/)/i;
 const TEMPLATED = /[{}$]/;
-const STATUS_SUGGESTIONS: Record<string, string> = {
-  active: "in-progress",
-  "in progress": "in-progress",
-  wip: "in-progress",
-  complete: "done",
-  completed: "done",
-  shipped: "done",
-  "needs-review": "review",
-};
 
 function lineAt(raw: string, offset: number): number {
   let line = 1;
@@ -100,7 +92,8 @@ function fieldProblem(key: string, value: unknown): Omit<CheckProblem, "line"> |
   switch (key) {
     case "status": {
       if (typeof value === "string" && (KNOWN_STATUSES as readonly string[]).includes(value)) return null;
-      const suggestion = typeof value === "string" ? STATUS_SUGGESTIONS[value.toLowerCase()] : undefined;
+      const canonical = typeof value === "string" ? canonicalStatus(value) : null;
+      const suggestion = canonical && (KNOWN_STATUSES as readonly string[]).includes(canonical) ? canonical : undefined;
       const hint = suggestion ? ` (did you mean ${suggestion}?)` : "";
       return { severity: "error", message: `status must be one of ${KNOWN_STATUSES.join(", ")}${hint}` };
     }

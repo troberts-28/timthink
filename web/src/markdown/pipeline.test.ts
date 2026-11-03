@@ -174,7 +174,7 @@ describe("markdownToHast", () => {
   });
 
   it("tags open task items with the PRs they mention", () => {
-    const items = render("- [ ] PR 1: wire it (#123) and PR 124\n- [x] PR 0 (#120)\n- [ ] no PR here\n").filter(
+    const items = render("- [ ] PR 1: wire it (#123) and PR #124\n- [x] PR 0 (#120)\n- [ ] no PR here\n").filter(
       (node) => node.tagName === "li",
     );
     expect(items.map((node) => node.properties.dataTaskPrs ?? null)).toEqual(["acme/api#123 acme/api#124", null, null]);
