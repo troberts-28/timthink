@@ -121,7 +121,7 @@ function eventPayload(event: HubEvent): { event: string; data: string } {
 const UNTRACKED_OPEN_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 function mayBeOpenUntracked(session: SessionRecord, now = Date.now()): boolean {
-  if (session.tracked || !session.lastActivity) return false;
+  if (session.livenessKnown || !session.lastActivity) return false;
   return now - Date.parse(session.lastActivity) < UNTRACKED_OPEN_WINDOW_MS;
 }
 
@@ -220,6 +220,7 @@ export function createApp(deps: AppDeps) {
     id: string,
     action: (session: SessionRecord) => Promise<SessionActionResponse>,
   ): Promise<{ body: SessionActionResponse; status: 200 | 404 }> => {
+    await sessions.refreshLiveness(0);
     const session = sessions.get(id);
     if (!session) return { body: { status: "unavailable", message: "Unknown session" }, status: 404 };
     try {
@@ -286,10 +287,12 @@ export function createApp(deps: AppDeps) {
     })
     .get("/api/doc-sessions", zValidator("query", docPathQuery), async (c) => {
       const { path: docPath } = c.req.valid("query");
+      await sessions.refreshLiveness();
       return c.json(await sessionsResponse(sessions.forDoc(docPath), sessions.scanning, docPath));
     })
     .get("/api/sessions", zValidator("query", repoQuery), async (c) => {
       const { repo } = c.req.valid("query");
+      await sessions.refreshLiveness();
       const prefix = `${repo}/`;
       const matching = sessions
         .all()

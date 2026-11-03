@@ -32,6 +32,7 @@ export function testConfig(overrides: Partial<TimthinkConfig>): TimthinkConfig {
     docsRoot: "/nonexistent/docs",
     codeRoot: "/nonexistent/code",
     claudeProjectsDir: "/nonexistent/claude-projects",
+    claudeSessionsDir: "/nonexistent/claude-sessions",
     warpTabConfigDir: "/nonexistent/warp-tab-configs",
     userName: "Test Reviewer",
     launchdLabel: "dev.timthink.test",

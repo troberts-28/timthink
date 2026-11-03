@@ -84,6 +84,24 @@ describe("SessionStore", () => {
     expect(changes.at(-1)).toEqual({ sessionIds: [SESSION_A], docPaths: [RATE_LIMITER] });
   });
 
+  it("prefers running processes over hook records for liveness and the focus URL", async () => {
+    await store.runBackfill();
+    await start({ sessionId: SESSION_B, at: "2026-11-01T09:00:00.000Z", warpFocusUrl: PANE_1 });
+    await store.readHookLogs();
+    expect(store.get(SESSION_A)).toMatchObject({ live: false, livenessKnown: false, warpFocusUrl: null });
+
+    store.applyLiveProcesses([
+      { pid: 7, sessionId: SESSION_A, updatedAt: 1, warpFocusUrl: PANE_2 },
+      { pid: 8, sessionId: SESSION_A, updatedAt: 2, warpFocusUrl: PANE_1 },
+    ]);
+    expect(store.get(SESSION_A)).toMatchObject({ live: true, livenessKnown: true, warpFocusUrl: PANE_1 });
+    expect(store.get(SESSION_B)?.live).toBe(false);
+    expect(changes.at(-1)).toEqual({ sessionIds: [SESSION_A], docPaths: [RATE_LIMITER] });
+
+    store.applyLiveProcesses(null);
+    expect(store.get(SESSION_B)?.live).toBe(true);
+  });
+
   it("treats a session as ended once another session starts in its pane", async () => {
     await start({ sessionId: SESSION_A, at: "2026-11-01T09:00:00.000Z", warpFocusUrl: PANE_1 });
     await start({ sessionId: SESSION_B, at: "2026-11-01T09:30:00.000Z", warpFocusUrl: PANE_1 });

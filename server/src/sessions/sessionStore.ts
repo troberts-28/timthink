@@ -2,11 +2,13 @@ import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { isInside, toPosix } from "../safePath.js";
 import { DOC_SESSIONS_LOG, JsonlFollower, parseDocWrite, parseSessionEvent, SESSIONS_LOG } from "./hookLog.js";
+import type { LiveClaudeProcess } from "./liveProcesses.js";
 import { BACKFILL_CACHE_FILE, type BackfillStats, TranscriptBackfill } from "./transcripts.js";
 import type { HookDocWrite, HookSessionEvent, TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHORT_ID_LENGTH = 8;
+const LIVENESS_MAX_AGE_MS = 3000;
 const ANY_TOUCH: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write", "use"]);
 const WRITES_ONLY: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write"]);
 
@@ -18,7 +20,7 @@ export interface SessionRecord {
   firstSeen: string | null;
   lastActivity: string | null;
   live: boolean;
-  tracked: boolean;
+  livenessKnown: boolean;
   warpFocusUrl: string | null;
   transcriptPath: string | null;
   docPaths: string[];
@@ -52,7 +54,17 @@ export interface SessionStoreOptions {
   docsRoot: string;
   stateDir: string;
   claudeProjectsDir: string;
+  scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   onChange?: (change: SessionChange) => void;
+}
+
+function newestProcessPerSession(processes: readonly LiveClaudeProcess[]): Map<string, LiveClaudeProcess> {
+  const bySession = new Map<string, LiveClaudeProcess>();
+  for (const process of processes) {
+    const current = bySession.get(process.sessionId);
+    if (!current || process.updatedAt > current.updatedAt) bySession.set(process.sessionId, process);
+  }
+  return bySession;
 }
 
 function later(a: string | null, b: string | null): string | null {
@@ -81,6 +93,9 @@ export class SessionStore {
   private backfillDone = false;
   private writeTimes: Map<string, DocWriteTime[]> | null = null;
 
+  private liveProcesses: Map<string, LiveClaudeProcess> | null = null;
+  private livenessScan: { at: number; pending: Promise<void> } | null = null;
+
   constructor(private readonly options: SessionStoreOptions) {
     this.docsRoots = [path.resolve(options.docsRoot)];
     this.sessionsLog = new JsonlFollower(path.join(options.stateDir, SESSIONS_LOG));
@@ -90,6 +105,32 @@ export class SessionStore {
 
   get stateDir(): string {
     return this.options.stateDir;
+  }
+
+  refreshLiveness(maxAgeMs = LIVENESS_MAX_AGE_MS): Promise<void> {
+    const scan = this.options.scanLiveProcesses;
+    if (!scan) return Promise.resolve();
+    if (this.livenessScan && Date.now() - this.livenessScan.at < maxAgeMs) return this.livenessScan.pending;
+    const pending = scan()
+      .then((processes) => this.applyLiveProcesses(processes))
+      .catch(() => this.applyLiveProcesses(null));
+    this.livenessScan = { at: Date.now(), pending };
+    return pending;
+  }
+
+  applyLiveProcesses(processes: readonly LiveClaudeProcess[] | null): void {
+    const next = processes === null ? null : newestProcessPerSession(processes);
+    const before = this.liveProcesses;
+    this.liveProcesses = next;
+    const changed = [...new Set([...(before?.keys() ?? []), ...(next?.keys() ?? [])])].filter(
+      (id) => before?.get(id)?.warpFocusUrl !== next?.get(id)?.warpFocusUrl || before?.has(id) !== next?.has(id),
+    );
+    const known = changed.filter((id) => this.states.has(id));
+    if (known.length === 0 && (before === null) === (next === null)) return;
+    this.notify({
+      sessionIds: known,
+      docPaths: [...new Set(known.flatMap((id) => this.get(id)?.docPaths ?? []))],
+    });
   }
 
   get scanning(): boolean {
@@ -318,6 +359,7 @@ export class SessionStore {
 
   private toRecord(state: SessionState, owners: Map<string, { id: string }>): SessionRecord {
     const { transcript, latestStart } = state;
+    const liveProcess = this.liveProcesses?.get(state.id);
     const lastDocTouch = (transcript?.docTouches ?? []).reduce<string | null>(
       (latest, write) => later(latest, write.at),
       null,
@@ -329,9 +371,9 @@ export class SessionStore {
       branch: transcript?.gitBranch ?? latestStart?.gitBranch ?? null,
       firstSeen: earlier(transcript?.firstSeen ?? null, state.firstHookAt),
       lastActivity: later(later(transcript?.lastActivity ?? null, lastDocTouch), state.lastHookAt),
-      live: this.isLive(state, owners),
-      tracked: latestStart !== null,
-      warpFocusUrl: latestStart?.warpFocusUrl ?? null,
+      live: this.liveProcesses ? liveProcess !== undefined : this.isLive(state, owners),
+      livenessKnown: this.liveProcesses !== null || latestStart !== null,
+      warpFocusUrl: liveProcess?.warpFocusUrl ?? latestStart?.warpFocusUrl ?? null,
       transcriptPath: state.hookTranscriptPath ?? transcript?.transcriptPath ?? null,
       docPaths: this.docPathsOf(state, ANY_TOUCH),
       writtenDocPaths: this.docPathsOf(state, WRITES_ONLY),

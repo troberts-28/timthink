@@ -17,7 +17,7 @@ function session(id: string, title: string): SessionRecord {
     firstSeen: null,
     lastActivity: null,
     live: false,
-    tracked: false,
+    livenessKnown: false,
     warpFocusUrl: null,
     transcriptPath: null,
     docPaths: [DOC],

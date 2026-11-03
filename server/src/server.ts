@@ -18,6 +18,7 @@ import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
 import { allowedOrigins, createSessionToken } from "./security.js";
 import { SeenStore } from "./seen/seenStore.js";
 import { DOC_SESSIONS_LOG, SESSIONS_LOG } from "./sessions/hookLog.js";
+import { createPsRunner, type LiveClaudeProcess, scanLiveClaudeProcesses } from "./sessions/liveProcesses.js";
 import { type SessionChange, SessionStore } from "./sessions/sessionStore.js";
 import { createMacOpener, type OpenUrl } from "./sessions/warp.js";
 import { defaultWebDist, mountWebApp } from "./webAssets.js";
@@ -31,6 +32,7 @@ export interface StartOptions {
   openInEditor?: OpenInEditor;
   openUrl?: OpenUrl;
   watch?: boolean;
+  scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   log?: (message: string) => void;
 }
 
@@ -75,10 +77,14 @@ export interface Runtime {
 }
 
 const BACKFILL_INTERVAL_MS = 5 * 60_000;
+const LIVENESS_INTERVAL_MS = 10_000;
 const INDEX_MAX_AGE_MS = 60 * 60_000;
 const HOOK_LOGS = new Set([SESSIONS_LOG, DOC_SESSIONS_LOG]);
 
 function startSessionTracking(sessions: SessionStore, log: (message: string) => void): DocsWatcher {
+  const liveness = setInterval(() => void sessions.refreshLiveness(), LIVENESS_INTERVAL_MS);
+  liveness.unref();
+  void sessions.refreshLiveness();
   const backfill = (): void => {
     sessions
       .runBackfill()
@@ -106,6 +112,7 @@ function startSessionTracking(sessions: SessionStore, log: (message: string) => 
   return {
     close(): void {
       clearInterval(interval);
+      clearInterval(liveness);
       watcher.close();
     },
   };
@@ -124,6 +131,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     docsRoot: config.docsRoot,
     stateDir: config.stateDir,
     claudeProjectsDir: config.claudeProjectsDir,
+    scanLiveProcesses:
+      options.scanLiveProcesses ?? (() => scanLiveClaudeProcesses(config.claudeSessionsDir, createPsRunner())),
     onChange: (change: SessionChange) => {
       hub.publish({ type: "sessions-changed", ...change, version: hub.nextVersion() });
     },

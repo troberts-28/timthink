@@ -37,6 +37,7 @@ const configFileSchema = z.object({
   codeRoot: z.string().optional(),
   stateDir: z.string().optional(),
   claudeProjectsDir: z.string().optional(),
+  claudeSessionsDir: z.string().optional(),
   warpTabConfigDir: z.string().optional(),
   userName: z.string().trim().min(1).optional(),
   launchdLabel: z
@@ -87,6 +88,7 @@ export interface TimthinkConfig {
   docsRoot: string;
   codeRoot: string;
   claudeProjectsDir: string;
+  claudeSessionsDir: string;
   warpTabConfigDir: string;
   userName: string | null;
   launchdLabel: string;
@@ -168,6 +170,7 @@ export function loadConfig(env: Env = process.env): TimthinkConfig {
     docsRoot: path.resolve(expandHome(file?.docsRoot ?? "~/agent-docs")),
     codeRoot: path.resolve(expandHome(file?.codeRoot ?? "~/code")),
     claudeProjectsDir: resolveDir(env.TIMTHINK_CLAUDE_PROJECTS_DIR, file?.claudeProjectsDir, "~/.claude/projects"),
+    claudeSessionsDir: resolveDir(env.TIMTHINK_CLAUDE_SESSIONS_DIR, file?.claudeSessionsDir, "~/.claude/sessions"),
     warpTabConfigDir: resolveDir(env.TIMTHINK_WARP_TAB_CONFIG_DIR, file?.warpTabConfigDir, "~/.warp/tab_configs"),
     userName: file?.userName ?? null,
     launchdLabel: file?.launchdLabel ?? DEFAULT_LAUNCHD_LABEL,
