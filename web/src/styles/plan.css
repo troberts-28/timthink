@@ -533,3 +533,11 @@
   padding-top: 0;
   border-top: 0;
 }
+
+:root {
+  --paper-max: 880px;
+}
+
+.paper-full {
+  --paper-max: 1200px;
+}

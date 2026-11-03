@@ -4,6 +4,7 @@ import path from "node:path";
 import { mimeTypeFor } from "../mime.js";
 import { toPosix } from "../safePath.js";
 import { analyzeContent, type DocContent } from "./content.js";
+import { isIgnoreFile, PlanFilter } from "./planFilter.js";
 import { locateDoc, summarizeDoc } from "./summarize.js";
 import type {
   AttachmentSummary,
@@ -27,6 +28,7 @@ export interface IndexOptions {
   repoInfo: (repo: string) => RepoInfo;
   archiveOf: (doc: DocSummary) => DocArchive;
   groupOrder: (assigned: Array<string | null>) => string[] | null;
+  sidebarQuotes?: readonly string[];
 }
 
 const IGNORED_NAMES = new Set(["node_modules", "__pycache__"]);
@@ -67,6 +69,7 @@ export class DocsStore {
   private readonly docs = new Map<string, DocSummary>();
   private readonly contents = new Map<string, DocContent>();
   private readonly attachments = new Map<string, AttachmentEntry>();
+  private planFilter = PlanFilter.none();
 
   constructor(readonly docsRoot: string) {}
 
@@ -74,6 +77,7 @@ export class DocsStore {
     this.docs.clear();
     this.contents.clear();
     this.attachments.clear();
+    this.planFilter = await PlanFilter.load(this.docsRoot);
     const repos = await this.readDirSafe(this.docsRoot);
     await Promise.all(
       repos
@@ -100,11 +104,24 @@ export class DocsStore {
 
   async applyChanges(relPaths: Iterable<string>): Promise<ChangeResult> {
     const result: ChangeResult = { changedDocs: [], removedDocs: [], changed: false };
-    for (const relPath of new Set(relPaths)) {
+    const paths = new Set(relPaths);
+    if ([...paths].some(isIgnoreFile)) return this.rescanForNewRules();
+    for (const relPath of paths) {
       if (!isIgnoredPath(relPath)) await this.applyChange(relPath, result);
     }
     result.changed = result.changed || result.changedDocs.length > 0 || result.removedDocs.length > 0;
     return result;
+  }
+
+  private async rescanForNewRules(): Promise<ChangeResult> {
+    const before = new Set(this.docs.keys());
+    await this.scanAll();
+    const after = new Set(this.docs.keys());
+    return {
+      changedDocs: [...after].filter((docPath) => !before.has(docPath)),
+      removedDocs: [...before].filter((docPath) => !after.has(docPath)),
+      changed: true,
+    };
   }
 
   attachmentsFor(doc: DocSummary): AttachmentSummary[] {
@@ -142,6 +159,7 @@ export class DocsStore {
     return {
       generatedAt: new Date().toISOString(),
       groups: options.groupOrder(repos.map((repo) => repo.group)),
+      sidebarQuotes: [...(options.sidebarQuotes ?? [])],
       repos,
     };
   }
@@ -238,7 +256,7 @@ export class DocsStore {
   private async upsertFile(relPath: string, size: number, mtime: number, result?: ChangeResult): Promise<void> {
     const location = locateDoc(relPath);
     if (!location) return;
-    if (isMarkdown(relPath)) {
+    if (isMarkdown(relPath) && this.planFilter.isPlan(relPath)) {
       const raw = await readFile(path.join(this.docsRoot, relPath), "utf8").catch(() => null);
       if (raw === null) return;
       const summary = summarizeDoc({ path: relPath, raw, mtime });

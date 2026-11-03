@@ -10,19 +10,18 @@ const order: NavEntry[] = [
 
 describe("nextDocPath", () => {
   it("skips archived docs unless they are shown", () => {
-    expect(nextDocPath(order, "a.md", 1, false)).toBe("c.md");
-    expect(nextDocPath(order, "a.md", 1, true)).toBe("b.md");
-    expect(nextDocPath(order, "c.md", 1, false)).toBe("c.md");
+    expect(nextDocPath(order, "a.md", 1)).toBe("c.md");
+    expect(nextDocPath(order, "c.md", 1)).toBe("c.md");
   });
 
   it("moves on from an archived doc that is open", () => {
-    expect(nextDocPath(order, "b.md", 1, false)).toBe("c.md");
-    expect(nextDocPath(order, "b.md", -1, false)).toBe("a.md");
+    expect(nextDocPath(order, "b.md", 1)).toBe("c.md");
+    expect(nextDocPath(order, "b.md", -1)).toBe("a.md");
   });
 
   it("starts at either end when nothing is open", () => {
-    expect(nextDocPath(order, null, 1, false)).toBe("a.md");
-    expect(nextDocPath(order, null, -1, false)).toBe("c.md");
-    expect(nextDocPath([], null, 1, false)).toBeNull();
+    expect(nextDocPath(order, null, 1)).toBe("a.md");
+    expect(nextDocPath(order, null, -1)).toBe("c.md");
+    expect(nextDocPath([], null, 1)).toBeNull();
   });
 });

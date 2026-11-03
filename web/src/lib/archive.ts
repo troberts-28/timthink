@@ -1,8 +1,6 @@
 import type { DocArchive } from "@timthink/server";
-import { useLocalFlag } from "./localSetting";
 
 const ACTIVE: DocArchive = { state: "active" };
-const SHOW_ARCHIVED_KEY = "timthink-show-archived";
 
 interface MaybeArchived {
   path: string;
@@ -31,8 +29,4 @@ function lowerFirst(text: string): string {
 export function archiveSummary(archive: DocArchive): string {
   if (archive.state === "manual") return archive.reason ?? "Archived by you";
   return archive.reason ? `Archived · ${lowerFirst(archive.reason)}` : "Archived";
-}
-
-export function useShowArchived(): [boolean, (value: boolean) => void] {
-  return useLocalFlag(SHOW_ARCHIVED_KEY);
 }

@@ -1,9 +1,9 @@
 import type { DocsIndex, IndexedDoc, ProjectIndex, RepoIndex } from "@timthink/server";
-import { Archive, ChevronRight, Folder, Inbox } from "lucide-react";
+import { ChevronRight, Folder, Inbox } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { useInbox } from "../api/queries";
-import { isArchived, partitionArchived, useShowArchived } from "../lib/archive";
+import { isArchived, partitionArchived } from "../lib/archive";
 import { compactDate, pluralise } from "../lib/format";
 import { useLocalNameSet } from "../lib/localSetting";
 import { repoSections } from "../lib/repoGroups";
@@ -207,7 +207,6 @@ function ArchivedSection({
       >
         <Chevron open={open} />
         <span className="min-w-0 flex-1 truncate">Archived</span>
-        <span className="flex-none tabular-nums">{count}</span>
       </button>
       {open ? children : null}
     </div>
@@ -222,13 +221,11 @@ function ProjectNode({
   repo,
   project,
   selection,
-  showArchived,
   insideArchive = false,
 }: {
   repo: string;
   project: ProjectIndex;
   selection: SidebarSelection;
-  showArchived: boolean;
   insideArchive?: boolean;
 }) {
   const containsActive = containsDoc(project.docs, selection.docPath);
@@ -238,8 +235,7 @@ function ProjectNode({
     if (containsActive) setOpen(true);
   }, [containsActive]);
   const { active, archived } = partitionArchived(project.docs);
-  const inline = showArchived || insideArchive;
-  const listed = inline ? project.docs : active;
+  const listed = insideArchive ? project.docs : active;
   const docIndent = 46;
   return (
     <div>
@@ -264,7 +260,7 @@ function ProjectNode({
               Files only, no plans
             </p>
           ) : null}
-          {inline ? null : (
+          {insideArchive ? null : (
             <ArchivedSection
               count={archived.length}
               indent={PROJECT_ARCHIVE_INDENT}
@@ -293,17 +289,7 @@ function splitProjects(projects: readonly ProjectIndex[]): { live: ProjectIndex[
   return { live, settled };
 }
 
-function RepoNode({
-  repo,
-  selection,
-  attention,
-  showArchived,
-}: {
-  repo: RepoIndex;
-  selection: SidebarSelection;
-  attention: number;
-  showArchived: boolean;
-}) {
+function RepoNode({ repo, selection, attention }: { repo: RepoIndex; selection: SidebarSelection; attention: number }) {
   const containsSelection = selection.repo === repo.name;
   const [open, setOpen] = useState(containsSelection);
   useEffect(() => {
@@ -341,36 +327,16 @@ function RepoNode({
       />
       {open ? (
         <div className="pb-1.5">
-          {(showArchived ? projectsWithPlans : live).map((project) => (
-            <ProjectNode
-              key={project.name}
-              repo={repo.name}
-              project={project}
-              selection={selection}
-              showArchived={showArchived}
-            />
+          {live.map((project) => (
+            <ProjectNode key={project.name} repo={repo.name} project={project} selection={selection} />
           ))}
-          <DocRows
-            docs={showArchived ? loosePlans : ungrouped.active}
-            selection={selection}
-            indent={26}
-            preview={UNGROUPED_PREVIEW}
-          />
-          {showArchived ? null : (
-            <ArchivedSection count={archivedHere} indent={REPO_ARCHIVE_INDENT} containsSelection={archivedSelected}>
-              {settled.map((project) => (
-                <ProjectNode
-                  key={project.name}
-                  repo={repo.name}
-                  project={project}
-                  selection={selection}
-                  showArchived={false}
-                  insideArchive
-                />
-              ))}
-              <DocRows docs={ungrouped.archived} selection={selection} indent={26} preview={UNGROUPED_PREVIEW} />
-            </ArchivedSection>
-          )}
+          <DocRows docs={ungrouped.active} selection={selection} indent={26} preview={UNGROUPED_PREVIEW} />
+          <ArchivedSection count={archivedHere} indent={REPO_ARCHIVE_INDENT} containsSelection={archivedSelected}>
+            {settled.map((project) => (
+              <ProjectNode key={project.name} repo={repo.name} project={project} selection={selection} insideArchive />
+            ))}
+            <DocRows docs={ungrouped.archived} selection={selection} indent={26} preview={UNGROUPED_PREVIEW} />
+          </ArchivedSection>
         </div>
       ) : null}
     </div>
@@ -416,32 +382,20 @@ function GroupSection({
   );
 }
 
-function ShowArchivedToggle({ total }: { total: number }) {
-  const [showArchived, setShowArchived] = useShowArchived();
+function SidebarQuote({ quotes }: { quotes: readonly string[] }) {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * quotes.length));
+  const quote = quotes[index % quotes.length];
+  const next = () =>
+    setIndex((current) => (current + 1 + Math.floor(Math.random() * (quotes.length - 1))) % quotes.length);
   return (
-    <div className="flex-none border-t border-line-soft px-3 py-2">
+    <div className="flex-none border-t border-line-soft px-3 py-2.5">
       <button
         type="button"
-        role="switch"
-        aria-checked={showArchived}
-        onClick={() => setShowArchived(!showArchived)}
-        className="flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-meta font-medium text-ink-64 transition-colors duration-150 hover:bg-surface/60 hover:text-ink"
+        onClick={next}
+        title="Another one"
+        className="w-full rounded-[8px] px-2.5 py-1.5 text-left text-meta leading-[18px] text-ink-64 italic transition-colors duration-150 hover:bg-surface/60 hover:text-ink"
       >
-        <Archive className="size-3.5 text-ink-32" strokeWidth={1.75} aria-hidden />
-        <span className="flex-1 text-left">Show archived</span>
-        {total > 0 ? <span className="text-ink-32 tabular-nums">{total}</span> : null}
-        <span
-          className={`relative h-4 w-7 flex-none rounded-full transition-colors duration-150 ${
-            showArchived ? "bg-accent" : "bg-line"
-          }`}
-          aria-hidden
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 size-3 rounded-full bg-surface transition-transform duration-150 ${
-              showArchived ? "translate-x-3" : ""
-            }`}
-          />
-        </span>
+        “{quote}”
       </button>
     </div>
   );
@@ -449,7 +403,6 @@ function ShowArchivedToggle({ total }: { total: number }) {
 
 function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSelection }) {
   const { data: inbox } = useInbox();
-  const [showArchived] = useShowArchived();
   const [collapsedGroups, setGroupCollapsed] = useLocalNameSet(COLLAPSED_GROUPS_KEY);
   const sections = repoSections(index);
   const repoNodes = (repos: RepoIndex[]) =>
@@ -461,7 +414,6 @@ function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSe
           repo={repo}
           selection={selection}
           attention={inbox?.attention.byRepo[repo.name] ?? 0}
-          showArchived={showArchived}
         />
       ));
   return (
@@ -491,7 +443,6 @@ function RepoTree({ index, selection }: { index: DocsIndex; selection: SidebarSe
 
 export function Sidebar({ index, selection }: { index: DocsIndex | undefined; selection: SidebarSelection }) {
   const { data: inbox } = useInbox();
-  const archivedTotal = index?.repos.reduce((sum, repo) => sum + (repo.archivedCount ?? 0), 0) ?? 0;
   return (
     <div className="flex h-full flex-col bg-bg-sunken">
       <nav aria-label="Plans" className="scroll-quiet scroll-stable min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-6">
@@ -518,7 +469,7 @@ export function Sidebar({ index, selection }: { index: DocsIndex | undefined; se
           </div>
         )}
       </nav>
-      <ShowArchivedToggle total={archivedTotal} />
+      {index && index.sidebarQuotes.length > 0 ? <SidebarQuote quotes={index.sidebarQuotes} /> : null}
     </div>
   );
 }

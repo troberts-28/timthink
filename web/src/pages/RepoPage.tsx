@@ -13,7 +13,7 @@ import { findRepo, repoDocs } from "../lib/indexNav";
 import { projectHref } from "../lib/routes";
 
 function ProjectCard({ repo, project }: { repo: string; project: ProjectIndex }) {
-  const { active, archived } = partitionArchived(project.docs);
+  const { active } = partitionArchived(project.docs);
   const latest = active[0];
   return (
     <Link
@@ -27,7 +27,6 @@ function ProjectCard({ repo, project }: { repo: string; project: ProjectIndex })
       <span className="flex items-center justify-between gap-3 text-meta text-ink-64">
         <span>
           {pluralise(active.length, "plan")}
-          {archived.length > 0 ? <span className="text-ink-32"> · {archived.length} archived</span> : null}
           {project.attachmentCount > 0 ? ` · ${pluralise(project.attachmentCount, "file")}` : ""}
         </span>
         {latest ? <span className="text-ink-32 tabular-nums">{compactDate(latest.date)}</span> : null}
@@ -73,7 +72,8 @@ export function RepoPage() {
         meta={
           <>
             {pluralise(repo.docCount - archived.length, "active plan")}
-            {archived.length > 0 ? ` · ${archived.length} archived` : ""} · {pluralise(liveProjects.length, "project")}
+            {" · "}
+            {pluralise(liveProjects.length, "project")}
             {github}
           </>
         }

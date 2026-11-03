@@ -75,7 +75,7 @@ function Paper({ doc, repo, body, bodyRef, headerActions, banner }: PaperProps) 
     <>
       {banner}
       <ChangesBanner />
-      <article className="mx-auto max-w-[760px] rounded-paper border border-line bg-surface px-8 pt-10 pb-14 sm:px-14">
+      <article className="mx-auto max-w-[var(--paper-max)] rounded-paper border border-line bg-surface px-7 pt-10 pb-14 sm:px-10">
         <header className="mb-10 border-b border-line-soft pb-7">
           <div className="mb-5 flex items-start justify-between gap-4">
             <p className="m-0 truncate pt-1.5 font-mono text-[11.5px] text-ink-32" title={doc.summary.path}>
@@ -199,7 +199,7 @@ export function PlanPage() {
   if (isLoading || !doc) {
     return (
       <div className="px-10 pt-8">
-        <div className="mx-auto max-w-[760px] rounded-paper border border-line bg-surface px-14 pt-10 pb-14">
+        <div className="mx-auto max-w-[var(--paper-max)] rounded-paper border border-line bg-surface px-10 pt-10 pb-14">
           <PaperSkeleton />
         </div>
       </div>

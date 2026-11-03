@@ -46,6 +46,7 @@ const configFileSchema = z.object({
     .optional(),
   repos: z.record(z.string(), repoOverrideSchema).optional(),
   groups: z.array(groupSchema).optional(),
+  sidebarQuotes: z.array(z.string().trim().min(1).max(280)).max(200).optional(),
   archive: archiveSchema.optional(),
   readOnly: z.boolean().optional(),
 });
@@ -94,6 +95,7 @@ export interface TimthinkConfig {
   launchdLabel: string;
   repos: Record<string, RepoOverride>;
   groups: RepoGroupConfig[] | null;
+  sidebarQuotes: string[];
   archive: ArchiveSettings;
   readOnly: boolean;
 }
@@ -176,6 +178,7 @@ export function loadConfig(env: Env = process.env): TimthinkConfig {
     launchdLabel: file?.launchdLabel ?? DEFAULT_LAUNCHD_LABEL,
     repos,
     groups: resolveGroups(file?.groups),
+    sidebarQuotes: file?.sidebarQuotes ?? [],
     archive: { ...DEFAULT_ARCHIVE_SETTINGS, ...file?.archive },
     readOnly: isTruthyFlag(env.TIMTHINK_READONLY) || (file?.readOnly ?? false),
   };

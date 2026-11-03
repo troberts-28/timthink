@@ -8,7 +8,7 @@ export function ArchiveBanner({ plan }: { plan: PlanArchive }) {
   return (
     <section
       aria-label="Archived plan"
-      className="mx-auto mb-4 flex max-w-[760px] items-center gap-3 rounded-card border border-line-soft bg-bg-sunken py-2 pr-2 pl-4"
+      className="mx-auto mb-4 flex max-w-[var(--paper-max)] items-center gap-3 rounded-card border border-line-soft bg-bg-sunken py-2 pr-2 pl-4"
     >
       <Archive className="size-3.5 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
       <p className="m-0 min-w-0 flex-1 truncate text-ui text-ink-64">{archiveSummary(plan.archive)}</p>

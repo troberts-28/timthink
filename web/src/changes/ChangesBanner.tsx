@@ -33,7 +33,7 @@ export function ChangesBanner() {
   return (
     <section
       aria-label="Changes since you last looked"
-      className="changes-banner popover-enter mx-auto mb-4 flex max-w-[760px] flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-line bg-surface py-2.5 pr-2.5 pl-4"
+      className="changes-banner popover-enter mx-auto mb-4 flex max-w-[var(--paper-max)] flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-line bg-surface py-2.5 pr-2.5 pl-4"
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span

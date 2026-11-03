@@ -207,6 +207,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
         },
         archiveOf: (summary) => archive.stateFor(summary),
         groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),
+        sidebarQuotes: config.sidebarQuotes,
       });
       cachedAt = Date.now();
     }

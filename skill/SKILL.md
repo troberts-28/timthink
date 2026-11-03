@@ -11,6 +11,8 @@ Plans are plain markdown files in a docs folder that the timthink hub renders, a
 
 **Where.** Run `timthink docs-dir` from the repo you're working in and write into the folder it prints, optionally in a project subfolder. If it notes the folder doesn't exist yet, create it. Name files `YYYY-MM-DD-<slug>.md`.
 
+**Markdown that isn't a plan.** Drafts of files destined for a repo (README, AGENTS.md), prompts, logs and raw notes don't belong in the hub's plan list. Keep them in a subfolder and add that folder to the repo docs folder's `.timthinkignore` (gitignore syntax, e.g. `/2026-11-03-agents-md/`). `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` are never treated as plans.
+
 **Frontmatter.** Always add it:
 
 ```yaml

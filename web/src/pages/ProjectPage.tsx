@@ -34,7 +34,7 @@ export function ProjectPage() {
           </Link>
         }
         title={project.name}
-        meta={`${pluralise(active.length, "active plan")}${archived.length > 0 ? ` · ${archived.length} archived` : ""} · ${pluralise(project.attachmentCount, "file")}`}
+        meta={`${pluralise(active.length, "active plan")} · ${pluralise(project.attachmentCount, "file")}`}
       />
       <section className="mb-10">
         <SectionHeading>Plans</SectionHeading>

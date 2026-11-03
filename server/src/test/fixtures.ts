@@ -38,6 +38,7 @@ export function testConfig(overrides: Partial<TimthinkConfig>): TimthinkConfig {
     launchdLabel: "dev.timthink.test",
     repos: {},
     groups: null,
+    sidebarQuotes: [],
     archive: DEFAULT_ARCHIVE_SETTINGS,
     readOnly: false,
     ...overrides,

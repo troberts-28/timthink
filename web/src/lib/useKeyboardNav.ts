@@ -1,7 +1,7 @@
 import type { DocsIndex, IndexedDoc } from "@timthink/server";
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { isArchived, useShowArchived } from "./archive";
+import { isArchived } from "./archive";
 import { repoSections } from "./repoGroups";
 import { docHref } from "./routes";
 
@@ -25,13 +25,8 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-export function nextDocPath(
-  order: readonly NavEntry[],
-  current: string | null,
-  step: 1 | -1,
-  includeArchived: boolean,
-): string | null {
-  const visible = (entry: NavEntry | undefined) => entry !== undefined && (includeArchived || !entry.archived);
+export function nextDocPath(order: readonly NavEntry[], current: string | null, step: 1 | -1): string | null {
+  const visible = (entry: NavEntry | undefined) => entry !== undefined && !entry.archived;
   const start = current ? order.findIndex((entry) => entry.path === current) : -1;
   if (start === -1) {
     const candidates = order.filter(visible);
@@ -45,7 +40,6 @@ export function nextDocPath(
 
 export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: string | null): void {
   const navigate = useNavigate();
-  const [showArchived] = useShowArchived();
   useEffect(() => {
     if (!index) return;
     const order = sidebarOrder(index);
@@ -53,7 +47,7 @@ export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: str
       if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
       const step = event.key === "j" ? 1 : event.key === "k" ? -1 : null;
       if (!step) return;
-      const target = nextDocPath(order, currentDocPath, step, showArchived);
+      const target = nextDocPath(order, currentDocPath, step);
       if (target && target !== currentDocPath) {
         event.preventDefault();
         navigate(docHref(target));
@@ -61,5 +55,5 @@ export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: str
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [index, currentDocPath, navigate, showArchived]);
+  }, [index, currentDocPath, navigate]);
 }

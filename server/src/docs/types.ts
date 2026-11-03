@@ -68,6 +68,7 @@ export interface RepoIndex {
 export interface DocsIndex {
   generatedAt: string;
   groups: string[] | null;
+  sidebarQuotes: string[];
   repos: RepoIndex[];
 }
 

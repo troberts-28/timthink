@@ -63,6 +63,10 @@ If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS 
 
 Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` and `linear` are used when present. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
 
+### Markdown that isn't a plan
+
+Every `*.md` file is a plan unless it's an agent instruction file (`AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md`) or matches a `.timthinkignore` rule. Put a `.timthinkignore` (gitignore syntax) in the docs root or in a repo's docs folder; matching markdown is listed as a plain file instead. Changes apply immediately.
+
 ## What it reads and writes
 
 | Path                                                   | Access     | Contents                                                                                          |
@@ -112,6 +116,7 @@ Nothing leaves your machine.
 | `repos.<repo>.prLinks`   | `graphite`                | Where PR references link: `graphite` or `github`                                            |
 | `repos.<repo>.aliases`   | none                      | Other checkout names that `timthink docs-dir` maps to this docs folder                      |
 | `groups`                 | none                      | Sidebar and inbox groups, in order (see below). Without it, repos aren't grouped            |
+| `sidebarQuotes`          | none                      | Lines shown at random in the sidebar footer (click for another). Hidden when empty          |
 | `archive.auto`           | `true`                    | Archive plans automatically by the rule below                                               |
 | `archive.staleAfterDays` | `21`                      | Auto-archive plans whose file hasn't changed for longer than this                          |
 | `archive.finishedAfterDays` | `3`                    | Auto-archive `done` or `abandoned` plans that haven't changed for longer than this         |

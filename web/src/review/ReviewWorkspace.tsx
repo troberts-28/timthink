@@ -70,13 +70,14 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
   );
   const ranges = useAnchoredRanges(body, raw, anchors, domVersion);
   const openCount = (review?.threads ?? []).filter((thread) => thread.status === "open").length;
+  const marginVisible = wide && openCount > 0;
 
   const activateFromCard = useCallback(
     (thread: Thread) => {
       setActiveThreadId(thread.id);
-      if (!wide) scrollToRange(ranges.get(thread.id));
+      if (!marginVisible) scrollToRange(ranges.get(thread.id));
     },
-    [setActiveThreadId, wide, ranges],
+    [setActiveThreadId, marginVisible, ranges],
   );
 
   const onBodyClick = (event: MouseEvent) => {
@@ -85,16 +86,20 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
     const caret = caretAt(event.clientX, event.clientY);
     const id = caret ? threadAtPoint(ranges, caret.node, caret.offset) : null;
     setActiveThreadId(id);
-    if (id && !wide) setDrawerOpen(true);
+    if (id && !marginVisible) setDrawerOpen(true);
   };
 
   const badge =
-    !wide && (review?.threads.length ?? 0) > 0 ? (
+    !marginVisible && (review?.threads.length ?? 0) > 0 ? (
       <ThreadsBadge count={openCount} onClick={() => setDrawerOpen(true)} />
     ) : null;
 
   return (
-    <div className="grid grid-cols-1 gap-8 px-6 pt-8 pb-24 lg:px-10 xl:grid-cols-[minmax(0,1fr)_320px] xl:pr-6">
+    <div
+      className={`grid grid-cols-1 gap-8 px-6 pt-8 pb-24 lg:px-8 ${
+        marginVisible ? "paper-with-margin grid-cols-[minmax(0,1fr)_300px] pr-6" : "paper-full"
+      }`}
+    >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: clicking a highlight is a pointer shortcut; every thread is reachable from its card. */}
       <div ref={attachColumn} className="relative min-w-0" onClick={onBodyClick}>
         {renderPaper({
@@ -110,7 +115,7 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
         <SelectionLayer body={body} containerRef={columnRef} ranges={ranges} layoutVersion={domVersion} />
         <PendingReviewBar />
       </div>
-      {wide ? (
+      {marginVisible ? (
         <aside aria-label="Review threads" className="min-w-0">
           <ThreadMargin ranges={ranges} layoutVersion={domVersion} onActivate={activateFromCard} />
         </aside>

@@ -21,7 +21,7 @@ export function ArchivedDocs({ docs, showLocation = false }: { docs: IndexedDoc[
           strokeWidth={2}
           aria-hidden
         />
-        Archived <span className="tabular-nums">{docs.length}</span>
+        Archived
       </button>
       {open ? (
         <div id={listId}>

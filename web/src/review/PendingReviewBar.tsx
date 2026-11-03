@@ -16,7 +16,7 @@ export function PendingReviewBar() {
   const { review, setSubmitOpen } = useRequiredReview();
   const counts = pendingCounts(review);
   return (
-    <div className="pending-bar sticky bottom-5 z-20 mx-auto mt-6 flex max-w-[760px] items-center gap-3 rounded-card border border-line bg-surface-raised py-2.5 pr-2.5 pl-4 shadow-pop">
+    <div className="pending-bar sticky bottom-5 z-20 mx-auto mt-6 flex max-w-[var(--paper-max)] items-center gap-3 rounded-card border border-line bg-surface-raised py-2.5 pr-2.5 pl-4 shadow-pop">
       <span className={`size-2 flex-none rounded-full ${counts.total > 0 ? "bg-accent" : "bg-ink-32"}`} aria-hidden />
       <p className={`m-0 min-w-0 flex-1 truncate text-ui font-medium ${counts.total > 0 ? "text-ink" : "text-ink-64"}`}>
         {summary(counts)}
