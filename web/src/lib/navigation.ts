@@ -1,4 +1,4 @@
-import type { DocsIndex, IndexedDoc } from "@timthink/server";
+import type { DocsIndex, IndexedDoc, SearchHit } from "@timthink/server";
 import type { SidebarSelection } from "../components/Sidebar";
 import { isArchived } from "./archive";
 import { allDocs, findDoc, findProject, findRepo } from "./indexNav";
@@ -18,7 +18,10 @@ export function parentHref(index: DocsIndex | undefined, selection: SidebarSelec
   return project ? repoHref(repo) : INBOX_HREF;
 }
 
-export type SearchResult = { kind: "repo"; repo: string } | { kind: "plan"; doc: IndexedDoc };
+export type SearchResult =
+  | { kind: "repo"; repo: string }
+  | { kind: "plan"; doc: IndexedDoc }
+  | { kind: "text"; hit: SearchHit };
 
 function haystack(doc: IndexedDoc): string {
   return `${doc.title} ${doc.path}`.toLowerCase();
@@ -31,8 +34,14 @@ function planScore(doc: IndexedDoc, terms: readonly string[]): number {
   return titleHits * 2 + startsWith + (isArchived(doc) ? -3 : 0);
 }
 
+const FILTER_TOKEN = /^(repo|status):/i;
+
 export function searchIndex(index: DocsIndex, query: string): SearchResult[] {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term && !FILTER_TOKEN.test(term));
+  if (terms.length === 0 && FILTER_TOKEN.test(query.trim())) return [];
   const docs = allDocs(index);
   if (terms.length === 0) {
     return docs
@@ -50,4 +59,9 @@ export function searchIndex(index: DocsIndex, query: string): SearchResult[] {
     .slice(0, MAX_RESULTS)
     .map((doc) => ({ kind: "plan", doc }));
   return [...repos, ...plans];
+}
+
+export function withTextHits(results: readonly SearchResult[], hits: readonly SearchHit[]): SearchResult[] {
+  const shown = new Set(results.flatMap((result) => (result.kind === "plan" ? [result.doc.path] : [])));
+  return [...results, ...hits.filter((hit) => !shown.has(hit.path)).map((hit) => ({ kind: "text" as const, hit }))];
 }

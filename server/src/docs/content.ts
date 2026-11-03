@@ -1,3 +1,4 @@
+import { parseFrontmatter } from "../frontmatter.js";
 import { parseInfoString, scanFences } from "../markdown/fences.js";
 import { parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
 import { docHash } from "../reviews/paths.js";
@@ -9,6 +10,7 @@ export interface DocQuestion extends QuestionBlock {
 export interface DocContent {
   hash: string;
   questions: DocQuestion[];
+  text: string;
 }
 
 export function questionsIn(raw: string): DocQuestion[] {
@@ -18,5 +20,5 @@ export function questionsIn(raw: string): DocQuestion[] {
 }
 
 export function analyzeContent(raw: string): DocContent {
-  return { hash: docHash(raw), questions: questionsIn(raw) };
+  return { hash: docHash(raw), questions: questionsIn(raw), text: parseFrontmatter(raw).body };
 }

@@ -13,6 +13,7 @@ import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
 import type { WorktreeIndex } from "./code/worktrees.js";
 import type { TimthinkConfig } from "./config.js";
 import { listPhases } from "./docs/phases.js";
+import { searchDocs } from "./docs/search.js";
 import type { DocsStore } from "./docs/store.js";
 import type { DocDetail, DocsIndex } from "./docs/types.js";
 import type { EventHub, HubEvent } from "./events.js";
@@ -125,6 +126,8 @@ const prLookupQuery = z.object({
     .regex(/^\d+(,\d+)*$/)
     .transform((value) => [...new Set(value.split(",").map(Number))].slice(0, MAX_LOOKUP_PRS)),
 });
+const SEARCH_LIMIT = 30;
+const searchQuery = z.object({ q: z.string().min(1).max(200) });
 const openWorktreeBody = z.object({ path: z.string().min(1).max(1024), app: z.enum(["zed", "warp"]) });
 const prDismissBody = z.object({
   path: z.string().min(1).max(1024),
@@ -404,6 +407,14 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .get("/api/search", zValidator("query", searchQuery), (c) => {
+      const { q } = c.req.valid("query");
+      const docs = store.allDocs().flatMap((summary) => {
+        const text = store.contentOf(summary.path)?.text;
+        return text === undefined ? [] : [{ summary, text }];
+      });
+      return c.json({ hits: searchDocs(docs, q, SEARCH_LIMIT) });
+    })
     .get("/api/doc-worktree", zValidator("query", docPathQuery), async (c) => {
       const doc = store.getDoc(c.req.valid("query").path);
       if (!doc) return c.json({ error: "Not found" }, 404);

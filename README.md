@@ -10,6 +10,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
 - **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
+- **Search.** ⌘K jumps to any plan or repo by title, and from three characters also searches plan text, with `repo:` and `status:` filters.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
 - **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
 - **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**.

@@ -76,15 +76,17 @@ describe("parentHref", () => {
 
 describe("searchIndex", () => {
   it("lists recent active plans for an empty query", () => {
-    expect(searchIndex(INDEX, "").map((result) => (result.kind === "plan" ? result.doc.path : result.repo))[0]).toBe(
-      rateLimiter.path,
-    );
+    expect(
+      searchIndex(INDEX, "").map((result) =>
+        result.kind === "plan" ? result.doc.path : result.kind === "repo" ? result.repo : null,
+      )[0],
+    ).toBe(rateLimiter.path);
     expect(searchIndex(INDEX, "").some((result) => result.kind === "plan" && result.doc === oldPlan)).toBe(false);
   });
 
   it("matches every term across title and path, ranking title hits and active plans first", () => {
     const paths = searchIndex(INDEX, "billing").map((result) =>
-      result.kind === "plan" ? result.doc.path : result.repo,
+      result.kind === "plan" ? result.doc.path : result.kind === "repo" ? result.repo : null,
     );
     expect(paths).toEqual([billingA.path, billingB.path, oldPlan.path]);
     expect(searchIndex(INDEX, "billing roll").map((result) => result.kind === "plan" && result.doc.path)).toEqual([
