@@ -1,11 +1,12 @@
 import type { Verdict } from "@timthink/server";
 import { CircleCheck, CircleDot, MessageSquare, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { useDoc, useDocSessions } from "../api/queries";
+import { useDoc, useDocSessions, useDocsIndex } from "../api/queries";
 import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "../build/BuildOptions";
 import { handOffBuild, NOT_NOW } from "../build/buildHandOff";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
+import { findRepo } from "../lib/indexNav";
 import { useToast } from "../lib/toast";
 import { defaultHandOffTarget, HandOffTarget } from "./HandOffTarget";
 import { handOffToClaude } from "./handOff";
@@ -63,7 +64,9 @@ export function SubmitReviewDialog() {
   const sessions = sessionsData?.sessions ?? [];
   const target = chosenTarget ?? defaultHandOffTarget(sessions);
   const { data: doc } = useDoc(docPath);
-  const build = useBuildOptions(planForBuild(docPath, doc), sessions, { allowNotNow: true });
+  const { data: index } = useDocsIndex();
+  const repo = findRepo(index, docPath.split("/")[0] ?? "");
+  const build = useBuildOptions(planForBuild(docPath, doc, repo), sessions, { allowNotNow: true });
   const titleId = useId();
   const close = () => {
     setSubmitOpen(false);

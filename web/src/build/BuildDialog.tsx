@@ -1,17 +1,22 @@
 import type { DocDetail } from "@timthink/server";
 import { Hammer, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { useDocSessions } from "../api/queries";
+import { useDocSessions, useDocsIndex } from "../api/queries";
 import { Button } from "../components/Button";
+import { findRepo } from "../lib/indexNav";
 import { useToast } from "../lib/toast";
 import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "./BuildOptions";
-import { handOffBuild } from "./buildHandOff";
+import { handOffBuild, LAUNCH } from "./buildHandOff";
 
 function BuildDialogPanel({ doc, close }: { doc: DocDetail; close: () => void }) {
   const toast = useToast();
   const titleId = useId();
   const { data } = useDocSessions(doc.summary.path);
-  const state = useBuildOptions(planForBuild(doc.summary.path, doc), data?.sessions ?? [], { allowNotNow: false });
+  const { data: index } = useDocsIndex();
+  const repo = findRepo(index, doc.summary.repo);
+  const state = useBuildOptions(planForBuild(doc.summary.path, doc, repo), data?.sessions ?? [], {
+    allowNotNow: false,
+  });
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
@@ -72,7 +77,7 @@ function BuildDialogPanel({ doc, close }: { doc: DocDetail; close: () => void })
             disabled={starting || !state.branchValid}
             onClick={() => void start()}
           >
-            Copy build command
+            {state.target === LAUNCH ? "Launch build" : "Copy build command"}
           </Button>
         </footer>
       </div>

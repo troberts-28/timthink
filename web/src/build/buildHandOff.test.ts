@@ -1,6 +1,6 @@
 import type { SessionView } from "@timthink/server";
 import { describe, expect, it } from "vitest";
-import { NEW_SESSION, NOT_NOW, newSessionCommand, plannerOf, targetFor } from "./buildHandOff";
+import { LAUNCH, NEW_SESSION, NOT_NOW, newSessionCommand, plannerOf, targetFor } from "./buildHandOff";
 
 function session(overrides: Partial<SessionView>): SessionView {
   return {
@@ -41,14 +41,19 @@ describe("targetFor", () => {
   const sessions = [session({ id: "p", plannedDoc: true })];
 
   it("maps the remembered kind onto this plan's sessions", () => {
-    expect(targetFor("planner", sessions, false)).toBe("p");
-    expect(targetFor("planner", [], false)).toBe(NEW_SESSION);
-    expect(targetFor("new", sessions, true)).toBe(NEW_SESSION);
+    expect(targetFor("planner", sessions, { allowNotNow: false, canLaunch: false })).toBe("p");
+    expect(targetFor("planner", [], { allowNotNow: false, canLaunch: false })).toBe(NEW_SESSION);
+    expect(targetFor("new", sessions, { allowNotNow: true, canLaunch: false })).toBe(NEW_SESSION);
+  });
+
+  it("remembers the fresh-worktree launcher only for repos that have one", () => {
+    expect(targetFor("launch", sessions, { allowNotNow: false, canLaunch: true })).toBe(LAUNCH);
+    expect(targetFor("launch", sessions, { allowNotNow: false, canLaunch: false })).toBe(NEW_SESSION);
   });
 
   it("only offers not-now where it's allowed", () => {
-    expect(targetFor("not-now", sessions, true)).toBe(NOT_NOW);
-    expect(targetFor("not-now", sessions, false)).toBe(NEW_SESSION);
+    expect(targetFor("not-now", sessions, { allowNotNow: true, canLaunch: false })).toBe(NOT_NOW);
+    expect(targetFor("not-now", sessions, { allowNotNow: false, canLaunch: false })).toBe(NEW_SESSION);
   });
 });
 

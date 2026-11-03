@@ -1,6 +1,7 @@
 import type {
   AppType,
   AttachmentSummary,
+  BuildLaunchResponse,
   BuildRequest,
   DocDetail,
   DocsIndex,
@@ -129,4 +130,11 @@ export async function setRepoHidden(repo: string, hidden: boolean): Promise<bool
     { headers: { [TOKEN_HEADER]: token } },
   );
   return response.ok;
+}
+
+export async function launchBuild(request: BuildRequest): Promise<BuildLaunchResponse> {
+  const token = await sessionToken();
+  const response = await client.api.build.launch.$post({ json: request }, { headers: { [TOKEN_HEADER]: token } });
+  if (!response.ok && response.status !== 404) throw new Error(`Launch failed (${response.status})`);
+  return response.json();
 }

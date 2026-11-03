@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 import { createApp } from "./app.js";
 import { ArchiveService } from "./archive/archiveService.js";
 import { ArchiveStore, repoForArchiveFile } from "./archive/archiveStore.js";
+import { type BuildLauncher, createBuildLauncher } from "./build/launcher.js";
 import { CodeService } from "./code/codeService.js";
 import { createZedOpener, type OpenInEditor } from "./code/editor.js";
 import { WorktreeIndex } from "./code/worktrees.js";
@@ -41,6 +42,7 @@ export interface StartOptions {
   watch?: boolean;
   scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   graphqlRunner?: GraphqlRunner;
+  launchBuild?: BuildLauncher;
   log?: (message: string) => void;
 }
 
@@ -251,6 +253,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
             prLinks: prLinkHostFor(config, repo),
             group: groupForRepo(config.groups, repo, remote),
             hidden: preferences.isRepoHidden(repo),
+            buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
           };
         },
         archiveOf: (summary) => archive.stateFor(summary),
@@ -329,6 +332,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     archive,
     prs,
     worktrees: new WorktreeIndex(config),
+    launchBuild: options.launchBuild ?? createBuildLauncher(),
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     preferences,
     onPreferencesChange: publishPreferencesChange,

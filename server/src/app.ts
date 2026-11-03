@@ -6,7 +6,8 @@ import { stream, streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { ArchiveService } from "./archive/archiveService.js";
 import { archiveRoutes } from "./archive/routes.js";
-import { buildSlashCommand, isValidBranchName, isValidPhase } from "./build/buildCommand.js";
+import { buildSlashCommand, isValidBranchName, isValidPhase, suggestBranch } from "./build/buildCommand.js";
+import { type BuildLauncher, launchArgv } from "./build/launcher.js";
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
 import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
@@ -59,6 +60,7 @@ export interface AppDeps {
   archive: ArchiveService;
   prs: PrService;
   worktrees: WorktreeIndex;
+  launchBuild: BuildLauncher;
   onArchiveChange: (docPath: string) => void;
   preferences: PreferencesStore;
   onPreferencesChange: () => void;
@@ -86,6 +88,11 @@ export type OpenCodeResponse =
   | { status: "ambiguous"; matches: PublicCodeMatch[] }
   | { status: "not-found" }
   | { status: "no-checkout" }
+  | { status: "error"; message: string };
+
+export type BuildLaunchResponse =
+  | { status: "launched"; branch: string }
+  | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
 export type SessionActionResponse =
@@ -407,6 +414,22 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .post("/api/build/launch", zValidator("json", buildBody), async (c) => {
+      const request = c.req.valid("json");
+      const doc = store.getDoc(request.doc);
+      if (!doc) return c.json<BuildLaunchResponse>({ status: "unavailable", message: "Unknown plan" }, 404);
+      const template = config.repos[doc.repo]?.buildLaunch;
+      if (!template) {
+        return c.json<BuildLaunchResponse>({ status: "unavailable", message: `No build launcher for ${doc.repo}` });
+      }
+      const branch = request.branch ?? doc.branch ?? suggestBranch(doc.path);
+      try {
+        await deps.launchBuild(launchArgv(template, request, branch));
+        return c.json<BuildLaunchResponse>({ status: "launched", branch });
+      } catch (error) {
+        return c.json<BuildLaunchResponse>({ status: "error", message: errorMessage(error, "The launcher failed") });
+      }
+    })
     .get("/api/search", zValidator("query", searchQuery), (c) => {
       const { q } = c.req.valid("query");
       const docs = store.allDocs().flatMap((summary) => {

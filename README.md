@@ -9,6 +9,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
+- **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. The header shows the whole stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. When every PR has merged, the plan is marked done.
 - **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
 - **Search.** ⌘K jumps to any plan or repo by title, and from three characters also searches plan text, with `repo:` and `status:` filters.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
@@ -117,6 +118,10 @@ Nothing leaves your machine.
 | `repos.<repo>.worktrees` | none                      | Glob for extra worktrees (`~/code/my-repo-*`), used to match sessions to the repo           |
 | `repos.<repo>.prLinks`   | `graphite`                | Where PR references link: `graphite` or `github`                                            |
 | `repos.<repo>.aliases`   | none                      | Other checkout names that `timthink docs-dir` maps to this docs folder                      |
+| `repos.<repo>.build.launch` | none                   | A command (argv, no shell) that starts a build in a fresh worktree; `{branch}`, `{prompt}` and `{doc}` are filled in. Adds "A fresh worktree" to the build dialog |
+| `prs.enabled`            | `true`                    | Fetch PR status and stacks through `gh`                                                      |
+| `prs.ghPath`             | Homebrew paths, then `gh` | The `gh` binary to use (launchd doesn't see your shell PATH)                                 |
+| `prs.mergeQueueLabels`   | none                      | Labels that mean "in the merge queue", e.g. `["merge_queue"]`, besides GitHub's own queue   |
 | `groups`                 | none                      | Sidebar and inbox groups, in order (see below). Without it, repos aren't grouped            |
 | `sidebarQuotes`          | none                      | Lines shown at random in the sidebar footer (click for another). Hidden when empty          |
 | `archive.auto`           | `true`                    | Archive plans automatically by the rule below                                               |

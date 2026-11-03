@@ -60,6 +60,7 @@ export interface RepoIndex {
   prLinks: PrLinkHost;
   group: string | null;
   hidden: boolean;
+  buildLauncher: boolean;
   lastActivity: number;
   docCount: number;
   activeCount: number;

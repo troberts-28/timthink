@@ -15,6 +15,7 @@ const repoOverrideSchema = z.object({
   worktrees: z.string().optional(),
   prLinks: z.enum(PR_LINK_HOSTS).optional(),
   aliases: z.array(z.string().min(1)).optional(),
+  build: z.object({ launch: z.array(z.string().min(1)).min(1).optional() }).optional(),
 });
 
 const groupSchema = z.object({
@@ -65,6 +66,7 @@ export interface RepoOverride {
   worktrees?: string;
   prLinks?: PrLinkHost;
   aliases?: string[];
+  buildLaunch?: string[];
 }
 
 export interface RepoGroupConfig {
@@ -156,6 +158,10 @@ function resolveRepoOverride(override: z.infer<typeof repoOverrideSchema>): Repo
   if (override.worktrees) resolved.worktrees = expandHome(override.worktrees);
   if (override.prLinks) resolved.prLinks = override.prLinks;
   if (override.aliases) resolved.aliases = override.aliases;
+  if (override.build?.launch) {
+    const [command = "", ...args] = override.build.launch;
+    resolved.buildLaunch = [expandHome(command), ...args];
+  }
   return resolved;
 }
 
