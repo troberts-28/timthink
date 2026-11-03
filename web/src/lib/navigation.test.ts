@@ -31,6 +31,7 @@ function repo(name: string, ungrouped: IndexedDoc[], projects: RepoIndex["projec
     prLinks: "github",
     group: null,
     hidden: false,
+    buildLauncher: false,
     lastActivity: 0,
     docCount: ungrouped.length,
     activeCount: ungrouped.length,

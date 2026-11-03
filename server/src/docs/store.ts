@@ -24,6 +24,7 @@ export interface RepoInfo {
   prLinks: PrLinkHost;
   group: string | null;
   hidden?: boolean;
+  buildLauncher?: boolean;
 }
 
 export interface IndexOptions {
@@ -171,7 +172,7 @@ export class DocsStore {
 
   private buildRepoIndex(
     name: string,
-    { github, prLinks, group, hidden = false }: RepoInfo,
+    { github, prLinks, group, hidden = false, buildLauncher = false }: RepoInfo,
     archiveOf: (doc: DocSummary) => DocArchive,
     prAttentionOf: (doc: DocSummary) => PrAttention | null,
   ): RepoIndex {
@@ -210,6 +211,7 @@ export class DocsStore {
       prLinks,
       group,
       hidden,
+      buildLauncher,
       lastActivity,
       docCount: repoDocs.length,
       activeCount: repoDocs.length - archivedCount,

@@ -1,6 +1,6 @@
-import type { BuildRequest, DocDetail, PhaseSummary, SessionView } from "@timthink/server";
+import type { BuildRequest, DocDetail, PhaseSummary, RepoIndex, SessionView } from "@timthink/server";
 import { isValidBranchName, suggestBranch } from "@timthink/server/shared";
-import { Hammer, PauseCircle, SquareSplitHorizontal } from "lucide-react";
+import { FolderGit2, Hammer, PauseCircle, SquareSplitHorizontal } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { useLocalString } from "../lib/localSetting";
 import { CommandCode, handOffMessage } from "../review/handOffMessage";
@@ -8,6 +8,7 @@ import {
   type BuildOutcome,
   type BuildTargetKind,
   kindOf,
+  LAUNCH,
   NEW_SESSION,
   NOT_NOW,
   plannerOf,
@@ -19,7 +20,7 @@ const MAX_SESSIONS = 3;
 const ALL_PHASES = "all";
 
 function isTargetKind(value: string | null): value is BuildTargetKind {
-  return value === "new" || value === "planner" || value === "not-now";
+  return value === "new" || value === "planner" || value === "not-now" || value === "launch";
 }
 
 function openPhases(phases: readonly PhaseSummary[]): PhaseSummary[] {
@@ -38,16 +39,23 @@ export interface BuildOptionsState {
   phases: PhaseSummary[];
   sessions: readonly SessionView[];
   allowNotNow: boolean;
+  canLaunch: boolean;
 }
 
 export interface PlanForBuild {
   path: string;
   branch: string | null;
   phases: readonly PhaseSummary[];
+  canLaunch: boolean;
 }
 
-export function planForBuild(docPath: string, doc: DocDetail | undefined): PlanForBuild {
-  return { path: docPath, branch: doc?.summary.branch ?? null, phases: doc?.phases ?? [] };
+export function planForBuild(docPath: string, doc: DocDetail | undefined, repo: RepoIndex | undefined): PlanForBuild {
+  return {
+    path: docPath,
+    branch: doc?.summary.branch ?? null,
+    phases: doc?.phases ?? [],
+    canLaunch: repo?.buildLauncher ?? false,
+  };
 }
 
 export function useBuildOptions(
@@ -61,7 +69,9 @@ export function useBuildOptions(
   const [editedBranch, setBranch] = useState<string | null>(null);
   const branch = editedBranch ?? planBranch ?? suggestBranch(plan.path);
   const [phase, setPhase] = useState<number | null>(null);
-  const target = chosenTarget ?? targetFor(isTargetKind(remembered) ? remembered : "new", sessions, allowNotNow);
+  const target =
+    chosenTarget ??
+    targetFor(isTargetKind(remembered) ? remembered : "new", sessions, { allowNotNow, canLaunch: plan.canLaunch });
   const trimmed = branch.trim();
   const request: BuildRequest = {
     doc: plan.path,
@@ -83,6 +93,7 @@ export function useBuildOptions(
     phases: openPhases(plan.phases),
     sessions,
     allowNotNow,
+    canLaunch: plan.canLaunch,
     reset: () => {
       setChosenTarget(null);
       setBranch(null);
@@ -217,6 +228,15 @@ export function BuildOptions({ state }: { state: BuildOptionsState }) {
             detail={sessionWhatHappens(session)}
           />
         ))}
+        {state.canLaunch ? (
+          <Option
+            checked={state.target === LAUNCH}
+            onSelect={() => state.setTarget(LAUNCH)}
+            icon={<FolderGit2 className="size-3.5 text-ink-64" aria-hidden />}
+            title="A fresh worktree"
+            detail="Runs this repo's build launcher with the branch and the build command"
+          />
+        ) : null}
         {state.allowNotNow ? (
           <Option
             checked={state.target === NOT_NOW}
@@ -233,6 +253,8 @@ export function BuildOptions({ state }: { state: BuildOptionsState }) {
 
 export function buildMessage(outcome: BuildOutcome): ReactNode {
   if (outcome.kind === "skipped") return null;
+  if (outcome.kind === "launched") return `Launching a build on ${outcome.branch} in a fresh worktree`;
+  if (outcome.kind === "launch-failed") return outcome.message;
   if (outcome.kind === "planner") return handOffMessage(outcome.handOff, "the build");
   if (!outcome.copied) {
     return (

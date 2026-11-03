@@ -525,3 +525,41 @@ describe("read-only mode", () => {
     await expect(readdir(path.join(docsRoot, "acme-api/.timthink"))).rejects.toThrow();
   });
 });
+
+describe("build launcher", () => {
+  it("runs the repo's launcher with the branch and build command filled in", async () => {
+    const docsRoot = await copyFixtureDocs();
+    const launched: string[][] = [];
+    const runtime = await createRuntime({
+      config: testConfig({
+        docsRoot,
+        stateDir: await makeTempDir(),
+        repos: { "acme-api": { buildLaunch: ["/bin/launch", "{branch}", "--prompt", "{prompt}"] } },
+      }),
+      webDist: null,
+      launchBuild: async (argv) => {
+        launched.push([...argv]);
+      },
+    });
+    const headers = { "content-type": "application/json", origin: ORIGIN, [TOKEN_HEADER]: runtime.token };
+    const launch = (doc: string) =>
+      runtime.app.request(`${BASE}/api/build/launch`, {
+        method: "POST",
+        body: JSON.stringify({ doc, phase: 1 }),
+        headers,
+      });
+    const ok = await launch("acme-api/2026-10-01-rate-limiter-plan.md");
+    expect(await ok.json()).toEqual({ status: "launched", branch: "feat/rate-limiter" });
+    expect(launched).toEqual([
+      [
+        "/bin/launch",
+        "feat/rate-limiter",
+        "--prompt",
+        "/timthink build acme-api/2026-10-01-rate-limiter-plan.md --phase 1",
+      ],
+    ]);
+    const garden = runtime.store.allDocs().find((doc) => doc.repo === "garden-app");
+    const none = await launch(garden?.path ?? "");
+    expect(await none.json()).toMatchObject({ status: "unavailable" });
+  });
+});
