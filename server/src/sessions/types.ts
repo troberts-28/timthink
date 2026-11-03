@@ -30,6 +30,14 @@ export interface TranscriptBuildRequest {
   at: string | null;
 }
 
+export interface SubmittedPr {
+  owner: string;
+  repo: string;
+  number: number;
+  branch: string | null;
+  at: string | null;
+}
+
 export interface TranscriptSummary {
   sessionId: string;
   transcriptPath: string;
@@ -41,6 +49,7 @@ export interface TranscriptSummary {
   firstPrompt: string | null;
   docTouches: TranscriptDocTouch[];
   buildRequests: TranscriptBuildRequest[];
+  submittedPrs: SubmittedPr[];
 }
 
 export interface SessionView {

@@ -39,6 +39,7 @@ export function testConfig(overrides: Partial<TimthinkConfig>): TimthinkConfig {
     repos: {},
     groups: null,
     sidebarQuotes: [],
+    prs: { enabled: false, ghPath: null, mergeQueueLabels: [] },
     archive: DEFAULT_ARCHIVE_SETTINGS,
     readOnly: false,
     ...overrides,

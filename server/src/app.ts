@@ -21,6 +21,7 @@ import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
 import { mimeTypeFor } from "./mime.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
+import type { PrService } from "./prs/prService.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
@@ -54,6 +55,7 @@ export interface AppDeps {
   seen: SeenStore;
   inbox: InboxService;
   archive: ArchiveService;
+  prs: PrService;
   onArchiveChange: (docPath: string) => void;
   preferences: PreferencesStore;
   onPreferencesChange: () => void;
@@ -104,6 +106,20 @@ const revealBody = z.object({ path: z.string().min(1).max(1024) });
 const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
 
 const RECENT_SESSIONS_LIMIT = 50;
+const MAX_LOOKUP_PRS = 50;
+
+const prLookupQuery = z.object({
+  repo: z.string().min(1),
+  numbers: z
+    .string()
+    .regex(/^\d+(,\d+)*$/)
+    .transform((value) => [...new Set(value.split(",").map(Number))].slice(0, MAX_LOOKUP_PRS)),
+});
+const prUnlinkBody = z.object({
+  path: z.string().min(1).max(1024),
+  number: z.number().int().positive(),
+  unlinked: z.boolean(),
+});
 
 const attachmentsQuery = z.object({ repo: z.string().min(1), project: z.string().min(1).optional() });
 
@@ -367,9 +383,31 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .get("/api/doc-prs", zValidator("query", docPathQuery), (c) => {
+      const { path: docPath } = c.req.valid("query");
+      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
+      return c.json(deps.prs.docPrs(docPath));
+    })
+    .post("/api/doc-prs/refresh", zValidator("json", docPathQuery), async (c) => {
+      const { path: docPath } = c.req.valid("json");
+      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
+      await deps.prs.refresh({ docPaths: [docPath] });
+      return c.json(deps.prs.docPrs(docPath));
+    })
+    .post("/api/doc-prs/unlink", zValidator("json", prUnlinkBody), async (c) => {
+      const { path: docPath, number, unlinked } = c.req.valid("json");
+      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
+      await deps.prs.setUnlinked(docPath, number, unlinked);
+      return c.json(deps.prs.docPrs(docPath));
+    })
+    .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
+      const { repo, numbers } = c.req.valid("query");
+      return c.json(deps.prs.lookup(repo, numbers));
+    })
     .get("/api/inbox", async (c) => c.json(await deps.inbox.build()))
     .get("/api/events", (c) =>
       streamSSE(c, async (sse) => {
+        const releaseViewer = hub.trackViewer();
         const unsubscribe = hub.subscribe((event) => {
           void sse.writeSSE(eventPayload(event));
         });
@@ -380,6 +418,7 @@ export function createApp(deps: AppDeps) {
         await new Promise<void>((resolve) => sse.onAbort(resolve));
         clearInterval(keepalive);
         unsubscribe();
+        releaseViewer();
       }),
     );
 }

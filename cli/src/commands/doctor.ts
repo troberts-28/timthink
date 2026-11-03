@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access, lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { BIND_HOST, type TimthinkConfig } from "@timthink/server";
+import { BIND_HOST, findGh, type TimthinkConfig } from "@timthink/server";
 import { SettingsParseError, timthinkHookState } from "./claudeHooks.js";
 import {
   type CommandRunner,
@@ -194,6 +194,18 @@ async function zedCheck(deps: DoctorDeps): Promise<DoctorCheck> {
     : { ...fail("zed", "not on PATH; code links won't open", "Zed > Install CLI"), optional: true };
 }
 
+async function ghCheck(config: TimthinkConfig, deps: DoctorDeps): Promise<DoctorCheck> {
+  if (!config.prs.enabled) return pass("gh", "PR status is turned off (prs.enabled)");
+  const gh = await findGh(config.prs.ghPath);
+  const result = await deps
+    .run(gh, ["auth", "status"], { HOME: homedir(), PATH: LAUNCHD_LIKE_PATH })
+    .catch(() => ({ code: 127, stdout: "", stderr: "not found" }));
+  if (result.code === 0) return pass("gh", `${gh} (logged in; PR status and stacks work)`);
+  const reason = result.code === 127 ? "not installed" : "not logged in";
+  const fix = result.code === 127 ? 'install the GitHub CLI, or set "prs.ghPath"' : "run `gh auth login`";
+  return { ...fail("gh", `${gh} ${reason}; PR status is unavailable`, fix), optional: true };
+}
+
 export async function doctorChecks(
   config: TimthinkConfig,
   paths: InstallPaths,
@@ -209,6 +221,7 @@ export async function doctorChecks(
     hooksCheck(paths),
     skillCheck(paths),
     zedCheck(deps),
+    ghCheck(config, deps),
   ]);
 }
 

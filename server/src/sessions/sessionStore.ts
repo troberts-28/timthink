@@ -5,7 +5,7 @@ import { isInside, toPosix } from "../safePath.js";
 import { DOC_SESSIONS_LOG, JsonlFollower, parseDocWrite, parseSessionEvent, SESSIONS_LOG } from "./hookLog.js";
 import type { LiveClaudeProcess } from "./liveProcesses.js";
 import { BACKFILL_CACHE_FILE, type BackfillStats, TranscriptBackfill } from "./transcripts.js";
-import type { HookDocWrite, HookSessionEvent, TranscriptDocTouch, TranscriptSummary } from "./types.js";
+import type { HookDocWrite, HookSessionEvent, SubmittedPr, TranscriptDocTouch, TranscriptSummary } from "./types.js";
 
 export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHORT_ID_LENGTH = 8;
@@ -28,6 +28,7 @@ export interface SessionRecord {
   writtenDocPaths: string[];
   plannedDocPaths: string[];
   builtDocPaths: string[];
+  submittedPrs: SubmittedPr[];
 }
 
 interface SessionState {
@@ -423,6 +424,7 @@ export class SessionStore {
       writtenDocPaths: this.docPathsOf(state, WRITES_ONLY),
       plannedDocPaths: this.plannedDocPathsOf(state, builds),
       builtDocPaths: [...builds.keys()],
+      submittedPrs: transcript?.submittedPrs ?? [],
     };
   }
 }
