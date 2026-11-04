@@ -271,4 +271,15 @@ describe("buildInbox", () => {
         .items,
     ).toEqual([]);
   });
+
+  it("keeps quiet completions (you chose Keep open) out of the inbox", () => {
+    const kept = doc("acme-api/kept.md", { completion: { marker: "5", at: "2026-11-02T12:00:00.000Z", quiet: true } });
+    const items = buildInbox({
+      docs: [kept],
+      seenInitialisedAt: "2026-10-01T00:00:00.000Z",
+      threadReadAt: () => null,
+      now: NOW,
+    }).items;
+    expect(items.filter((entry) => entry.reason === "plan-completed")).toEqual([]);
+  });
 });

@@ -15,6 +15,7 @@ export type InboxReason =
   | "changes-requested"
   | "review-comments"
   | "pr-closed-unmerged"
+  | "merged-tasks-open"
   | "plan-completed";
 
 export interface InboxDoc {

@@ -29,6 +29,12 @@ export interface SessionRecord {
   plannedDocPaths: string[];
   builtDocPaths: string[];
   submittedPrs: SubmittedPr[];
+  docEvents: DocEvent[];
+}
+
+export interface DocEvent {
+  docPath: string;
+  at: string;
 }
 
 interface SessionState {
@@ -369,6 +375,22 @@ export class SessionStore {
     return [...paths];
   }
 
+  private docEventsOf(state: SessionState): DocEvent[] {
+    const events: DocEvent[] = [];
+    const add = (docPath: string | null, at: string | null | undefined) => {
+      if (docPath && at) events.push({ docPath, at });
+    };
+    for (const write of state.hookDocWrites) add(write.docPath, write.at);
+    for (const touch of state.transcript?.docTouches ?? []) {
+      if (touch.kind !== "write") continue;
+      const docPath = this.docPathFor(touch.filePath);
+      add(docPath, touch.firstAt);
+      add(docPath, touch.at);
+    }
+    for (const { request, at } of state.transcript?.buildRequests ?? []) add(this.docPathForArgument(request.doc), at);
+    return events.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
   private firstBuilds(state: SessionState): Map<string, string | null> {
     const builds = new Map<string, string | null>();
     for (const { request, at } of state.transcript?.buildRequests ?? []) {
@@ -425,6 +447,7 @@ export class SessionStore {
       plannedDocPaths: this.plannedDocPathsOf(state, builds),
       builtDocPaths: [...builds.keys()],
       submittedPrs: transcript?.submittedPrs ?? [],
+      docEvents: this.docEventsOf(state),
     };
   }
 }

@@ -45,6 +45,8 @@ export function reasonChip(item: InboxItem): ReasonChip {
       };
     case "pr-closed-unmerged":
       return { label: "Closed without merging", className: "chip-neutral" };
+    case "merged-tasks-open":
+      return { label: "PRs merged, tasks open", className: "chip-accent" };
     case "plan-completed":
       return { label: "All PRs merged", className: "chip-ok-soft" };
     case "edited": {

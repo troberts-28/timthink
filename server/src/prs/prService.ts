@@ -47,6 +47,11 @@ interface StateFile {
   unlinked: Record<string, number[]>;
   completed: Record<string, PlanCompletion>;
   dismissed: Record<string, number[]>;
+  awaiting: Record<string, AwaitingCompletion>;
+}
+
+interface AwaitingCompletion extends PlanCompletion {
+  openTasks: number;
 }
 
 function emptyState(): StateFile {
@@ -59,6 +64,7 @@ function emptyState(): StateFile {
     unlinked: {},
     completed: {},
     dismissed: {},
+    awaiting: {},
   };
 }
 
@@ -83,6 +89,16 @@ function repoKey(github: GithubRepo): string {
 
 function sameRepo(pr: SubmittedPr, github: GithubRepo): boolean {
   return pr.owner.toLowerCase() === github.owner.toLowerCase() && pr.repo.toLowerCase() === github.repo.toLowerCase();
+}
+
+function planForSubmit(session: SessionRecord, pr: SubmittedPr): string | null {
+  const docs = new Set([...session.writtenDocPaths, ...session.plannedDocPaths, ...session.builtDocPaths]);
+  if (docs.size <= 1) return [...docs][0] ?? null;
+  const events = session.docEvents.filter((event) => docs.has(event.docPath));
+  if (!pr.at || events.length === 0) return null;
+  const before = events.filter((event) => event.at <= (pr.at ?? ""));
+  if (before.length > 0) return before[before.length - 1]?.docPath ?? null;
+  return events[0]?.docPath ?? null;
 }
 
 export class PrService {
@@ -220,9 +236,28 @@ export class PrService {
     return this.state.completed[doc.path]?.marker === marker ? null : marker;
   }
 
-  async markCompleted(docPath: string, marker: string): Promise<void> {
-    this.state.completed[docPath] = { marker, at: new Date(this.now()).toISOString() };
+  async markCompleted(
+    docPath: string,
+    marker: string,
+    { announce = true }: { announce?: boolean } = {},
+  ): Promise<void> {
+    const at = new Date(this.now()).toISOString();
+    this.state.completed[docPath] = announce ? { marker, at } : { marker, at, quiet: true };
+    delete this.state.awaiting[docPath];
     await this.save();
+  }
+
+  async markAwaiting(docPath: string, marker: string, openTasks: number): Promise<void> {
+    const current = this.state.awaiting[docPath];
+    if (current?.marker === marker && current.openTasks === openTasks) return;
+    const at = current?.marker === marker ? current.at : new Date(this.now()).toISOString();
+    this.state.awaiting[docPath] = { marker, openTasks, at };
+    await this.save();
+    this.options.onChange([docPath]);
+  }
+
+  awaitingCompletion(docPath: string): AwaitingCompletion | null {
+    return this.state.awaiting[docPath] ?? null;
   }
 
   signalsFor(doc: DocSummary): PrSignal[] {
@@ -250,6 +285,17 @@ export class PrService {
     const changes = live.filter((info) => info.review === "changes_requested");
     const comments = live.filter((info) => info.review !== "changes_requested" && info.unresolvedThreads > 0);
     const closed = infos.filter((info) => info.state === "closed" && !dismissed.has(info.number));
+    const awaiting = this.state.awaiting[doc.path];
+    const merged: PrSignal[] = awaiting
+      ? [
+          {
+            reason: "merged-tasks-open",
+            numbers: awaiting.marker.split(",").map(Number),
+            detail: `${awaiting.marker.includes(",") ? "All its PRs" : "Its PR"} merged, but ${awaiting.openTasks === 1 ? "1 task is" : `${awaiting.openTasks} tasks are`} still open`,
+            at: awaiting.at,
+          },
+        ]
+      : [];
     return [
       ...signal("ci-failing", failing, (info) =>
         info.failingChecks.length > 0
@@ -259,6 +305,7 @@ export class PrService {
       ...signal("changes-requested", changes, (info) => `#${info.number}`),
       ...signal("review-comments", comments, (info) => `#${info.number}: ${info.unresolvedThreads} unresolved`),
       ...signal("pr-closed-unmerged", closed, (info) => `#${info.number} ${info.title}`),
+      ...merged,
     ];
   }
 
@@ -548,9 +595,10 @@ export class PrService {
     if (this.sessionIndex) return this.sessionIndex;
     const index = new Map<string, SubmittedPr[]>();
     for (const session of this.options.sessions.all()) {
-      if (session.submittedPrs.length === 0) continue;
-      const docs = new Set([...session.writtenDocPaths, ...session.plannedDocPaths, ...session.builtDocPaths]);
-      for (const docPath of docs) index.set(docPath, [...(index.get(docPath) ?? []), ...session.submittedPrs]);
+      for (const pr of session.submittedPrs) {
+        const docPath = planForSubmit(session, pr);
+        if (docPath) index.set(docPath, [...(index.get(docPath) ?? []), pr]);
+      }
     }
     this.sessionIndex = index;
     return index;

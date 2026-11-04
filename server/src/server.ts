@@ -16,9 +16,10 @@ import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
-import { completePlansWithMergedPrs } from "./prs/completion.js";
+import { type CompletionDeps, completePlansWithMergedPrs, markPlanDone } from "./prs/completion.js";
 import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
 import { PrService } from "./prs/prService.js";
+import { ReadOnlyError } from "./readOnly.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
@@ -209,15 +210,26 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     },
     log,
   });
+  const completionDeps: CompletionDeps = {
+    docsRoot: config.docsRoot,
+    readOnly: config.readOnly,
+    docs: store,
+    prs,
+    onDocWrite: onHubDocWrite,
+    log,
+  };
   const completeMergedPlans = (paths: readonly string[]): Promise<void> =>
-    completePlansWithMergedPrs(paths, {
-      docsRoot: config.docsRoot,
-      readOnly: config.readOnly,
-      docs: store,
-      prs,
-      onDocWrite: onHubDocWrite,
-      log,
-    });
+    completePlansWithMergedPrs(paths, completionDeps);
+  const resolveCompletion = async (docPath: string, done: boolean): Promise<boolean> => {
+    const awaiting = prs.awaitingCompletion(docPath);
+    if (!awaiting) return false;
+    if (done) {
+      if (config.readOnly) throw new ReadOnlyError();
+      await markPlanDone(docPath, completionDeps);
+    }
+    await prs.markCompleted(docPath, awaiting.marker, { announce: false });
+    return true;
+  };
   const inbox = new InboxService({
     store,
     reviews: reviews.store,
@@ -332,6 +344,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     archive,
     prs,
     worktrees: new WorktreeIndex(config),
+    resolveCompletion,
     launchBuild: options.launchBuild ?? createBuildLauncher(),
     onArchiveChange: (docPath) => publishArchiveChange([docPath]),
     preferences,
