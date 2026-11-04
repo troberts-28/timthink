@@ -89,6 +89,7 @@ function session(overrides: Partial<SessionRecord>): SessionRecord {
     plannedDocPaths: [],
     builtDocPaths: [],
     submittedPrs: [],
+    docEvents: [],
     ...overrides,
   };
 }
@@ -197,6 +198,26 @@ describe("PrService", () => {
     expect(prs.docPrs("api/plan.md").unlinked).toEqual([41]);
   });
 
+  it("links a session's PRs only to the plan it worked on just before submitting them", async () => {
+    const github = fakeGithub([rawPr({ number: 80 }), rawPr({ number: 81 }), rawPr({ number: 82 })]);
+    const planA = doc({ path: "api/a.md" });
+    const planB = doc({ path: "api/b.md" });
+    const pr = (number: number, at: string) => ({ owner: "acme", repo: "api", number, branch: null, at });
+    const sessions = [
+      session({
+        writtenDocPaths: ["api/a.md", "api/b.md"],
+        docEvents: [
+          { docPath: "api/a.md", at: "2026-11-01T09:00:00Z" },
+          { docPath: "api/b.md", at: "2026-11-01T11:00:00Z" },
+        ],
+        submittedPrs: [pr(80, "2026-11-01T10:00:00Z"), pr(81, "2026-11-01T12:00:00Z"), pr(82, "2026-11-01T08:00:00Z")],
+      }),
+    ];
+    const { prs } = await service([planA, planB], github.runner, sessions);
+    expect([...prs.linkedNumbers(planA).keys()]).toEqual([80, 82]);
+    expect([...prs.linkedNumbers(planB).keys()]).toEqual([81]);
+  });
+
   it("rebuilds the stack around a linked PR and keeps merged PRs at the bottom", async () => {
     const stack = [
       rawPr({ number: 50, headRefName: "feat/a", baseRefName: "main" }),
@@ -253,6 +274,19 @@ describe("PrService", () => {
     expect(prs.attentionFor(plan)).toBe("ci-failing");
     await prs.dismissClosed(plan.path, [72]);
     expect(prs.signalsFor(plan).map((signal) => signal.reason)).not.toContain("pr-closed-unmerged");
+  });
+
+  it("asks about plans whose PRs merged with tasks still open, until resolved", async () => {
+    const github = fakeGithub([rawPr({ number: 90, state: "MERGED", merged: true })]);
+    const plan = doc({ prs: ["90"] });
+    const { prs } = await service([plan], github.runner);
+    await prs.markAwaiting(plan.path, "90", 3);
+    expect(prs.signalsFor(plan).map(({ reason, numbers, detail }) => ({ reason, numbers, detail }))).toEqual([
+      { reason: "merged-tasks-open", numbers: [90], detail: "Its PR merged, but 3 tasks are still open" },
+    ]);
+    await prs.markCompleted(plan.path, "90", { announce: false });
+    expect(prs.signalsFor(plan)).toEqual([]);
+    expect(prs.completion(plan.path)).toMatchObject({ marker: "90", quiet: true });
   });
 
   it("reports when gh isn't available", async () => {

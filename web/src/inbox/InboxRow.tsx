@@ -4,7 +4,7 @@ import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { markSeen } from "../api/changes";
 import { focusSession, resumeSession } from "../api/client";
-import { dismissClosedPrs } from "../api/prs";
+import { dismissClosedPrs, resolvePlanCompletion } from "../api/prs";
 import { Button } from "../components/Button";
 import { StatusDot } from "../components/StatusChip";
 import { relativeTime } from "../lib/format";
@@ -181,7 +181,35 @@ function DismissClosedButton({ item }: { item: InboxItem }) {
   );
 }
 
+function CompletionButtons({ item }: { item: InboxItem }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const resolve = (done: boolean) => {
+    setBusy(true);
+    resolvePlanCompletion(item.doc.path, done)
+      .then(() => toast(done ? "Marked the plan done" : "Keeping the plan open"))
+      .catch(() => toast("Couldn't update the plan", "bad"))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <>
+      <Button tone="ghost" disabled={busy} onClick={() => resolve(false)}>
+        Keep open
+      </Button>
+      <Button
+        tone="primary"
+        disabled={busy}
+        icon={<Check className="size-3.5" aria-hidden />}
+        onClick={() => resolve(true)}
+      >
+        Mark done
+      </Button>
+    </>
+  );
+}
+
 function actionsFor(item: InboxItem): ReactNode {
+  if (item.reason === "merged-tasks-open") return <CompletionButtons item={item} />;
   if (item.reason in PR_COMMANDS) return <PrCommandButton item={item} />;
   if (item.reason === "pr-closed-unmerged") return <DismissClosedButton item={item} />;
   if (item.reason === "plan-completed") return <MarkSeenButton item={item} />;

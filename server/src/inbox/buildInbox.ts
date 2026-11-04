@@ -187,7 +187,7 @@ function prItems(input: InboxDocInput): InboxItem[] {
         }),
       );
   const { completion, seen } = input;
-  if (completion && (!seen || seen.at < completion.at)) {
+  if (completion && !completion.quiet && (!seen || seen.at < completion.at)) {
     const count = completion.marker.split(",").length;
     items.push(
       item(input, {

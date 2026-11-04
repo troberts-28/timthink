@@ -25,6 +25,7 @@ function session(id: string, title: string): SessionRecord {
     plannedDocPaths: [DOC],
     builtDocPaths: [],
     submittedPrs: [],
+    docEvents: [],
   };
 }
 

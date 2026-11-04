@@ -50,3 +50,7 @@ export async function fetchDocWorktree(path: string): Promise<DocWorktreeRespons
 export function openWorktree(path: string, app: "zed" | "warp"): Promise<{ status: string; message?: string }> {
   return postJson("/api/open-worktree", { path, app });
 }
+
+export async function resolvePlanCompletion(path: string, done: boolean): Promise<void> {
+  await postJson("/api/doc-prs/complete", { path, done });
+}
