@@ -2,11 +2,11 @@ import { Maximize2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "../lib/theme";
+import { DiagramViewport } from "./DiagramViewport";
 import { type SvgSize, svgNaturalSize, withoutFixedSize } from "./mermaidSize";
 import { mermaidThemeVariables } from "./mermaidTheme";
 
 const MAX_UPSCALE = 1.4;
-const MODAL_MAX_UPSCALE = 2;
 const READABLE_SCALE = 0.85;
 const INLINE_CONTENT_WIDTH = 610;
 
@@ -121,9 +121,6 @@ function DiagramModal({ svg, size, onClose }: { svg: string; size: SvgSize | nul
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
-  const style: CSSProperties | undefined = size
-    ? { maxWidth: `${Math.round(size.width * MODAL_MAX_UPSCALE)}px`, aspectRatio: `${size.width} / ${size.height}` }
-    : undefined;
   return createPortal(
     <div className="mermaid-modal-backdrop">
       <button
@@ -133,7 +130,12 @@ function DiagramModal({ svg, size, onClose }: { svg: string; size: SvgSize | nul
         aria-label="Close diagram"
         tabIndex={-1}
       />
-      <div role="dialog" aria-modal="true" aria-label="Diagram" className="mermaid-modal">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Diagram"
+        className={`mermaid-modal ${size ? "is-zoomable" : ""}`}
+      >
         <button
           ref={closeRef}
           type="button"
@@ -143,10 +145,14 @@ function DiagramModal({ svg, size, onClose }: { svg: string; size: SvgSize | nul
         >
           <X className="size-4" aria-hidden />
         </button>
-        <div className="mermaid-modal-scroll scroll-quiet">
-          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid output is sanitised with securityLevel "strict". */}
-          <div className="mermaid-svg" style={style} dangerouslySetInnerHTML={{ __html: svg }} />
-        </div>
+        {size ? (
+          <DiagramViewport svg={svg} size={size} />
+        ) : (
+          <div className="mermaid-modal-scroll scroll-quiet">
+            {/* biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid output is sanitised with securityLevel "strict". */}
+            <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+          </div>
+        )}
       </div>
     </div>,
     document.body,
