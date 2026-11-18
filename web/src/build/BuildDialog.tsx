@@ -44,7 +44,7 @@ function BuildDialogPanel({ doc, close }: { doc: DocDetail; close: () => void })
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="dialog-panel relative flex w-[min(560px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
+        className="dialog-panel relative flex w-[min(640px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
       >
         <header className="flex items-start gap-3">
           <div className="min-w-0 flex-1">

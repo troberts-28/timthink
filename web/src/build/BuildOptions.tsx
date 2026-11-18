@@ -3,6 +3,7 @@ import { isValidBranchName, suggestBranch } from "@timthink/server/shared";
 import { FolderGit2, Hammer, PauseCircle, SquareSplitHorizontal } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { useLocalString } from "../lib/localSetting";
+import { sessionCandidates } from "../review/HandOffTarget";
 import { CommandCode, handOffMessage } from "../review/handOffMessage";
 import {
   type BuildOutcome,
@@ -16,7 +17,6 @@ import {
 } from "./buildHandOff";
 
 const TARGET_SETTING = "timthink:build-target";
-const MAX_SESSIONS = 3;
 const ALL_PHASES = "all";
 
 function isTargetKind(value: string | null): value is BuildTargetKind {
@@ -160,21 +160,12 @@ function newSessionDetail(sessions: readonly SessionView[]): string {
   return `Copies a command for a fresh Claude${where ? ` in ${where}` : ""}; paste it into any terminal pane`;
 }
 
-function candidateSessions(sessions: readonly SessionView[], selected: string): SessionView[] {
-  const ranked = [...sessions].sort(
-    (a, b) => Number(Boolean(b.plannedDoc)) - Number(Boolean(a.plannedDoc)) || Number(b.live) - Number(a.live),
-  );
-  const shown = ranked.slice(0, MAX_SESSIONS);
-  const chosen = sessions.find((session) => session.id === selected);
-  return chosen && !shown.includes(chosen) ? [...shown.slice(0, MAX_SESSIONS - 1), chosen] : shown;
-}
-
 export function BuildOptions({ state }: { state: BuildOptionsState }) {
   const branchId = useId();
   const phaseId = useId();
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
         <label htmlFor={branchId} className="flex min-w-0 flex-col gap-1.5">
           <span className="text-meta font-semibold text-ink-64">Branch</span>
           <input
@@ -196,7 +187,7 @@ export function BuildOptions({ state }: { state: BuildOptionsState }) {
               onChange={(event) =>
                 state.setPhase(event.target.value === ALL_PHASES ? null : Number(event.target.value))
               }
-              className="field h-[34px] py-0 text-ui"
+              className="field h-[34px] max-w-56 py-0 text-ui"
             >
               <option value={ALL_PHASES}>Everything left</option>
               {state.phases.map((phase) => (
@@ -209,7 +200,7 @@ export function BuildOptions({ state }: { state: BuildOptionsState }) {
           </label>
         ) : null}
       </div>
-      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+      <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
         <legend className="mb-2 p-0 text-meta font-semibold text-ink-64">Build in</legend>
         <Option
           checked={state.target === NEW_SESSION}
@@ -218,7 +209,7 @@ export function BuildOptions({ state }: { state: BuildOptionsState }) {
           title="A new session"
           detail={newSessionDetail(state.sessions)}
         />
-        {candidateSessions(state.sessions, state.target).map((session) => (
+        {sessionCandidates(state.sessions, state.target).map((session) => (
           <Option
             key={session.id}
             checked={state.target === session.id}

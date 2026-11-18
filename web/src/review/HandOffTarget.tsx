@@ -3,7 +3,7 @@ import { Copy } from "lucide-react";
 import { relativeTime } from "../lib/format";
 
 export const COPY_ONLY = "copy-only";
-const MAX_SESSIONS = 4;
+const MAX_SESSIONS = 3;
 
 export function defaultHandOffTarget(sessions: readonly SessionView[]): string {
   const best =
@@ -13,8 +13,11 @@ export function defaultHandOffTarget(sessions: readonly SessionView[]): string {
   return best?.id ?? COPY_ONLY;
 }
 
-export function handOffCandidates(sessions: readonly SessionView[], selectedId: string): SessionView[] {
-  const shown = sessions.slice(0, MAX_SESSIONS);
+export function sessionCandidates(sessions: readonly SessionView[], selectedId: string): SessionView[] {
+  const ranked = [...sessions].sort(
+    (a, b) => Number(Boolean(b.plannedDoc)) - Number(Boolean(a.plannedDoc)) || Number(b.live) - Number(a.live),
+  );
+  const shown = ranked.slice(0, MAX_SESSIONS);
   const selected = sessions.find((session) => session.id === selectedId);
   return selected && !shown.includes(selected) ? [...shown.slice(0, MAX_SESSIONS - 1), selected] : shown;
 }
@@ -75,9 +78,9 @@ export function HandOffTarget({
   onSelect: (id: string) => void;
 }) {
   return (
-    <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+    <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
       <legend className="mb-2 p-0 text-meta font-semibold text-ink-64">Send to</legend>
-      {handOffCandidates(sessions, selectedId).map((session) => (
+      {sessionCandidates(sessions, selectedId).map((session) => (
         <TargetOption
           key={session.id}
           session={session}

@@ -118,7 +118,7 @@ export function SubmitReviewDialog() {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="dialog-panel relative flex w-[min(560px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
+        className="dialog-panel relative flex w-[min(640px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
       >
         <header className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -158,7 +158,7 @@ export function SubmitReviewDialog() {
           placeholder="Overall comment (optional)"
           className="field text-ui"
         />
-        <fieldset className="m-0 grid grid-cols-1 gap-2 border-0 p-0 sm:grid-cols-3">
+        <fieldset className="m-0 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 sm:grid-cols-3">
           <legend className="sr-only">Verdict</legend>
           {VERDICTS.map((option) => (
             <label key={option.value} className={`verdict-card verdict-${option.value}`}>
