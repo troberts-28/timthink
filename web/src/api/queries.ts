@@ -128,7 +128,6 @@ function parseEvent(data: string): HubEvent | null {
 export function useLiveUpdates(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const source = new EventSource("/api/events");
     const invalidateInbox = () => void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
     const onIndexChanged = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.index });
@@ -180,16 +179,42 @@ export function useLiveUpdates(): void {
       invalidateInbox();
       for (const docPath of event.paths) void queryClient.invalidateQueries({ queryKey: queryKeys.docPrs(docPath) });
     };
-    source.addEventListener("prs-changed", onPrsChanged);
-    source.addEventListener("index-changed", onIndexChanged);
-    source.addEventListener("archive-changed", onIndexChanged);
-    source.addEventListener("doc-changed", onDocChanged);
-    source.addEventListener("doc-removed", onDocChanged);
-    source.addEventListener("sessions-changed", onSessionsChanged);
-    source.addEventListener("review-changed", onReviewChanged);
-    source.addEventListener("history-changed", onHistoryChanged);
-    source.addEventListener("seen-changed", onHistoryChanged);
-    source.addEventListener("ready", onIndexChanged);
-    return () => source.close();
+    const openEventStream = () => {
+      const stream = new EventSource("/api/events");
+      stream.addEventListener("prs-changed", onPrsChanged);
+      stream.addEventListener("index-changed", onIndexChanged);
+      stream.addEventListener("archive-changed", onIndexChanged);
+      stream.addEventListener("doc-changed", onDocChanged);
+      stream.addEventListener("doc-removed", onDocChanged);
+      stream.addEventListener("sessions-changed", onSessionsChanged);
+      stream.addEventListener("review-changed", onReviewChanged);
+      stream.addEventListener("history-changed", onHistoryChanged);
+      stream.addEventListener("seen-changed", onHistoryChanged);
+      stream.addEventListener("ready", onIndexChanged);
+      return stream;
+    };
+
+    // Chrome allows six HTTP/1.1 connections per host, and each open stream holds one,
+    // so background tabs let theirs go and catch up on whatever they missed when shown.
+    let stream: EventSource | null = null;
+    let missedEvents = false;
+    const followVisibility = () => {
+      if (document.visibilityState === "visible" && stream === null) {
+        stream = openEventStream();
+        if (missedEvents) void queryClient.invalidateQueries();
+        return;
+      }
+      if (document.visibilityState !== "visible" && stream !== null) {
+        stream.close();
+        stream = null;
+        missedEvents = true;
+      }
+    };
+    followVisibility();
+    document.addEventListener("visibilitychange", followVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", followVisibility);
+      stream?.close();
+    };
   }, [queryClient]);
 }
