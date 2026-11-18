@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useDocsIndex, useLiveUpdates } from "../api/queries";
 import { parentHref } from "../lib/navigation";
@@ -6,6 +6,7 @@ import { useSelection } from "../lib/selection";
 import { useCommandKShortcut, useKeyShortcut } from "../lib/shortcuts";
 import { useSidebarCollapsed, useSidebarShortcut } from "../lib/sidebar";
 import { useKeyboardNav } from "../lib/useKeyboardNav";
+import { useScrollRestore } from "../lib/useScrollRestore";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { Sidebar } from "./Sidebar";
@@ -14,6 +15,8 @@ import { TopBar } from "./TopBar";
 export function AppShell() {
   useLiveUpdates();
   useSidebarShortcut();
+  const mainRef = useRef<HTMLElement>(null);
+  useScrollRestore(mainRef);
   const navigate = useNavigate();
   const { data: index } = useDocsIndex();
   const selection = useSelection();
@@ -46,7 +49,7 @@ export function AppShell() {
           <Sidebar index={index} selection={selection} />
         </div>
       </aside>
-      <main id="main" className="scroll-quiet scroll-stable min-h-0 overflow-y-auto">
+      <main ref={mainRef} id="main" className="scroll-quiet scroll-stable min-h-0 overflow-y-auto">
         <Outlet />
       </main>
       <ShortcutsDialog open={shortcutsOpen} onClose={hideShortcuts} />
