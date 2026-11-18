@@ -15,6 +15,11 @@ function elements(node: Root | ElementContent): Element[] {
   return [...own, ...node.children.flatMap((child) => (child.type === "doctype" ? [] : elements(child)))];
 }
 
+function textContentOf(node: ElementContent): string {
+  if (node.type === "text") return node.value;
+  return node.type === "element" ? node.children.map(textContentOf).join("") : "";
+}
+
 function render(markdown: string): Element[] {
   return elements(markdownToHast(markdown, options).hast);
 }
@@ -34,6 +39,16 @@ describe("markdownToHast", () => {
     const nodes = render("Edit `src/a.ts:42` and `not a path`.\n\n```ts\nsrc/b.ts\n```\n");
     const refs = nodes.filter((node) => node.properties.dataCodeRef !== undefined);
     expect(refs.map((node) => node.properties.dataCodeRef)).toEqual(["src/a.ts:42"]);
+  });
+
+  it("lets inline code wrap only after slashes and at spaces, keeping its source offsets", () => {
+    const markdown = "See `packages/data-layer/a.ts` and `x ?? y`.\n\n```ts\nsrc/b.ts\n```\n";
+    const nodes = render(markdown);
+    const segments = nodes.filter((node) => node.tagName === "span" && node.properties.className !== undefined);
+    expect(segments.map((node) => textContentOf(node))).toEqual(["packages/", "data-layer/", "a.ts", "x", "??", "y"]);
+    expect(nodes.filter((node) => node.tagName === "wbr")).toHaveLength(2);
+    const sourced = nodes.filter((node) => node.tagName === "span" && node.properties.dataS !== undefined);
+    expect(sourced.map((node) => textContentOf(node))).toContain("packages/data-layer/a.ts");
   });
 
   it("links PR references in prose but never inside code", () => {

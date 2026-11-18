@@ -123,22 +123,18 @@
 }
 
 .plan-body li.task-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding-left: 0;
-}
-
-.plan-body li.task-list-item > ul {
-  flex-basis: 100%;
+  position: relative;
+  padding-left: 26px;
 }
 
 .plan-body li.task-list-item input[type="checkbox"] {
   appearance: none;
-  flex: none;
+  position: absolute;
+  top: 5px;
+  left: 0;
   width: 16px;
   height: 16px;
-  margin-top: 5px;
+  margin: 0;
   border-radius: 5px;
   border: 1.5px solid var(--ink-32);
   background: var(--surface);
@@ -168,12 +164,17 @@
 
 .plan-body code {
   font-family: var(--font-mono-stack);
-  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   font-size: 0.86em;
   background: var(--bg-sunken);
   border-radius: 5px;
   padding: 0.12em 0.36em;
   font-variant-ligatures: none;
+}
+
+.plan-body .code-seg {
+  white-space: nowrap;
 }
 
 .plan-body a code {

@@ -211,3 +211,40 @@ export function rehypeTaskPrs() {
     });
   };
 }
+
+const WHITESPACE_RUNS = /(\s+)/;
+const AFTER_SLASH = /(?<=\/)/;
+
+function codeSegments(value: string): ElementContent[] {
+  return value
+    .split(WHITESPACE_RUNS)
+    .filter((run) => run !== "")
+    .flatMap((run): ElementContent[] => {
+      if (/^\s+$/.test(run)) return [{ type: "text", value: run }];
+      return run.split(AFTER_SLASH).flatMap((segment, index): ElementContent[] => [
+        ...(index > 0 ? [{ type: "element", tagName: "wbr", properties: {}, children: [] } as Element] : []),
+        {
+          type: "element",
+          tagName: "span",
+          properties: { className: ["code-seg"] },
+          children: [{ type: "text", value: segment }],
+        },
+      ]);
+    });
+}
+
+export function rehypeInlineCodeBreaks() {
+  return (tree: Root): void => {
+    visit(tree, "element", (node) => {
+      if (node.tagName === "pre" || isFence(node)) return SKIP;
+      if (node.tagName !== "code") return;
+      visit(node, "text", (text, index, parent) => {
+        if (!parent || index === undefined) return;
+        const segments = codeSegments(text.value);
+        parent.children.splice(index, 1, ...segments);
+        return [SKIP, index + segments.length];
+      });
+      return SKIP;
+    });
+  };
+}

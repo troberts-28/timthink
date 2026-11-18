@@ -7,6 +7,7 @@ import { unified } from "unified";
 import { rehypeQuestionDetails } from "./questionDetails";
 import {
   rehypeHeadingIds,
+  rehypeInlineCodeBreaks,
   rehypeSectionRanges,
   rehypeSourcePositions,
   rehypeTaskPrs,
@@ -36,6 +37,7 @@ export function markdownToHast(raw: string, options: AutoLinkOptions): RenderedM
     .use(rehypeQuestionDetails, options)
     .use(rehypeHeadingIds, toc)
     .use(rehypeSourcePositions)
+    .use(rehypeInlineCodeBreaks)
     .use(rehypeSectionRanges)
     .use(rehypeTaskPrs);
   const hast = processor.runSync(processor.parse(raw), raw);
