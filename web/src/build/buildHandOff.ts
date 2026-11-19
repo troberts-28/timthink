@@ -49,10 +49,24 @@ export function newSessionCommand(request: BuildRequest, sessions: readonly Sess
   return buildShellCommand(request, plannerOf(sessions)?.cwd ?? null);
 }
 
-async function startNewSession(request: BuildRequest, sessions: readonly SessionView[]): Promise<BuildOutcome> {
+export function handOffBuildCommand(
+  target: string,
+  request: BuildRequest,
+  sessions: readonly SessionView[],
+): string | null {
+  if (target === NOT_NOW || target === LAUNCH) return null;
+  if (target === NEW_SESSION) return newSessionCommand(request, sessions);
+  return buildSlashCommand(request);
+}
+
+async function startNewSession(
+  request: BuildRequest,
+  sessions: readonly SessionView[],
+  copying?: Promise<boolean>,
+): Promise<BuildOutcome> {
   const planner = plannerOf(sessions);
   const command = newSessionCommand(request, sessions);
-  const copied = await copyText(command);
+  const copied = await (copying ?? copyText(command));
   if (!planner?.live || !planner.warpFocusUrl) {
     return { kind: "new-session", command, copied, focused: false, problem: null };
   }
@@ -70,9 +84,10 @@ export async function handOffBuild(
   target: string,
   request: BuildRequest,
   sessions: readonly SessionView[],
+  copying?: Promise<boolean>,
 ): Promise<BuildOutcome> {
   if (target === NOT_NOW) return { kind: "skipped" };
-  if (target === NEW_SESSION) return startNewSession(request, sessions);
+  if (target === NEW_SESSION) return startNewSession(request, sessions, copying);
   if (target === LAUNCH) {
     const result = await launchBuild(request);
     return result.status === "launched"
@@ -80,5 +95,8 @@ export async function handOffBuild(
       : { kind: "launch-failed", message: result.message };
   }
   const session = sessions.find((candidate) => candidate.id === target) ?? null;
-  return { kind: "planner", handOff: await handOffCommand(buildSlashCommand(request), session, { build: request }) };
+  return {
+    kind: "planner",
+    handOff: await handOffCommand(buildSlashCommand(request), session, { build: request }, copying),
+  };
 }

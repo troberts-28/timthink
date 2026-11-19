@@ -28,8 +28,9 @@ export async function handOffCommand(
   command: string,
   session: SessionView | null,
   resumeWith: ResumeWith,
+  copying: Promise<boolean> = copyText(command),
 ): Promise<HandOffOutcome> {
-  const copied = await copyText(command);
+  const copied = await copying;
   if (!session) return { kind: "copied-only", command, copied, reason: null };
   try {
     if (session.live && session.warpFocusUrl) {
@@ -49,6 +50,10 @@ export async function handOffCommand(
   }
 }
 
-export function handOffToClaude(docPath: string, session: SessionView | null): Promise<HandOffOutcome> {
-  return handOffCommand(reviewCommand(docPath), session, { reviewDoc: docPath });
+export function handOffToClaude(
+  docPath: string,
+  session: SessionView | null,
+  copying?: Promise<boolean>,
+): Promise<HandOffOutcome> {
+  return handOffCommand(reviewCommand(docPath), session, { reviewDoc: docPath }, copying);
 }
