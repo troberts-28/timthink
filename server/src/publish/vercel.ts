@@ -33,6 +33,8 @@ export class VercelError extends Error {
 }
 
 export class VercelClient {
+  private teamId: Promise<string | null> | null = null;
+
   constructor(private readonly options: VercelClientOptions) {}
 
   async deploy(files: readonly ExportFile[]): Promise<VercelDeployment> {
@@ -120,8 +122,29 @@ export class VercelClient {
     });
   }
 
-  private request(apiPath: string, init: RequestInit) {
-    return this.options.fetch(`${VERCEL_API}${apiPath}`, {
+  private async request(apiPath: string, init: RequestInit) {
+    const url = new URL(`${VERCEL_API}${apiPath}`);
+    const teamId = await this.defaultTeamId();
+    if (teamId) {
+      url.searchParams.set("teamId", teamId);
+    }
+    return this.authorized(url, init);
+  }
+
+  private defaultTeamId() {
+    this.teamId ??= this.authorized(new URL(`${VERCEL_API}/v2/user`), { method: "GET" }).then(async (response) => {
+      if (!response.ok) {
+        throw await vercelError(response, "Reading the Vercel account failed");
+      }
+      const body: unknown = await response.json();
+      const user = isObject(body) && isObject(body.user) ? body.user : null;
+      return typeof user?.defaultTeamId === "string" ? user.defaultTeamId : null;
+    });
+    return this.teamId;
+  }
+
+  private authorized(url: URL, init: RequestInit) {
+    return this.options.fetch(url, {
       ...init,
       headers: { ...init.headers, authorization: `Bearer ${this.options.token}` },
     });

@@ -79,11 +79,12 @@ describe("publishing a project", () => {
     const first = await publisher.publish(request);
     expect(first).toMatchObject({ deploymentId: "dpl_2", projectId: CHECKOUT_ID, url: "https://deploy-2.vercel.app" });
     expect(vercel.calls.filter((call) => !call.startsWith("POST /v2/files"))).toEqual([
-      "GET /v9/projects/timthink-pages",
-      "POST /v11/projects",
-      "PATCH /v9/projects/timthink-pages",
-      "POST /v13/deployments?skipAutoDetectionConfirmation=1",
-      "POST /v13/deployments?skipAutoDetectionConfirmation=1",
+      "GET /v2/user",
+      "GET /v9/projects/timthink-pages?teamId=team_1",
+      "POST /v11/projects?teamId=team_1",
+      "PATCH /v9/projects/timthink-pages?teamId=team_1",
+      "POST /v13/deployments?skipAutoDetectionConfirmation=1&teamId=team_1",
+      "POST /v13/deployments?skipAutoDetectionConfirmation=1&teamId=team_1",
     ]);
     expect(vercel.deployments.map((deployment) => deployment.target ?? "preview")).toEqual(["production", "preview"]);
     expect(await publisher.live(CHECKOUT_ID)).toEqual([first]);
@@ -91,11 +92,11 @@ describe("publishing a project", () => {
     now = new Date(PUBLISHED_AT.getTime() + DAY_MS);
     expect(await publisher.live(CHECKOUT_ID)).toEqual([]);
     expect(await publisher.removeExpired()).toEqual(["dpl_2"]);
-    expect(vercel.calls.at(-1)).toBe("DELETE /v13/deployments/dpl_2");
+    expect(vercel.calls.at(-1)).toBe("DELETE /v13/deployments/dpl_2?teamId=team_1");
 
     const second = await publisher.publish(request);
     await publisher.unpublish(second.url);
-    expect(vercel.calls.at(-1)).toBe(`DELETE /v13/deployments/${second.deploymentId}`);
+    expect(vercel.calls.at(-1)).toBe(`DELETE /v13/deployments/${second.deploymentId}?teamId=team_1`);
     expect(await publisher.live(CHECKOUT_ID)).toEqual([]);
     await expect(publisher.publish({ ...request, ttlMs: 90 * DAY_MS + 1 })).rejects.toMatchObject({
       code: "invalid-ttl",
@@ -150,10 +151,13 @@ function fakeVercel() {
     const method = init?.method ?? "GET";
     const call = `${method} ${url.pathname}${url.search}`;
     calls.push(call);
-    if (call === "GET /v9/projects/timthink-pages") {
+    if (call === "GET /v2/user") {
+      return Response.json({ user: { defaultTeamId: "team_1" } });
+    }
+    if (call === "GET /v9/projects/timthink-pages?teamId=team_1") {
       return projectExists ? Response.json({ ssoProtection: null }) : Response.json({}, { status: 404 });
     }
-    if (call === "POST /v11/projects") {
+    if (call === "POST /v11/projects?teamId=team_1") {
       projectExists = true;
       return Response.json({ id: "prj_1" });
     }
