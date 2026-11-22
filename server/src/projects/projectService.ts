@@ -46,6 +46,10 @@ const SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 export class ProjectService {
   constructor(private readonly options: ProjectServiceOptions) {}
 
+  get docsRoot() {
+    return this.options.docsRoot;
+  }
+
   async create(project: NewProject) {
     this.assertWritable();
     const segments = project.id.split("/");

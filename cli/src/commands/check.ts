@@ -1,6 +1,13 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { type CheckProblem, checkDoc, expandHome, type MermaidFailure, type TimthinkConfig } from "@timthink/server";
+import {
+  type CheckProblem,
+  checkDoc,
+  expandHome,
+  type MermaidFailure,
+  ProjectRegistry,
+  type TimthinkConfig,
+} from "@timthink/server";
 
 type MermaidParser = (code: string) => Promise<MermaidFailure | null>;
 
@@ -43,6 +50,22 @@ function formatProblem(file: string, problem: CheckProblem): string {
   return `${file}:${problem.line}: ${problem.severity}: ${problem.message}`;
 }
 
+async function projectManifestProblems(docsRoot: string, relative: string) {
+  const registry = new ProjectRegistry(docsRoot);
+  await registry.scan();
+  const docPath = relative.split(path.sep).join("/");
+  const project = registry.projectForPath(docPath);
+  const area = registry.areaForPath(docPath);
+  return [
+    ...(area?.problems ?? []).map(
+      (problem) => `${path.join(docsRoot, area?.id ?? "", "area.yaml")}: error: ${problem}`,
+    ),
+    ...(project?.problems ?? []).map(
+      (problem) => `${path.join(docsRoot, project?.id ?? "", "project.yaml")}: error: ${problem}`,
+    ),
+  ];
+}
+
 export interface CheckIo {
   out: (text: string) => void;
   err: (text: string) => void;
@@ -70,11 +93,14 @@ export async function runCheck(
   const display = path.relative(process.cwd(), docFile) || docFile;
   for (const problem of problems) io.out(formatProblem(display, problem));
   for (const note of notes) io.out(`note: ${note}`);
-  if (path.relative(config.docsRoot, docFile).startsWith("..")) {
+  const relative = path.relative(config.docsRoot, docFile);
+  if (relative.startsWith("..")) {
     io.out(`note: ${docFile} is outside docsRoot (${config.docsRoot}), so the hub won't show it`);
   }
-  const errors = problems.filter((problem) => problem.severity === "error").length;
-  const warnings = problems.length - errors;
+  const manifestProblems = relative.startsWith("..") ? [] : await projectManifestProblems(config.docsRoot, relative);
+  for (const problem of manifestProblems) io.out(problem);
+  const errors = problems.filter((problem) => problem.severity === "error").length + manifestProblems.length;
+  const warnings = problems.length + manifestProblems.length - errors;
   io.out(
     errors + warnings === 0
       ? "No problems found."

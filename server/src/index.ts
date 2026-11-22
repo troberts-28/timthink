@@ -43,6 +43,7 @@ export {
 export type { DocContent, DocQuestion } from "./docs/content.js";
 export type { SearchHit } from "./docs/search.js";
 export { canonicalStatus } from "./docs/status.js";
+export { DocsStore } from "./docs/store.js";
 export type {
   ArchiveState,
   AreaEntry,

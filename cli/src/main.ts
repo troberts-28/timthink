@@ -3,7 +3,7 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfig, type TimthinkConfig } from "@timthink/server";
+import { loadConfig, ProjectRegistry, type TimthinkConfig } from "@timthink/server";
 import { ARCHIVE_USAGE, runArchive } from "./commands/archive.js";
 import { runCheck } from "./commands/check.js";
 import { findDocsDir } from "./commands/docsDir.js";
@@ -20,6 +20,7 @@ import {
   planUninstall,
   runCommand,
 } from "./commands/install.js";
+import { PROJECT_USAGE, runProject } from "./commands/project.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
 import { serve } from "./commands/serve.js";
 import { runStatus, STATUS_USAGE } from "./commands/status.js";
@@ -30,7 +31,9 @@ const USAGE = `Usage: timthink <command>
 Commands:
   serve                 Start the hub on 127.0.0.1
   url <doc-path>        Print the hub URL for a doc (absolute or docsRoot-relative)
-  docs-dir [--cwd dir]  Print the docs folder for the git repo containing dir (default: current directory)
+  docs-dir [--cwd dir] [--project id]
+                        Print the docs folder for a project, or for the git repo containing dir
+  project <command>     List, show, create and update projects (see \`timthink project --help\`)
   docs-root             Print the docs root
   check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
@@ -85,6 +88,19 @@ const consoleIo: ReviewIo = {
   stdinIsTty: process.stdin.isTTY === true,
 };
 
+async function printProjectDir(config: TimthinkConfig, projectId: string) {
+  const registry = new ProjectRegistry(config.docsRoot);
+  await registry.scan();
+  if (!registry.project(projectId)) {
+    console.error(
+      `There is no project ${projectId}. Run \`timthink project list\`, or create it with \`timthink project create\`.`,
+    );
+    return 1;
+  }
+  console.log(path.join(config.docsRoot, projectId));
+  return 0;
+}
+
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
     args: argv,
@@ -100,11 +116,19 @@ async function main(argv: string[]): Promise<number> {
       repo: { type: "string" },
       "docs-root": { type: "string" },
       "code-root": { type: "string" },
+      project: { type: "string" },
+      title: { type: "string" },
+      summary: { type: "string" },
+      repos: { type: "string" },
     },
   });
   const [command, ...rest] = positionals;
   if (command === "review" && (values.help || rest.length === 0)) {
     console.log(REVIEW_USAGE);
+    return values.help ? 0 : 1;
+  }
+  if (command === "project" && (values.help || rest.length === 0)) {
+    console.log(PROJECT_USAGE);
     return values.help ? 0 : 1;
   }
   if (command === "archive" && values.help) {
@@ -133,6 +157,9 @@ async function main(argv: string[]): Promise<number> {
       console.log(config.docsRoot);
       return 0;
     case "docs-dir": {
+      if (values.project) {
+        return printProjectDir(config, values.project);
+      }
       const found = await findDocsDir(config, values.cwd ?? process.cwd());
       console.log(found.dir);
       if (!found.exists) console.error(`(${found.dir} doesn't exist yet; create it when you write the first plan)`);
@@ -152,6 +179,13 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       return runStatus(config, rest, { out: (text) => console.log(text), err: (text) => console.error(text) });
+    case "project":
+      return runProject({
+        config,
+        args: rest,
+        flags: { title: values.title, summary: values.summary, repos: values.repos, repo: values.repo },
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+      });
     case "review":
       return runReview(config, rest, values.message === undefined ? {} : { message: values.message }, consoleIo);
     case "archive":
