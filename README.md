@@ -11,7 +11,8 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
 - **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. The header shows the whole stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. When every PR has merged, the plan is marked done.
-- **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
+- **Decision rounds.** `/timthink comments` triages a PR's review comments with your address-comments skill, then puts them in the hub as a round: each comment with its thread, diff hunk, code at the PR head, Claude's read and fix, the options and a reply editor. Decide each (`j`/`k`, `1` to `4`, `r`, `⌘↵`), submit, and the waiting session wakes up to fix, push and reply. The round then shows what happened to each comment.
+- **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox holds only what a Claude session is blocked on: rounds awaiting you, and open questions on plans in `review`.
 - **Search.** ⌘K jumps to any plan or repo by title, and from three characters also searches plan text, with `repo:` and `status:` filters.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
 - **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
@@ -101,7 +102,7 @@ Every `*.md` file is a plan unless it's an agent instruction file (`AGENTS.md`, 
 | `<docsRoot>/<repo>/.timthink/archive.json`             | read/write | Plans you archived or kept active by hand, keyed by repo-relative path                            |
 | `<docsRoot>/**/*.md`                                   | write      | Only the `status:` line when you submit a verdict, and the text when you accept a suggestion      |
 | `<docsRoot>/**/project.yaml`, `area.yaml`              | write      | Only when you change a project's status or PRs in the hub, or with `timthink project`             |
-| `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, `preferences.json` (hidden repos), a transcript backfill cache |
+| `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, `preferences.json` (hidden repos), `rounds/` (decision rounds), a transcript backfill cache |
 | `~/.claude/projects/*/*.jsonl`                         | read       | Claude Code transcripts, scanned for plan writes and session titles                               |
 | `~/.warp/tab_configs/timthink-resume.toml`             | write      | Written when you click **Resume in Warp**                                                         |
 
@@ -177,6 +178,7 @@ A plan is archived when you archive it, or automatically when its file hasn't ch
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links          |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
+| `timthink round create \| wait \| show \| report \| abandon \| list` | Create a decision round, wait in the background until you submit it (exit 3 if abandoned), and record outcomes (`timthink round --help`) |
 | `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active whatever the auto rule says (`--clear` forgets either) |
 | `timthink archive --list \| --dry-run-auto [--repo name]` | List archived plans, or preview what the auto rule archives and why     |
 | `timthink doctor`                               | Check every installed component                                                   |

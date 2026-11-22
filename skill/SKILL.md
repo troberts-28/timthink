@@ -1,6 +1,6 @@
 ---
 name: timthink
-description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, act on reviews submitted from it, and build approved plans. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", runs "/timthink review" (with or without a doc path) or "/timthink build <doc>", asks you to address, answer or work through review comments on a plan, or asks you to implement a plan.
+description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, act on reviews submitted from it, and build approved plans. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", runs "/timthink review" (with or without a doc path), "/timthink build <doc>" or "/timthink comments", asks you to address, answer or work through review comments on a plan, or asks you to implement a plan.
 ---
 
 # timthink
@@ -109,3 +109,25 @@ The user approved a plan and wants it built, usually in a fresh session with not
 4. **Build.** Work phase by phase, in order, through every phase with open tasks, or only phase N with `--phase N`. Tick each task (`- [x]`) in the plan as it lands, not in a batch at the end. Follow the repo's own conventions for tests, lint and commits. When the plan's decisions turn out to be wrong in practice, follow the code, note the deviation in the plan under the phase, and mention it in your summary.
 5. **PRs.** After `gt submit`, `gh pr create` or similar, add every PR number to the plan's `pr:` list. When the plan is in a project, also run `timthink project link-pr <id> <repo>#<number>` for a PR in a repo other than the plan's. Don't open PRs or push unless the user's instructions for the repo say to; ask if unsure.
 6. **Finish.** Leave `status: in-progress` while any phase has open tasks. Set `status: done` only when every task is ticked and the work is merged or the user says it's done. Summarise what's built, what's left, and any deviations, and end with the URL from `timthink url <doc>`.
+
+## `/timthink comments [--stack] [--round <id>]`
+
+Address PR review comments with the decisions made in the hub instead of in chat. This mode wraps the address-comments skill rather than replacing it.
+
+1. **Find the skill in effect.** Read `$(git rev-parse --show-toplevel)/.claude/skills/address-comments/SKILL.md` if it exists (a repo's team copy wins), else `~/.claude/skills/address-comments/SKILL.md`. Follow it, with `--stack` passed through, except where this section says otherwise.
+2. **Fall back when the hub is down.** If `curl -sf http://127.0.0.1:7420/api/health` fails (use the port from the URLs timthink prints) or `timthink round` is an unknown command, say so in one line and run address-comments as written.
+3. **Collect and Triage** run as written.
+4. **Replace step 3** (called "Set the plan" where the skill asks the user, "Decide and print the plan" where it decides alone) with a round. Write the round JSON to a temp file, then `timthink round create <file>`. One item per triage row:
+   - `id`: the row number; in `--stack`, `<pr>-<n>`. `pr`, `threadId` (null for a greptile-summary item), `path`, `line`, `author` (root author), `participants`, `flags` (`outdated`, `summary`), `messages` (the whole thread, `{ author, body, at }`), `diffHunk`.
+   - `said`, `read` (`{ assessment, reason }`, the assessment word without its emoji) and `fix`: the row's Said, My read and Fix lines.
+   - `options`: the decisions the skill offers for this row (`{ id, label, hint }`), your pick first. Never add an Other option; the hub always offers one.
+   - `reply`: on a greptile-authored row, `{ "kind": "drafted", "drafts": { "<option id>": "<exact reply>" } }` with the text the skill's reply step would post for each option; leave out options that post nothing. On any other row, `{ "kind": "yours", "suggestion": "<suggested answer>" }`.
+   - The round itself: `{ "kind": "pr-comments", "title": "Comments on #<pr>", "prs": [{ "number", "title", "headSha", "link" }], "items": [...] }`, with `prs` bottom to top for `--stack` and `link` per the skill's link rule. `fixtures/rounds/pr-comments.json` in the timthink repo is a complete example.
+5. **Wait.** Run `timthink round wait <id>` as a background Bash command, then end your turn with one line and the round URL that `round create` printed. Never poll.
+6. **When the wait exits 0**, it prints the decisions as JSON. Echo the plan in one status line (`#1 fix · #2 no change · #3 custom fix`), then run the skill's Execute, Push, Reply, Report and Re-review steps on these decisions:
+   - `decision` is the chosen option's label. `customFix` set means Other: treat it as the skill treats a typed Other answer (a custom fix, marked VALID).
+   - `reply` is the exact text to post on that item. Post it on greptile rows in place of the skill's own wording, and post it under the user's `gh` identity on human rows (still never resolving a human thread). An empty `reply` posts nothing, except a greptile row with `customFix`, where you word the reply by the skill's rules.
+7. **Report outcomes.** `timthink round report <id> -` with `{ "<item id>": { "kind": "fixed" | "replied" | "no-change" | "deferred" | "skipped", "note": "…", "commit": "<sha>" } }` on stdin, one entry per item, so the round page shows what happened. Then finish with the skill's report.
+8. **Exit 3** means the user abandoned the round: stop, with nothing edited, pushed or posted.
+
+`--round <id>` resumes a round, usually from the hub's Resume in Warp. Run `timthink round show <id>`: while it's `open`, go back to step 5; once `submitted`, its decisions are printed, so check out the PR's branch and carry on from step 6; once `done`, summarise its outcomes.
