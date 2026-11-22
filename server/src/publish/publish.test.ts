@@ -54,6 +54,11 @@ describe("publishing a project", () => {
       expect.arrayContaining(["index.html", "app.js", "middleware.js", "assets/index-abc.css", "assets/inter-x.woff2"]),
     );
     expect(byPath.get("app.js")).toContain("Seed a household with saved cards.");
+    const mermaidChunk = [...byPath].find(
+      ([filePath, text]) => filePath.startsWith("chunks/") && text.includes("mermaid"),
+    );
+    expect(mermaidChunk).toBeDefined();
+    expect(byPath.get("app.js")?.length).toBeLessThan(1_500_000);
     expect(byPath.get("middleware.js")).toContain(String(PUBLISHED_AT.getTime() + DAY_MS));
 
     const data = exportData(byPath.get("index.html") ?? "");

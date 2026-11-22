@@ -52,12 +52,12 @@ export async function buildProjectExport(input: ProjectExportInput): Promise<Exp
     publishedAt: input.publishedAt.toISOString(),
     expiresAt: input.expiresAt.toISOString(),
   };
-  const script = await bundleExport(docsRoot, (await fileExists(pageFile)) ? pageFile : null);
+  const scripts = await bundleExport(docsRoot, (await fileExists(pageFile)) ? pageFile : null);
   const css = await hubStylesheet(input.webDist);
   const attachments = detail.attachments.filter((attachment) => attachment.size <= MAX_EXPORTED_FILE_BYTES);
   return [
     { path: "index.html", data: Buffer.from(indexHtml(data, css.name)) },
-    { path: "app.js", data: Buffer.from(script) },
+    ...scripts,
     { path: "middleware.js", data: Buffer.from(expiryMiddleware(input.expiresAt)) },
     ...css.files,
     ...(await Promise.all(
@@ -97,25 +97,32 @@ function indexHtml(data: ProjectExport, cssName: string) {
     "<body>",
     '<div id="root"></div>',
     `<script type="application/json" id="${EXPORT_DATA_ELEMENT_ID}">${json}</script>`,
-    '<script src="/app.js"></script>',
+    '<script type="module" src="/app.js"></script>',
     "</body>",
     "</html>",
     "",
   ].join("\n");
 }
 
-async function bundleExport(docsRoot: string, pageFile: string | null) {
+const EXPORT_ENTRY = "timthink-export-entry";
+const SCRIPT_OUT_DIR = "timthink-export-out";
+
+async function bundleExport(docsRoot: string, pageFile: string | null): Promise<ExportFile[]> {
   const contents = [
     `import { renderExport } from ${JSON.stringify(path.join(WEB_SRC, "export", "main.tsx"))};`,
     pageFile ? `import Page from ${JSON.stringify(pageFile)};` : "const Page = null;",
     "renderExport(Page);",
   ].join("\n");
+  const outdir = path.join(docsRoot, SCRIPT_OUT_DIR);
   const result = await build({
-    stdin: { contents, resolveDir: docsRoot, loader: "tsx", sourcefile: "export-entry.tsx" },
+    entryPoints: { app: EXPORT_ENTRY },
     absWorkingDir: docsRoot,
+    outdir,
+    chunkNames: "chunks/[name]-[hash]",
     bundle: true,
+    splitting: true,
     write: false,
-    format: "iife",
+    format: "esm",
     platform: "browser",
     target: "es2022",
     jsx: "automatic",
@@ -123,17 +130,25 @@ async function bundleExport(docsRoot: string, pageFile: string | null) {
     nodePaths: [WEB_NODE_MODULES],
     define: { "process.env.NODE_ENV": '"production"' },
     logLevel: "silent",
-    plugins: [exportModules()],
+    plugins: [exportModules({ contents, resolveDir: docsRoot })],
   }).catch((error: unknown) => {
     throw new ExportError(`The page didn't bundle for publishing: ${error instanceof Error ? error.message : error}`);
   });
-  return result.outputFiles[0]?.text ?? "";
+  return result.outputFiles.map((file) => ({
+    path: path.relative(outdir, file.path).split(path.sep).join("/"),
+    data: Buffer.from(file.contents),
+  }));
 }
 
-function exportModules(): Plugin {
+function exportModules(entry: { contents: string; resolveDir: string }): Plugin {
   return {
     name: "timthink-export",
     setup(builder) {
+      builder.onResolve({ filter: new RegExp(`^${EXPORT_ENTRY}$`) }, () => ({
+        path: EXPORT_ENTRY,
+        namespace: "entry",
+      }));
+      builder.onLoad({ filter: /.*/, namespace: "entry" }, () => ({ ...entry, loader: "tsx" }));
       builder.onResolve({ filter: /^timthink\/page$/ }, () => ({ path: path.join(WEB_SRC, "page", "index.ts") }));
       builder.onResolve({ filter: /^@timthink\/server\/shared$/ }, () => ({ path: SERVER_SHARED }));
     },
