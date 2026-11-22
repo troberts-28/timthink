@@ -2,6 +2,7 @@ import type { CodeRepoInfo, ProjectPr, ProjectPrs as ProjectPrsData, ProjectStac
 import { ExternalLink, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 import { changeProjectPr, type ProjectPrAction } from "../api/projects";
+import { CopyCommandButton } from "../components/CopyCommandButton";
 import { useToast } from "../lib/toast";
 import { prUrl } from "../markdown/linkPatterns";
 import { PrSignals, PrStateDot, prSummaryLines } from "../prs/PrVisuals";
@@ -57,6 +58,7 @@ export function ProjectPrs({ projectId, prs, repoLinks, showRepo }: ProjectPrsPr
                   codeRepo={repoLinks[pr.repo]}
                   showRepo
                   action="reattach"
+                  roundCommand={null}
                 />
               ))}
             </ul>
@@ -79,10 +81,19 @@ interface StackCardProps {
 }
 
 function StackCard({ stack, projectId, codeRepo, showRepo }: StackCardProps) {
+  const roundCommand = stack.prs.length > 1 ? "/timthink comments --stack" : "/timthink comments";
   return (
     <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
       {[...stack.prs].reverse().map((pr) => (
-        <PrRow key={pr.number} pr={pr} projectId={projectId} codeRepo={codeRepo} showRepo={showRepo} action="unlink" />
+        <PrRow
+          key={pr.number}
+          pr={pr}
+          projectId={projectId}
+          codeRepo={codeRepo}
+          showRepo={showRepo}
+          action="unlink"
+          roundCommand={roundCommand}
+        />
       ))}
     </ul>
   );
@@ -94,9 +105,10 @@ interface PrRowProps {
   codeRepo: CodeRepoInfo | undefined;
   showRepo: boolean;
   action: Extract<ProjectPrAction, "unlink" | "reattach">;
+  roundCommand: string | null;
 }
 
-function PrRow({ pr, projectId, codeRepo, showRepo, action }: PrRowProps) {
+function PrRow({ pr, projectId, codeRepo, showRepo, action, roundCommand }: PrRowProps) {
   const toast = useToast();
   const [pending, setPending] = useState(false);
   const href = codeRepo?.github ? prUrl(codeRepo.github, String(pr.number), codeRepo.prLinks) : (pr.info?.url ?? null);
@@ -111,6 +123,7 @@ function PrRow({ pr, projectId, codeRepo, showRepo, action }: PrRowProps) {
     }
   };
   const actionLabel = action === "unlink" ? `Detach #${pr.number} from this project` : `Reattach #${pr.number}`;
+  const hasOpenThreads = !settled && (pr.info?.unresolvedThreads ?? 0) > 0;
   return (
     <li className="group relative flex items-center gap-3 border-b border-line-soft px-4 py-2.5 last:border-b-0">
       <PrStateDot state={pr.info?.state ?? null} />
@@ -130,6 +143,12 @@ function PrRow({ pr, projectId, codeRepo, showRepo, action }: PrRowProps) {
           {pr.sources.includes("stack") && pr.sources.length === 1 ? " · in the stack" : null}
         </span>
       </span>
+      {roundCommand && hasOpenThreads ? (
+        <CopyCommandButton
+          command={roundCommand}
+          label={`Copy the command that starts a round on #${pr.number}'s comments`}
+        />
+      ) : null}
       {href ? (
         <a
           href={href}

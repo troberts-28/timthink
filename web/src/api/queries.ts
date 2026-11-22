@@ -6,6 +6,7 @@ import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode }
 import { fetchProject } from "./projects";
 import { fetchDocPrs, lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
+import { fetchRound, fetchRoundFile } from "./rounds";
 
 export const queryKeys = {
   index: ["index"] as const,
@@ -27,7 +28,28 @@ export const queryKeys = {
   prLookup: (owner: string, repo: string, numbers: string) => ["pr-lookup", owner, repo, numbers] as const,
   projectRoot: ["project"] as const,
   project: (id: string) => ["project", id] as const,
+  roundRoot: ["round"] as const,
+  round: (id: string) => ["round", id] as const,
+  roundFile: (id: string, item: string) => ["round-file", id, item] as const,
 };
+
+export function useRound(id: string) {
+  return useQuery({
+    queryKey: queryKeys.round(id),
+    queryFn: () => fetchRound(id),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
+export function useRoundFile(id: string, item: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.roundFile(id, item),
+    queryFn: () => fetchRoundFile(id, item),
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled,
+  });
+}
 
 export function useProject(id: string) {
   return useQuery({
@@ -194,8 +216,15 @@ export function useLiveUpdates(): void {
       invalidateInbox();
       for (const docPath of event.paths) void queryClient.invalidateQueries({ queryKey: queryKeys.docPrs(docPath) });
     };
+    const onRoundsChanged = (message: MessageEvent<string>) => {
+      const event = parseEvent(message.data);
+      if (event?.type !== "rounds-changed") return;
+      invalidateInbox();
+      for (const id of event.ids) void queryClient.invalidateQueries({ queryKey: queryKeys.round(id) });
+    };
     const openEventStream = () => {
       const stream = new EventSource("/api/events");
+      stream.addEventListener("rounds-changed", onRoundsChanged);
       stream.addEventListener("prs-changed", onPrsChanged);
       stream.addEventListener("index-changed", onIndexChanged);
       stream.addEventListener("archive-changed", onIndexChanged);

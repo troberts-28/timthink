@@ -234,6 +234,7 @@ describe("project PRs", () => {
       prsEnabled: true,
       prsUnavailable: null,
       attachmentsUnder: () => [],
+      rounds: [],
     };
     const detail = await buildProjectDetail(deps);
     expect(detail?.prs.stacks.map((stack) => stack.prs.map((pr) => [pr.number, pr.sources]))).toEqual([

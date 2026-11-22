@@ -10,7 +10,7 @@ import { buildSlashCommand, isValidBranchName, isValidPhase, suggestBranch } fro
 import { type BuildLauncher, launchArgv } from "./build/launcher.js";
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
-import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
+import { hostCheckout, isCheckoutOfRepo } from "./code/repoCheckouts.js";
 import type { WorktreeIndex } from "./code/worktrees.js";
 import type { TimthinkConfig } from "./config.js";
 import { listPhases } from "./docs/phases.js";
@@ -32,6 +32,10 @@ import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
 import { reviewRoutes } from "./reviews/routes.js";
+import type { RoundStore } from "./rounds/roundStore.js";
+import { roundResumePrompt } from "./rounds/roundView.js";
+import { roundRoutes } from "./rounds/routes.js";
+import { ROUND_ID_PATTERN } from "./rounds/schema.js";
 import { PathOutsideRootError, resolveInsideRoot } from "./safePath.js";
 import { loopbackHostGuard, mutationGuard, sameOriginReadGuard } from "./security.js";
 import { seenRoutes } from "./seen/routes.js";
@@ -63,6 +67,7 @@ export interface AppDeps {
   archive: ArchiveService;
   prs: PrService;
   projects: ProjectRegistry;
+  rounds: RoundStore;
   projectService: ProjectService;
   githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
@@ -123,6 +128,7 @@ const resumeBody = z.object({
   reviewDoc: z.string().min(1).max(1024).optional(),
   build: buildBody.optional(),
   command: z.enum(RESUME_COMMANDS).optional(),
+  round: z.string().regex(ROUND_ID_PATTERN).optional(),
 });
 const revealBody = z.object({ path: z.string().min(1).max(1024) });
 const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
@@ -269,7 +275,7 @@ export function createApp(deps: AppDeps) {
 
   const resumeSession = async (
     session: SessionRecord,
-    { reviewDoc, build, command }: z.infer<typeof resumeBody>,
+    { reviewDoc, build, command, round }: z.infer<typeof resumeBody>,
   ): Promise<SessionActionResponse> => {
     if (!isSessionId(session.id)) return { status: "unavailable", message: "This session id can't be resumed" };
     if (!session.cwd || !(await isExistingDirectory(session.cwd))) {
@@ -285,9 +291,11 @@ export function createApp(deps: AppDeps) {
       ? buildSlashCommand(build)
       : command
         ? `/${command}`
-        : reviewDoc === undefined
-          ? null
-          : `/timthink review ${reviewDoc}`;
+        : round
+          ? roundResumePrompt({ id: round })
+          : reviewDoc === undefined
+            ? null
+            : `/timthink review ${reviewDoc}`;
     await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd, prompt);
     await deps.openUrl(RESUME_TAB_CONFIG_URL);
     return { status: "resumed", cwd: session.cwd };
@@ -411,6 +419,18 @@ export function createApp(deps: AppDeps) {
       return c.json<SessionActionResponse>(body, status);
     })
     .route("/api/review", reviewRoutes(deps.reviews))
+    .route(
+      "/api/round",
+      roundRoutes({
+        rounds: deps.rounds,
+        hostCheckout: (repo) => hostCheckout(config, repo),
+        sessionFor: async (round) => {
+          await sessions.refreshLiveness();
+          const session = sessions.all().find((candidate) => candidate.cwd !== null && candidate.cwd === round.cwd);
+          return session ? toSessionView(session) : null;
+        },
+      }),
+    )
     .route("/api/history", historyRoutes(store, deps.history, deps.seen))
     .route(
       "/api/seen",
@@ -429,6 +449,7 @@ export function createApp(deps: AppDeps) {
         service: deps.projectService,
         store,
         reviews: deps.reviews.store,
+        rounds: deps.rounds,
         prs: deps.prs,
         githubFor: deps.githubFor,
         getIndex: deps.getIndex,

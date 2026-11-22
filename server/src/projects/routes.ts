@@ -6,6 +6,8 @@ import type { DocsIndex, GithubRepo } from "../docs/types.js";
 import type { PrService } from "../prs/prService.js";
 import { ReadOnlyError } from "../readOnly.js";
 import type { ReviewStore } from "../reviews/reviewStore.js";
+import type { RoundStore } from "../rounds/roundStore.js";
+import { summarizeRound } from "../rounds/roundView.js";
 import { PROJECT_STATUSES } from "./manifest.js";
 import { ProjectError, type ProjectService } from "./projectService.js";
 import { buildProjectDetail } from "./projectView.js";
@@ -16,6 +18,7 @@ export interface ProjectRouteDeps {
   service: ProjectService;
   store: DocsStore;
   reviews: ReviewStore;
+  rounds: RoundStore;
   prs: PrService;
   githubFor: (repo: string) => GithubRepo | null;
   getIndex: () => DocsIndex;
@@ -52,6 +55,7 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         prsEnabled: deps.prs.enabled,
         prsUnavailable: deps.prs.unavailableMessage,
         attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
+        rounds: (await deps.rounds.list()).map(summarizeRound),
       });
       return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
     })

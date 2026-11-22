@@ -18,6 +18,10 @@ export function projectEntryHref(projectId: string) {
   return `/p/${encodePath(projectId)}`;
 }
 
+export function roundHref(id: string) {
+  return `/round/${encodeURIComponent(id)}`;
+}
+
 export function areaHref(area: string) {
   return `/a/${encodeURIComponent(area)}`;
 }

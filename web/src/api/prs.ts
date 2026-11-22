@@ -33,10 +33,6 @@ export async function lookupPrs(owner: string, repo: string, numbers: readonly n
   return response.json() as Promise<PrLookupResponse>;
 }
 
-export async function dismissClosedPrs(path: string, numbers: readonly number[]): Promise<void> {
-  await postJson("/api/doc-prs/dismiss", { path, numbers });
-}
-
 export interface DocWorktreeResponse {
   worktree: { path: string; name: string } | null;
 }
@@ -49,8 +45,4 @@ export async function fetchDocWorktree(path: string): Promise<DocWorktreeRespons
 
 export function openWorktree(path: string, app: "zed" | "warp"): Promise<{ status: string; message?: string }> {
   return postJson("/api/open-worktree", { path, app });
-}
-
-export async function resolvePlanCompletion(path: string, done: boolean): Promise<void> {
-  await postJson("/api/doc-prs/complete", { path, done });
 }

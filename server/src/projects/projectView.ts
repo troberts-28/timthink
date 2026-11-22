@@ -9,6 +9,7 @@ import type {
 } from "../docs/types.js";
 import { isTerminal, type PrInfo } from "../prs/types.js";
 import type { ReviewFile } from "../reviews/schema.js";
+import type { RoundSummary } from "../rounds/roundView.js";
 import { type PrRef, samePr } from "./manifest.js";
 import type { ProjectRecord } from "./registry.js";
 
@@ -77,6 +78,7 @@ export interface ProjectDetail {
   questions: ProjectQuestion[];
   threads: ProjectThread[];
   activity: ProjectActivity[];
+  rounds: RoundSummary[];
   attachments: AttachmentSummary[];
 }
 
@@ -98,6 +100,7 @@ export interface ProjectViewDeps {
   prsEnabled: boolean;
   prsUnavailable: string | null;
   attachmentsUnder(dir: string): AttachmentSummary[];
+  rounds: readonly RoundSummary[];
 }
 
 const ACTIVITY_LIMIT = 40;
@@ -358,6 +361,18 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
     questions: reviews.questions,
     threads: reviews.threads,
     activity,
+    rounds: projectRounds(deps, prs),
     attachments: deps.attachmentsUnder(deps.record.id),
   };
+}
+
+function projectRounds(deps: ProjectViewDeps, prs: ProjectPrs) {
+  const projectPrKeys = new Set(prs.stacks.flatMap((stack) => stack.prs.map(prKeyOf)));
+  return deps.rounds.filter((round) => {
+    const isFiledUnderProject = round.project === deps.record.id;
+    const touchesProjectPr = round.prs.some((pr) =>
+      projectPrKeys.has(prKeyOf({ repo: round.repo, number: pr.number })),
+    );
+    return isFiledUnderProject || touchesProjectPr;
+  });
 }

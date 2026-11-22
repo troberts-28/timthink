@@ -1,0 +1,62 @@
+{
+  "kind": "pr-comments",
+  "title": "Comments on #4301",
+  "repo": "acme-api",
+  "prs": [
+    {
+      "number": 4301,
+      "title": "Saved cards on the checkout page",
+      "headSha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "link": "https://app.graphite.com/github/pr/acme/acme-api/4301"
+    }
+  ],
+  "items": [
+    {
+      "id": "1",
+      "pr": 4301,
+      "threadId": "PRRT_kwDOAbc123",
+      "path": "src/checkout/savedCards.ts",
+      "line": 42,
+      "author": "greptile-apps",
+      "participants": ["greptile-apps", "tim"],
+      "messages": [
+        { "author": "greptile-apps", "body": "`defaultCard` can be an archived card.", "at": "2026-11-20T10:00:00Z" },
+        { "author": "tim", "body": "Looks legit.", "at": "2026-11-20T11:00:00Z" }
+      ],
+      "diffHunk": "@@ -40,3 +40,4 @@\n const cards = await listCards(user);\n-const defaultCard = cards[0];\n+const defaultCard = cards.find((card) => card.isDefault);",
+      "said": "The default card can be an archived one.",
+      "read": { "assessment": "VALID", "reason": "Archived cards still carry isDefault; tim confirms." },
+      "fix": "Skip archived cards when choosing the default.",
+      "options": [
+        { "id": "fix", "label": "Fix", "hint": "Skip archived cards when choosing the default" },
+        { "id": "push-back", "label": "Push back", "hint": "Keep it as is" },
+        { "id": "defer", "label": "Defer", "hint": "Real, not in this PR" }
+      ],
+      "reply": {
+        "kind": "drafted",
+        "drafts": {
+          "fix": "Addressed ✅ Skip archived cards when choosing the default.",
+          "push-back": "Keeping this as is. Archived cards are filtered upstream.",
+          "defer": "Real issue, deferring. It needs a migration, so it gets its own PR."
+        }
+      }
+    },
+    {
+      "id": "2",
+      "pr": 4301,
+      "threadId": "PRRT_kwDOAbc456",
+      "path": "src/checkout/CheckoutPage.tsx",
+      "line": 12,
+      "author": "sam",
+      "messages": [{ "author": "sam", "body": "Why not reuse the old card picker?", "at": "2026-11-20T12:00:00Z" }],
+      "said": "Reuse the old card picker.",
+      "read": { "assessment": "CLARIFY", "reason": "The old picker can't show saved cards." },
+      "fix": "none",
+      "options": [
+        { "id": "no-change", "label": "Agree, no change", "hint": "Reported to you to answer" },
+        { "id": "fix-anyway", "label": "Fix it anyway", "hint": "Reuse the old picker" }
+      ],
+      "reply": { "kind": "yours", "suggestion": "The old picker can't list saved cards, so this one replaces it." }
+    }
+  ]
+}

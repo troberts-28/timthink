@@ -104,6 +104,7 @@ export type ResumeWith =
   | { reviewDoc: string }
   | { build: BuildRequest }
   | { command: "fix-ci" | "address-comments" }
+  | { round: string }
   | Record<string, never>;
 
 export async function resumeSession(id: string, resumeWith: ResumeWith = {}): Promise<SessionActionResponse> {

@@ -23,10 +23,9 @@ describe("history, seen and inbox API", () => {
       body: JSON.stringify(body),
       headers: { "content-type": "application/json", origin: BASE, [TOKEN_HEADER]: runtime.token },
     });
-  const reasons = async () =>
-    (await get<InboxResponse>("/api/inbox")).items
-      .filter((item) => item.doc.path === DOC)
-      .map((item) => `${item.reason} ${item.doc.path}`);
+  const inboxIds = async () =>
+    (await get<InboxResponse>("/api/inbox")).items.map((item) => item.id).filter((id) => id.includes(DOC));
+  const seenHash = async () => (await get<DocHistory>(`/api/history?path=${encodeURIComponent(DOC)}`)).seen?.hash;
 
   beforeAll(async () => {
     docsRoot = await copyFixtureDocs();
@@ -35,8 +34,8 @@ describe("history, seen and inbox API", () => {
     await runtime.startHistory();
   });
 
-  it("starts with everything seen, so only standing items show", async () => {
-    expect(await reasons()).toEqual([`review-requested ${DOC}`, `open-question ${DOC}`]);
+  it("starts with everything seen, and lists only open questions on plans in review", async () => {
+    expect(await inboxIds()).toEqual([`question:${DOC}#burst-policy`]);
     const seen = JSON.parse(await readFile(path.join(stateDir, "seen.json"), "utf8"));
     expect(Object.keys(seen.docs)).toContain(DOC);
   });
@@ -57,8 +56,6 @@ describe("history, seen and inbox API", () => {
     expect(history.snapshots).toHaveLength(2);
     expect(history.snapshots[0]?.attribution).toMatchObject({ kind: "claude", sessionId: SESSION_ID });
     expect(history.seen?.hash).not.toBe(history.hash);
-    const inbox = await get<InboxResponse>("/api/inbox");
-    expect(inbox.items.find((item) => item.reason === "edited")?.attribution).toMatchObject({ kind: "claude" });
 
     const older = history.snapshots[1];
     const snapshot = await get<{ raw: string }>(
@@ -70,20 +67,27 @@ describe("history, seen and inbox API", () => {
   it("marks a doc seen and unseen", async () => {
     const { hash } = await get<DocHistory>(`/api/history?path=${encodeURIComponent(DOC)}`);
     expect((await post("/api/seen", { path: DOC, hash })).status).toBe(200);
-    expect(await reasons()).not.toContain(`edited ${DOC}`);
+    expect(await seenHash()).toBe(hash);
     expect((await post("/api/seen/unseen", { path: DOC })).status).toBe(200);
-    expect(await reasons()).toContain(`edited ${DOC}`);
+    expect(await seenHash()).not.toBe(hash);
     await post("/api/seen", { path: DOC, hash });
   });
 
-  it("attributes the hub's own writes to you and keeps them out of the inbox", async () => {
+  it("attributes the hub's own writes to you, and drops an answered question from the inbox", async () => {
     const view = await runtime.reviews.state(DOC);
-    await runtime.reviews.submit(DOC, view.version, "approve", "Looks good");
+    const answered = await runtime.reviews.answer(DOC, view.version, {
+      questionId: "burst-policy",
+      prompt: "",
+      choice: 0,
+      choiceText: null,
+      note: "",
+    });
+    await runtime.reviews.submit(DOC, answered.version, "approve", "Looks good");
     await runtime.store.applyChanges([DOC]);
     await runtime.history.snapshotNow(DOC);
     const history = await get<DocHistory>(`/api/history?path=${encodeURIComponent(DOC)}`);
     expect(history.snapshots[0]?.attribution).toEqual({ kind: "human", name: "Test Reviewer" });
     expect(history.seen?.hash).toBe(history.hash);
-    expect(await reasons()).toEqual([`open-question ${DOC}`, `waiting-on-claude ${DOC}`]);
+    expect(await inboxIds()).toEqual([]);
   });
 });

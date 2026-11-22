@@ -4,7 +4,7 @@ import { useDocsIndex, useInbox } from "../api/queries";
 import { DocList } from "../components/DocList";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
-import { InboxRow } from "../inbox/InboxRow";
+import { InboxQuestionRow, InboxRoundRow } from "../inbox/InboxRow";
 import { groupByRepo, groupRepoSections, INBOX_SECTIONS, type RepoGroup, type SectionSpec } from "../inbox/inboxModel";
 import { pluralise } from "../lib/format";
 import { recentDocs } from "../lib/indexNav";
@@ -21,9 +21,13 @@ function RepoItems({ group, showRepo }: { group: RepoGroup; showRepo: boolean })
         </p>
       ) : null}
       <ul className="m-0 list-none p-0">
-        {group.items.map((item) => (
-          <InboxRow key={item.id} item={item} showRepo={!showRepo} />
-        ))}
+        {group.items.map((item) =>
+          item.kind === "round" ? (
+            <InboxRoundRow key={item.id} item={item} showRepo={!showRepo} />
+          ) : (
+            <InboxQuestionRow key={item.id} item={item} showRepo={!showRepo} />
+          ),
+        )}
       </ul>
     </li>
   );
@@ -68,26 +72,22 @@ function InboxSectionCard({
   );
 }
 
-function headline(attention: number, waiting: number): string {
-  if (attention > 0) return `${pluralise(attention, "thing needs", "things need")} you`;
-  return waiting > 0
-    ? `All caught up. ${pluralise(waiting, "review is", "reviews are")} with Claude.`
-    : "All caught up";
+function headline(attention: number): string {
+  return attention > 0 ? `${pluralise(attention, "thing needs", "things need")} you` : "All caught up";
 }
 
 export function InboxPage() {
   const { data: inbox, isLoading } = useInbox();
   const { data: index } = useDocsIndex();
   if (isLoading || !inbox) return <PageContainer>{null}</PageContainer>;
-  const waiting = inbox.items.filter((item) => item.section === "waiting").length;
   const sections = INBOX_SECTIONS.map((spec) => ({
     spec,
-    items: inbox.items.filter((item) => item.section === spec.id),
+    items: inbox.items.filter((item) => item.kind === spec.kind),
   }));
   const recent = index ? recentDocs(index, RECENT_LIMIT) : [];
   return (
     <PageContainer>
-      <PageHeader eyebrow="Across every repo" title="Inbox" meta={headline(inbox.attention.total, waiting)} />
+      <PageHeader eyebrow="Across every repo" title="Inbox" meta={headline(inbox.attention.total)} />
       {inbox.attention.total === 0 ? (
         <div className="mb-10 rounded-card border border-line bg-surface">
           <EmptyState icon={Inbox}>Nothing needs you. Nice.</EmptyState>
@@ -96,7 +96,7 @@ export function InboxPage() {
       {sections
         .filter(({ items }) => items.length > 0)
         .map(({ spec, items }) => (
-          <InboxSectionCard key={spec.id} spec={spec} items={items} index={index} />
+          <InboxSectionCard key={spec.kind} spec={spec} items={items} index={index} />
         ))}
       <section aria-label="Recent plans">
         <SectionHeading aside="Most recently edited first">Recent plans</SectionHeading>

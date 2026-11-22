@@ -43,7 +43,9 @@ export function useKeyboardNav(index: DocsIndex | undefined, currentDocPath: str
     if (!index) return;
     const order = sidebarOrder(index);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) {
+        return;
+      }
       const step = event.key === "j" ? 1 : event.key === "k" ? -1 : null;
       if (!step) return;
       const target = nextDocPath(order, currentDocPath, step);

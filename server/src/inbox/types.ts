@@ -1,22 +1,5 @@
-import type { Attribution } from "../history/attribution.js";
 import type { QuestionOption } from "../markdown/questionBlock.js";
-
-export type InboxSection = "review" | "replies" | "questions" | "prs" | "waiting" | "changed";
-
-export type InboxReason =
-  | "review-requested"
-  | "review-addressed"
-  | "claude-replied"
-  | "open-question"
-  | "waiting-on-claude"
-  | "edited"
-  | "new"
-  | "ci-failing"
-  | "changes-requested"
-  | "review-comments"
-  | "pr-closed-unmerged"
-  | "merged-tasks-open"
-  | "plan-completed";
+import type { RoundSummary } from "../rounds/roundView.js";
 
 export interface InboxDoc {
   path: string;
@@ -27,34 +10,31 @@ export interface InboxDoc {
   hash: string;
 }
 
-export interface InboxSessionHint {
-  id: string;
-  title: string;
-  live: boolean;
-  canFocus: boolean;
-  canResume: boolean;
-}
-
 export interface InboxQuestion {
   prompt: string;
   options: QuestionOption[];
   details: string | null;
 }
 
-export interface InboxItem {
+export interface InboxQuestionItem {
+  kind: "question";
   id: string;
-  section: InboxSection;
-  reason: InboxReason;
-  doc: InboxDoc;
   at: string;
-  detail: string | null;
-  count: number;
-  questionId: string | null;
-  question: InboxQuestion | null;
-  attribution: Attribution | null;
-  session: InboxSessionHint | null;
-  prs: number[];
+  repo: string;
+  doc: InboxDoc;
+  questionId: string;
+  question: InboxQuestion;
 }
+
+export interface InboxRoundItem {
+  kind: "round";
+  id: string;
+  at: string;
+  repo: string;
+  round: RoundSummary;
+}
+
+export type InboxItem = InboxQuestionItem | InboxRoundItem;
 
 export interface InboxAttention {
   total: number;

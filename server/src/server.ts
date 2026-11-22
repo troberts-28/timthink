@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { type ServerType, serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import { createApp } from "./app.js";
@@ -25,6 +26,7 @@ import { ReadOnlyError } from "./readOnly.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
+import { RoundStore, roundIdOf } from "./rounds/roundStore.js";
 import { allowedOrigins, createSessionToken } from "./security.js";
 import { SeenStore } from "./seen/seenStore.js";
 import { DOC_SESSIONS_LOG, SESSIONS_LOG } from "./sessions/hookLog.js";
@@ -84,11 +86,13 @@ export interface Runtime {
   archive: ArchiveService;
   prs: PrService;
   projects: ProjectRegistry;
+  rounds: RoundStore;
   hub: EventHub;
   token: string;
   startHistory(): Promise<void>;
   startWatching(): DocsWatcher;
   startSessionTracking(): DocsWatcher;
+  startRoundTracking(): Promise<DocsWatcher>;
   startPrTracking(): () => void;
 }
 
@@ -235,15 +239,12 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     await prs.markCompleted(docPath, awaiting.marker, { announce: false });
     return true;
   };
+  const rounds = new RoundStore(config.stateDir);
   const inbox = new InboxService({
     store,
     reviews: reviews.store,
-    seen,
-    history,
-    sessions,
+    rounds,
     isArchived: (summary) => archive.isArchived(summary),
-    prSignals: (summary) => prs.signalsFor(summary),
-    completion: (docPath) => prs.completion(docPath),
   });
 
   await projects.scan();
@@ -357,6 +358,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     archive,
     prs,
     projects,
+    rounds,
     projectService: new ProjectService({ docsRoot: config.docsRoot, registry: projects, readOnly: config.readOnly }),
     githubFor: (repo) => github.get(repo),
     worktrees: new WorktreeIndex(config),
@@ -386,6 +388,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     archive,
     prs,
     projects,
+    rounds,
     hub,
     token,
     startPrTracking: () => prs.start(),
@@ -396,6 +399,17 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       }
     },
     startSessionTracking: () => startSessionTracking(sessions, log),
+    startRoundTracking: async () => {
+      await mkdir(rounds.dir, { recursive: true });
+      return watchDocsRoot(
+        rounds.dir,
+        (relPaths) => {
+          const ids = [...new Set(relPaths.map(roundIdOf).filter((id) => id !== null))];
+          if (ids.length > 0) hub.publish({ type: "rounds-changed", ids, version: hub.nextVersion() });
+        },
+        { onError: (error) => log(`rounds watcher error: ${error.message}`) },
+      );
+    },
     startWatching: () =>
       watchDocsRoot(
         config.docsRoot,
@@ -411,6 +425,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   const runtime = await createRuntime(options);
   const watcher = options.watch === false ? null : runtime.startWatching();
   const sessionTracking = options.watch === false ? null : runtime.startSessionTracking();
+  const roundTracking = options.watch === false ? null : await runtime.startRoundTracking();
   const stopPrTracking = options.watch === false ? null : runtime.startPrTracking();
   if (options.watch !== false) {
     runtime.startHistory().catch((error: unknown) => options.log?.(`snapshotting docs failed: ${String(error)}`));
@@ -428,6 +443,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
       new Promise<void>((resolve) => {
         watcher?.close();
         sessionTracking?.close();
+        roundTracking?.close();
         stopPrTracking?.();
         runtime.history.close();
         server.close(() => resolve());

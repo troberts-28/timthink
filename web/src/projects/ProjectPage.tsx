@@ -5,8 +5,9 @@ import type {
   ProjectDetail,
   ProjectQuestion,
   ProjectThread,
+  RoundSummary,
 } from "@timthink/server";
-import { CircleHelp, FolderKanban, MessageSquare } from "lucide-react";
+import { CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { NotFoundError } from "../api/client";
 import { useProject } from "../api/queries";
@@ -17,7 +18,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
 import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
-import { areaHref, docHref } from "../lib/routes";
+import { areaHref, docHref, roundHref } from "../lib/routes";
 import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
@@ -106,6 +107,16 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
           showRepo={project.repos.length > 1}
         />
       </section>
+      {detail.rounds.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading aside={pluralise(detail.rounds.length, "round")}>Rounds</SectionHeading>
+          <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
+            {detail.rounds.map((round) => (
+              <RoundRow key={round.id} round={round} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {KIND_ORDER.map((kind) => (
         <DocsOfKind key={kind} kind={kind} docs={active.filter((doc) => doc.kind === kind)} />
       ))}
@@ -192,6 +203,39 @@ function QuestionRow({ question }: { question: ProjectQuestion }) {
             {question.docTitle}
           </span>
         </span>
+      </Link>
+    </li>
+  );
+}
+
+const ROUND_STATE_CHIPS: Record<RoundSummary["state"], { label: string; className: string }> = {
+  open: { label: "Waiting on you", className: "chip-accent" },
+  submitted: { label: "With Claude", className: "chip-info" },
+  done: { label: "Done", className: "chip-ok-soft" },
+  abandoned: { label: "Abandoned", className: "chip-muted" },
+};
+
+function RoundRow({ round }: { round: RoundSummary }) {
+  const chip = ROUND_STATE_CHIPS[round.state];
+  const progress =
+    round.state === "open"
+      ? `${round.decidedCount} of ${round.itemCount} decided`
+      : `${round.reportedCount} of ${round.itemCount} reported`;
+  return (
+    <li className="border-b border-line-soft last:border-b-0">
+      <Link
+        to={roundHref(round.id)}
+        className="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-bg/60"
+      >
+        <ListChecks className="mt-0.5 size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-ui font-medium text-ink">{round.title}</span>
+          <span className="block truncate text-meta text-ink-64">
+            {round.prs.map((pr) => `#${pr.number}`).join(", ")} · {progress} ·{" "}
+            {relativeTime(Date.parse(round.createdAt))}
+          </span>
+        </span>
+        <span className={`chip ${chip.className} flex-none`}>{chip.label}</span>
       </Link>
     </li>
   );

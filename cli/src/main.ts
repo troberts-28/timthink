@@ -22,6 +22,7 @@ import {
 } from "./commands/install.js";
 import { PROJECT_USAGE, runProject } from "./commands/project.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
+import { ROUND_USAGE, runRound } from "./commands/round.js";
 import { serve } from "./commands/serve.js";
 import { runStatus, STATUS_USAGE } from "./commands/status.js";
 import { docUrlForRelative } from "./commands/url.js";
@@ -38,6 +39,7 @@ Commands:
   check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
+  round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)
   archive <doc>         Archive a plan; also --list and --dry-run-auto (see \`timthink archive --help\`)
   unarchive <doc>       Keep a plan active, even when the auto rule would archive it
   doctor                Check every installed component and print fixes
@@ -127,6 +129,10 @@ async function main(argv: string[]): Promise<number> {
     console.log(REVIEW_USAGE);
     return values.help ? 0 : 1;
   }
+  if (command === "round" && (values.help || rest.length === 0)) {
+    console.log(ROUND_USAGE);
+    return values.help ? 0 : 1;
+  }
   if (command === "project" && (values.help || rest.length === 0)) {
     console.log(PROJECT_USAGE);
     return values.help ? 0 : 1;
@@ -186,6 +192,8 @@ async function main(argv: string[]): Promise<number> {
         flags: { title: values.title, summary: values.summary, repos: values.repos, repo: values.repo },
         io: { out: (text) => console.log(text), err: (text) => console.error(text) },
       });
+    case "round":
+      return runRound({ config, args: rest, io: consoleIo, cwd: values.cwd ?? process.cwd() });
     case "review":
       return runReview(config, rest, values.message === undefined ? {} : { message: values.message }, consoleIo);
     case "archive":

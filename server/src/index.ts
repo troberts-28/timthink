@@ -75,10 +75,9 @@ export type {
   InboxDoc,
   InboxItem,
   InboxQuestion,
-  InboxReason,
+  InboxQuestionItem,
   InboxResponse,
-  InboxSection,
-  InboxSessionHint,
+  InboxRoundItem,
 } from "./inbox/types.js";
 export {
   formatPrRef,
@@ -156,6 +155,32 @@ export type {
   Verdict,
 } from "./reviews/schema.js";
 export { lineNumberAt } from "./reviews/sections.js";
+export {
+  abandonRound,
+  decideRoundItem,
+  RoundError,
+  reportRoundOutcomes,
+  setRoundWaiter,
+  submitRound,
+} from "./rounds/operations.js";
+export { RoundStore } from "./rounds/roundStore.js";
+export type { RoundSummary, RoundView } from "./rounds/roundView.js";
+export { roundResumePrompt, summarizeRound } from "./rounds/roundView.js";
+export type { RoundFileContext } from "./rounds/routes.js";
+export {
+  OUTCOME_KINDS,
+  type Round,
+  type RoundChoice,
+  type RoundDecision,
+  type RoundInput,
+  type RoundItem,
+  type RoundOption,
+  type RoundOutcome,
+  type RoundOutcomeKind,
+  type RoundPr,
+  type RoundState,
+  roundOutcomesSchema,
+} from "./rounds/schema.js";
 export { TOKEN_HEADER } from "./security.js";
 export type { SeenResponse } from "./seen/routes.js";
 export type { SeenEntry, SeenMark } from "./seen/seenStore.js";
