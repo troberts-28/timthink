@@ -71,15 +71,7 @@ export function projectRoutes(deps: ProjectRouteDeps) {
       if (!record) {
         return c.json({ error: "Not found" }, 404);
       }
-      const detail = await buildProjectDetail({
-        ...projectViewDeps(deps, record),
-        contentOf: (docPath) => deps.store.contentOf(docPath),
-        readReview: (docPath) => deps.reviews.read(docPath).catch(() => null),
-        attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
-        rounds: (await deps.rounds.list()).map(summarizeRound),
-        awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
-        sessionsOf: deps.sessionsOf,
-      });
+      const detail = await projectDetailOf(deps, record);
       return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
     })
     .get("/page", zValidator("query", projectQuery), async (c) => {
@@ -147,6 +139,18 @@ export function areaRoutes(deps: ProjectRouteDeps) {
       }
       return c.json(await deps.pages.forPage(`${area.id}/${AREA_PAGE_FILE}`));
     });
+}
+
+export async function projectDetailOf(deps: ProjectRouteDeps, record: ProjectRecord) {
+  return buildProjectDetail({
+    ...projectViewDeps(deps, record),
+    contentOf: (docPath) => deps.store.contentOf(docPath),
+    readReview: (docPath) => deps.reviews.read(docPath).catch(() => null),
+    attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
+    rounds: (await deps.rounds.list()).map(summarizeRound),
+    awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
+    sessionsOf: deps.sessionsOf,
+  });
 }
 
 function projectViewDeps(deps: ProjectRouteDeps, record: ProjectRecord): PrViewDeps {

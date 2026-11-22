@@ -30,8 +30,10 @@ import type { AuthoredPages } from "./pages/pageBundle.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
 import type { ProjectService } from "./projects/projectService.js";
 import type { ProjectRegistry } from "./projects/registry.js";
-import { areaRoutes, type ProjectRouteDeps, projectRoutes } from "./projects/routes.js";
+import { areaRoutes, type ProjectRouteDeps, projectDetailOf, projectRoutes } from "./projects/routes.js";
 import type { PrService } from "./prs/prService.js";
+import type { Publisher } from "./publish/publisher.js";
+import { publishRoutes } from "./publish/routes.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
@@ -76,6 +78,7 @@ export interface AppDeps {
   movedDocs: MovedDocs;
   projectService: ProjectService;
   pages: AuthoredPages;
+  publisher: Publisher;
   checklists: ChecklistStore;
   githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
@@ -471,6 +474,15 @@ export function createApp(deps: AppDeps) {
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
     .route("/api/project", projectRoutes(projectRouteDeps))
     .route("/api/area", areaRoutes(projectRouteDeps))
+    .route(
+      "/api/publish",
+      publishRoutes({
+        publisher: deps.publisher,
+        registry: deps.projects,
+        checklists: deps.checklists,
+        detailOf: (record) => projectDetailOf(projectRouteDeps, record),
+      }),
+    )
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {
       const request = c.req.valid("json");
       const doc = store.getDoc(request.doc);

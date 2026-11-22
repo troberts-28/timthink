@@ -77,7 +77,13 @@ export type {
   InboxResponse,
   InboxRoundItem,
 } from "./inbox/types.js";
-export type { ChecklistResults, StepResult } from "./pages/checklistStore.js";
+export {
+  type ChecklistOwner,
+  type ChecklistResults,
+  ChecklistStore,
+  projectChecklistOwner,
+  type StepResult,
+} from "./pages/checklistStore.js";
 export { type AuthoredPageView, bundlePageForCheck, type PageBuildError } from "./pages/pageBundle.js";
 export { AREA_PAGE_FILE, blockIdOf, isPageFile } from "./pages/pageFile.js";
 export {
@@ -116,6 +122,16 @@ export type {
   ReviewDecision,
   StackItem,
 } from "./prs/types.js";
+export type { ExportDoc, ProjectExport } from "./publish/exportData.js";
+export { ExportError } from "./publish/projectExport.js";
+export {
+  MAX_PUBLISH_TTL_MS,
+  MIN_PUBLISH_TTL_MS,
+  PublishError,
+  Publisher,
+  type PublishRecord,
+} from "./publish/publisher.js";
+export { VercelClient, VercelError } from "./publish/vercel.js";
 export { ReadOnlyError } from "./readOnly.js";
 export { type AnchorMatch, createAnchor, locateAnchor } from "./reviews/anchor.js";
 export { writeFileAtomic } from "./reviews/atomicWrite.js";
@@ -199,4 +215,4 @@ export { BIND_HOST, createRuntime, type RunningServer, type StartOptions, startS
 export { appendSessionEvent, MAX_SESSION_LABEL_LENGTH } from "./sessions/hookLog.js";
 export { claudeSessionOfAncestor, createPsRunner } from "./sessions/liveProcesses.js";
 export type { SessionStatus, SessionsResponse, SessionView } from "./sessions/types.js";
-export { TOKEN_META_NAME } from "./webAssets.js";
+export { defaultWebDist, TOKEN_META_NAME } from "./webAssets.js";

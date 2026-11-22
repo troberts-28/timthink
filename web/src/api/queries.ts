@@ -3,7 +3,7 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
-import { fetchArea, fetchAreaPage, fetchChecklist, fetchProject, fetchProjectPage } from "./projects";
+import { fetchArea, fetchAreaPage, fetchChecklist, fetchProject, fetchProjectPage, fetchPublishes } from "./projects";
 import { lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 import { fetchRound, fetchRoundFile } from "./rounds";
@@ -28,6 +28,7 @@ export const queryKeys = {
   project: (id: string) => ["project", id] as const,
   projectPage: (id: string) => ["project", id, "page"] as const,
   checklist: (id: string, checklist: string) => ["project", id, "checklist", checklist] as const,
+  publishes: (projectId: string) => ["publishes", projectId] as const,
   areaRoot: ["area"] as const,
   area: (id: string) => ["area", id] as const,
   areaPage: (id: string) => ["area", id, "page"] as const,
@@ -69,6 +70,14 @@ export function useArea(id: string) {
     queryFn: () => fetchArea(id),
     staleTime: 30_000,
     retry: false,
+  });
+}
+
+export function usePublishes(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.publishes(projectId),
+    queryFn: () => fetchPublishes(projectId),
+    staleTime: 60_000,
   });
 }
 

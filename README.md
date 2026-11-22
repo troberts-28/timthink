@@ -8,6 +8,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 
 - **Projects.** Group docs by project rather than by repo. A project spans repos and has a home page: what needs you (open questions and replies), its PRs and stacks across repos, its docs grouped by kind, and recent activity. Projects sit in areas, and shipped or dropped projects archive their docs.
 - **Project pages.** A project can carry a `project.page.tsx` that Claude writes and keeps current: what it is, how to test it, diagrams and decisions, built from a small primitive library (`timthink/page`) and rendered above the generated sections. Saving it reloads the page, compile and render errors show inline, and `timthink check` catches them first. Hover any block to comment on it; comments go to Claude through the same review flow as plans. Pages can import components from the area folder, so shared setup is written once, and `useJson` and `QrLink` let them read local dev services and hand links to a phone. A `Checklist` records pass, fail and a note per step against the PR's head commit, and marks results stale when the PR moves on.
+- **Publishing.** **Publish** on a project page (or `timthink publish <project> --ttl 7d`) puts the project on an unlisted Vercel URL to paste into a PR or send a teammate: the authored page, PRs, docs list, activity and every doc in full, with checklists read-only and dev-service widgets showing their offline state. The deployment answers 410 once it expires, and the hub deletes expired deployments; the project page lists live links with Copy link and Unpublish.
 - **Areas.** An area page lists its projects, every live PR stack across them grouped by project, and its reference docs by kind. An optional `area.page.tsx` renders at the top with the same primitives, comments and checklists as a project page, reading the area through `useArea()`.
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
@@ -124,7 +125,7 @@ The hooks append one JSON line per event and print nothing:
 
 `timthink session label` and `timthink project use` append `Label` and `Bind` lines to `sessions.jsonl` for the session they run in, found through their parent processes.
 
-Nothing leaves your machine.
+Nothing leaves your machine, except what you publish: `timthink publish` and the **Publish** button upload the project's page, PR titles and states, and every doc in the project to the `timthink-pages` project in the Vercel account behind `VERCEL_TOKEN`, and record each publish in `publishes.json` in the state dir. The hub reads the token from its own environment; under launchd, run `launchctl setenv VERCEL_TOKEN <token>` and restart the hub, or publish from a terminal with the CLI. The first publish turns off Vercel Authentication on that project so the links open without a login.
 
 ## Security
 
@@ -187,6 +188,7 @@ A plan is archived when you archive it, or when its project is `shipped` or `dro
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| comment \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews, or comment on a passage in your draft review (`timthink review --help`) |
 | `timthink round create \| wait \| show \| report \| abandon \| list` | Create a decision round, wait in the background until you submit it (exit 3 if abandoned), and record outcomes (`timthink round --help`) |
+| `timthink publish <project> [--ttl 7d]` / `unpublish <url>` | Publish a project to an unlisted Vercel URL that expires (1h to 90d), or take it down; needs `VERCEL_TOKEN` and the hub running |
 | `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active even in a shipped project (`--clear` forgets either) |
 | `timthink archive --list [--repo name]`         | List archived plans and why                                                       |
 | `timthink doctor`                               | Check every installed component                                                   |

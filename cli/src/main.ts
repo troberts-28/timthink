@@ -4,9 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
+  BIND_HOST,
   claudeSessionOfAncestor,
   createPsRunner,
   loadConfig,
+  type ProjectDetail,
   ProjectRegistry,
   type TimthinkConfig,
 } from "@timthink/server";
@@ -27,6 +29,7 @@ import {
   runCommand,
 } from "./commands/install.js";
 import { PROJECT_USAGE, runProject } from "./commands/project.js";
+import { PUBLISH_USAGE, runPublish, runUnpublish } from "./commands/publish.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
 import { ROUND_USAGE, runRound } from "./commands/round.js";
 import { serve } from "./commands/serve.js";
@@ -50,6 +53,9 @@ Commands:
   round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)
   session label "<text>"
                         Name the Claude session this runs in, on its project's page
+  publish <project> [--ttl 7d]
+                        Publish a project to an unlisted Vercel URL that expires (needs VERCEL_TOKEN)
+  unpublish <url>       Take a published project down again
   archive <doc>         Archive a plan; also --list (see \`timthink archive --help\`)
   unarchive <doc>       Keep a plan active, even when its project is shipped or dropped
   doctor                Check every installed component and print fixes
@@ -113,6 +119,15 @@ async function printProjectDir(config: TimthinkConfig, projectId: string) {
   return 0;
 }
 
+async function fetchHubProject(config: TimthinkConfig, projectId: string): Promise<ProjectDetail | null> {
+  const response = await fetch(`http://${BIND_HOST}:${config.port}/api/project?id=${encodeURIComponent(projectId)}`);
+  if (!response.ok) {
+    return null;
+  }
+  const detail: ProjectDetail = await response.json();
+  return detail;
+}
+
 function ownSessionId(config: TimthinkConfig) {
   return claudeSessionOfAncestor({ sessionsDir: config.claudeSessionsDir, pid: process.pid, runPs: createPsRunner() });
 }
@@ -135,6 +150,7 @@ async function main(argv: string[]): Promise<number> {
       title: { type: "string" },
       summary: { type: "string" },
       repos: { type: "string" },
+      ttl: { type: "string" },
     },
   });
   const [command, ...rest] = positionals;
@@ -153,6 +169,10 @@ async function main(argv: string[]): Promise<number> {
   if (command === "session" && (values.help || rest.length === 0)) {
     console.log(SESSION_USAGE);
     return values.help ? 0 : 1;
+  }
+  if ((command === "publish" || command === "unpublish") && values.help) {
+    console.log(PUBLISH_USAGE);
+    return 0;
   }
   if (command === "archive" && values.help) {
     console.log(ARCHIVE_USAGE);
@@ -216,6 +236,22 @@ async function main(argv: string[]): Promise<number> {
         args: rest,
         io: { out: (text) => console.log(text), err: (text) => console.error(text) },
         ownSessionId: () => ownSessionId(config),
+      });
+    case "publish":
+      return runPublish({
+        config,
+        target: rest[0],
+        ttl: values.ttl,
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        vercelToken: process.env.VERCEL_TOKEN,
+        fetchDetail: (projectId) => fetchHubProject(config, projectId),
+      });
+    case "unpublish":
+      return runUnpublish({
+        config,
+        target: rest[0],
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        vercelToken: process.env.VERCEL_TOKEN,
       });
     case "round":
       return runRound({ config, args: rest, io: consoleIo, cwd: values.cwd ?? process.cwd() });

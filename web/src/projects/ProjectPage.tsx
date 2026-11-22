@@ -28,6 +28,7 @@ import { useToast } from "../lib/toast";
 import { ProjectAuthoredPage } from "../page/AuthoredPage";
 import { SessionRow } from "../plan/SessionsPanel";
 import { ProjectPrs } from "./ProjectPrs";
+import { PublishButton, PublishedPages } from "./ProjectPublishing";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
 export function ProjectPage() {
@@ -57,6 +58,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
   const answeredQuestions = detail.questions.filter((question) => question.answered);
   return (
     <PageContainer>
+      <PublishButton projectId={project.id} />
       <PageHeader
         eyebrow={
           detail.area ? (
@@ -115,6 +117,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
           showRepo={project.repos.length > 1}
         />
       </section>
+      <PublishedPages projectId={project.id} />
       {detail.rounds.length > 0 ? (
         <section className="mb-10">
           <SectionHeading aside={pluralise(detail.rounds.length, "round")}>Rounds</SectionHeading>

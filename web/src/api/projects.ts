@@ -5,6 +5,7 @@ import type {
   ChecklistResults,
   ProjectDetail,
   ProjectStatus,
+  PublishRecord,
   StepResult,
 } from "@timthink/server";
 import { hc } from "hono/client";
@@ -117,4 +118,50 @@ export async function settlePlanCompletion(docPath: string, done: boolean) {
   if (!response.ok) {
     throw new Error(`Couldn't update the plan (${response.status})`);
   }
+}
+
+export interface PublishesView {
+  canPublish: boolean;
+  publishes: PublishRecord[];
+}
+
+export async function fetchPublishes(project: string): Promise<PublishesView> {
+  const response = await client.api.publish.$get({ query: { project } });
+  if (!response.ok) {
+    throw new Error(`Publishes request failed (${response.status})`);
+  }
+  const view: PublishesView = await response.json();
+  return view;
+}
+
+export async function publishProject(project: string, ttlHours: number): Promise<PublishRecord> {
+  const token = await sessionToken();
+  const response = await client.api.publish.$post(
+    { json: { project, ttlHours } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, "Publishing failed"));
+  }
+  const record: PublishRecord = await response.json();
+  return record;
+}
+
+export async function unpublishProject(deploymentId: string) {
+  const token = await sessionToken();
+  const response = await client.api.publish.unpublish.$post(
+    { json: { deploymentId } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, "Unpublishing failed"));
+  }
+}
+
+async function failureMessage(response: { status: number; json(): Promise<unknown> }, fallback: string) {
+  const body: unknown = await response.json().catch(() => null);
+  if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "string") {
+    return body.error;
+  }
+  return `${fallback} (${response.status})`;
 }

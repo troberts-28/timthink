@@ -7,6 +7,8 @@ export interface PageScope {
   ownerId: string;
   stacks: ProjectStack[];
   defaultRepo: string | null;
+  readOnly: boolean;
+  fileHref: (filePath: string) => string;
 }
 
 export const PageScopeContext = createContext<PageScope | null>(null);
@@ -43,6 +45,8 @@ export function projectPageScope(detail: ProjectDetail, pagePath: string): PageS
     ownerId: detail.project.id,
     stacks: detail.prs.stacks,
     defaultRepo: detail.project.repos[0] ?? null,
+    readOnly: false,
+    fileHref: rawFileHref,
   };
 }
 
@@ -52,16 +56,18 @@ export function areaPageScope(detail: AreaDetail, pagePath: string): PageScope {
     ownerId: detail.area.id,
     stacks: detail.projectPrs.flatMap((entry) => entry.prs.stacks),
     defaultRepo: detail.area.repos[0] ?? null,
+    readOnly: false,
+    fileHref: rawFileHref,
   };
 }
 
 const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/)/i;
 
 export function usePageFileHref(src: string) {
-  const { pagePath } = usePageScope();
+  const { pagePath, fileHref } = usePageScope();
   if (ABSOLUTE_URL.test(src)) {
     return src;
   }
   const resolved = resolveRelative(pagePath, src);
-  return resolved ? rawFileHref(resolved) : src;
+  return resolved ? fileHref(resolved) : src;
 }

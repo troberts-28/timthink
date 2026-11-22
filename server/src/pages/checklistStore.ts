@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { AreaRecord, ProjectRecord } from "../projects/registry.js";
@@ -53,6 +53,15 @@ export class ChecklistStore {
     const text = await readFile(this.filePath(owner, checklistId), "utf8").catch(() => null);
     const parsed = checklistFileSchema.safeParse(text === null ? null : parseJson(text));
     return parsed.success ? parsed.data : { steps: {} };
+  }
+
+  async readAll(owner: ChecklistOwner): Promise<Record<string, ChecklistResults>> {
+    const names = await readdir(path.dirname(this.filePath(owner, "_"))).catch(() => []);
+    const ids = names
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => name.slice(0, -".json".length))
+      .filter((id) => CHECKLIST_ID_PATTERN.test(id));
+    return Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await this.read(owner, id)] as const)));
   }
 
   async record({ owner, checklistId, stepId, result }: StepRecord): Promise<ChecklistResults> {

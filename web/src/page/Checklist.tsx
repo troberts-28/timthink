@@ -28,7 +28,7 @@ export function Checklist({ id, pr, children }: { id: string; pr?: number; child
   const recorded = Object.values(results);
   const passedOnHead = recorded.filter((result) => result.outcome === "pass" && !isStale(result, headSha)).length;
   return (
-    <ChecklistContext.Provider value={{ results, headSha, record }}>
+    <ChecklistContext.Provider value={{ results, headSha, record, readOnly: scope.readOnly }}>
       <div data-block-id={id} className="mb-[18px] overflow-hidden rounded-card border border-line bg-surface">
         <div className="flex items-center justify-between gap-3 border-b border-line-soft px-4 py-2 text-meta text-ink-64">
           <span>
@@ -75,6 +75,7 @@ export function Step({ id, children }: { id: string; children: ReactNode }) {
           <OutcomeButton
             label="Pass"
             active={result?.outcome === "pass" && !stale}
+            disabled={checklist.readOnly}
             tone="ok"
             onClick={() => void mark("pass")}
           >
@@ -83,6 +84,7 @@ export function Step({ id, children }: { id: string; children: ReactNode }) {
           <OutcomeButton
             label="Fail"
             active={result?.outcome === "fail" && !stale}
+            disabled={checklist.readOnly}
             tone="bad"
             onClick={() => void mark("fail")}
           >
@@ -93,7 +95,7 @@ export function Step({ id, children }: { id: string; children: ReactNode }) {
           <div className="text-ink">{children}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-meta text-ink-64">
             {result ? <StepStatus result={result} stale={stale} /> : <span>Not checked</span>}
-            {result ? (
+            {result && !checklist.readOnly ? (
               <button type="button" className="text-ink-64 underline-offset-2 hover:underline" onClick={openNote}>
                 {result.note ? "Edit note" : "Add note"}
               </button>
@@ -135,12 +137,14 @@ function StepStatus({ result, stale }: { result: StepResult; stale: boolean }) {
 function OutcomeButton({
   label,
   active,
+  disabled,
   tone,
   onClick,
   children,
 }: {
   label: string;
   active: boolean;
+  disabled: boolean;
   tone: "ok" | "bad";
   onClick: () => void;
   children: ReactNode;
@@ -153,7 +157,8 @@ function OutcomeButton({
       aria-pressed={active}
       title={label}
       onClick={onClick}
-      className={`grid size-6 place-items-center rounded-chip border transition-colors duration-150 ${
+      disabled={disabled}
+      className={`grid size-6 place-items-center rounded-chip border transition-colors duration-150 disabled:cursor-default ${
         active ? activeClass : "border-line text-ink-32 hover:border-ink-32 hover:text-ink"
       }`}
     >
@@ -173,6 +178,7 @@ function isStale(result: StepResult, headSha: string | null) {
 }
 
 interface ChecklistState {
+  readOnly: boolean;
   results: Record<string, StepResult>;
   headSha: string | null;
   record: (stepId: string, result: Omit<StepResult, "at"> | null) => Promise<void>;

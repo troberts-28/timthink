@@ -26,6 +26,8 @@ import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
 import { type CompletionDeps, completePlansWithMergedPrs, markPlanDone } from "./prs/completion.js";
 import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
 import { PrService } from "./prs/prService.js";
+import { Publisher } from "./publish/publisher.js";
+import { VercelClient } from "./publish/vercel.js";
 import { ReadOnlyError } from "./readOnly.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
@@ -38,6 +40,8 @@ import { createPsRunner, type LiveClaudeProcess, scanLiveClaudeProcesses } from 
 import { type SessionChange, SessionStore } from "./sessions/sessionStore.js";
 import { createMacOpener, type OpenUrl } from "./sessions/warp.js";
 import { defaultWebDist, mountWebApp } from "./webAssets.js";
+
+const PUBLISH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export const BIND_HOST = "127.0.0.1";
 
@@ -93,6 +97,7 @@ export interface Runtime {
   rounds: RoundStore;
   hub: EventHub;
   token: string;
+  publisher: Publisher;
   startHistory(): Promise<void>;
   startWatching(): DocsWatcher;
   startSessionTracking(): DocsWatcher;
@@ -357,8 +362,18 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     },
   });
 
+  const vercelToken = process.env.VERCEL_TOKEN;
+  const publisher = new Publisher({
+    docsRoot: config.docsRoot,
+    stateDir: config.stateDir,
+    webDist: options.webDist ?? defaultWebDist(),
+    vercel: vercelToken ? new VercelClient({ token: vercelToken, fetch }) : null,
+    now: () => new Date(),
+  });
+
   const app: Hono = createApp({
     config,
+    publisher,
     store,
     hub,
     code,
@@ -408,6 +423,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     rounds,
     hub,
     token,
+    publisher,
     startPrTracking: () => prs.start(),
     startHistory: async () => {
       const stats = await history.snapshotAll();
@@ -444,6 +460,15 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   const sessionTracking = options.watch === false ? null : runtime.startSessionTracking();
   const roundTracking = options.watch === false ? null : await runtime.startRoundTracking();
   const stopPrTracking = options.watch === false ? null : runtime.startPrTracking();
+  const removeExpiredPublishes = () =>
+    void runtime.publisher
+      .removeExpired()
+      .catch((error: unknown) => options.log?.(`removing expired publishes failed: ${String(error)}`));
+  const publishCleanup =
+    options.watch === false ? null : setInterval(removeExpiredPublishes, PUBLISH_CLEANUP_INTERVAL_MS);
+  if (publishCleanup) {
+    removeExpiredPublishes();
+  }
   if (options.watch !== false) {
     runtime.startHistory().catch((error: unknown) => options.log?.(`snapshotting docs failed: ${String(error)}`));
   }
@@ -462,6 +487,9 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
         sessionTracking?.close();
         roundTracking?.close();
         stopPrTracking?.();
+        if (publishCleanup) {
+          clearInterval(publishCleanup);
+        }
         runtime.history.close();
         server.close(() => resolve());
         if ("closeAllConnections" in server) server.closeAllConnections();

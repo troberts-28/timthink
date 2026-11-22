@@ -111,6 +111,10 @@ A project can carry a `project.page.tsx` in its folder. The hub renders it at th
 
 **Area pages.** An area can carry an `area.page.tsx`, rendered at the top of the area page above its projects, live PRs across projects and reference docs. It earns its place when several projects share something a reader needs before picking one: the households and gates every project tests with, how the area's stacks fit together, or decisions that bind all of them. Don't write one to list projects or PRs; the area page already does. It works like a project page with three differences: `useArea()` (the area with its projects and docs, `projectPrs` with each live project's open stacks, and `repoLinks`) replaces `useProject()`; a `Checklist`'s `pr` can be any PR in those stacks; and comments arrive as a review on `<area>/area.page.tsx`. Check it with `timthink check <area>/area.page.tsx`.
 
+## Publishing a project
+
+`timthink publish <project-id> [--ttl 7d]` puts the project's page, PRs and every doc in full on an unlisted Vercel URL that stops working after the TTL (1h to 90d). Only publish when the user asks, and tell them anyone with the link can read every doc in the project until it expires. When they ask for the link in a PR description, publish, then add it to the body as `Project page: <url> (until <date>)`, keeping the rest of the body verbatim. It needs `VERCEL_TOKEN` in the environment and the hub running; never ask for the token's value. `timthink unpublish <url>` takes it down early.
+
 ## `/timthink review [doc]`
 
 The user submitted a review in the hub. Work through all of it.
