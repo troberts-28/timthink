@@ -179,7 +179,7 @@ A plan is archived when you archive it, or when its project is `shipped` or `dro
 | `timthink project list \| show \| create \| status \| link-pr \| unlink-pr \| legacy-docs` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent, `legacy-docs` lists docs outside any project as JSON |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links; for a `.page.tsx`, compile it, render it once and check block ids |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
-| `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
+| `timthink review list \| show \| comment \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews, or comment on a passage in your draft review (`timthink review --help`) |
 | `timthink round create \| wait \| show \| report \| abandon \| list` | Create a decision round, wait in the background until you submit it (exit 3 if abandoned), and record outcomes (`timthink round --help`) |
 | `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active even in a shipped project (`--clear` forgets either) |
 | `timthink archive --list [--repo name]`         | List archived plans and why                                                       |

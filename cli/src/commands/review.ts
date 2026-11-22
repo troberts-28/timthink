@@ -18,6 +18,8 @@ export const REVIEW_USAGE = `Usage: timthink review <command>
 
 Commands:
   show <doc>                                  Print the submitted review waiting on <doc> (exit 2 if none)
+  comment <doc> <quote> [message]             Comment as Claude on the passage <quote>, adding it to the draft review
+                                              (reads the message from stdin when omitted or "-")
   reply <doc> <thread-id> [message]           Reply as Claude (reads the message from stdin when omitted or "-")
   resolve <doc> <thread-id> [--message text]  Resolve a thread, optionally with a final reply
   answer-ack <doc> <question-id> [--message text]
@@ -133,6 +135,12 @@ async function runSubcommand(
   switch (subcommand) {
     case "show":
       return show(service, docPath, io);
+    case "comment": {
+      requireArgs(args, 2, "comment <doc> <quote> [message]");
+      const view = await service.commentAsClaude(docPath, args[1] ?? "", await messageFrom(args.slice(2), io));
+      io.out(`Commented as ${view.threads.at(-1)?.id}.`);
+      return 0;
+    }
     case "reply": {
       requireArgs(args, 2, "reply <doc> <thread-id> [message]");
       const threadId = normaliseId(

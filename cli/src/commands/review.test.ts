@@ -169,6 +169,31 @@ describe("timthink review", () => {
     expect((await cli(["addressed", DOC])).code).toBe(1);
   });
 
+  it("comments as Claude in the reviewer's draft review, which hands it back once submitted", async () => {
+    expect((await cli(["comment", DOC, "Ship the table first.", "Backfill", "first?"])).code).toBe(0);
+    expect((await cli(["comment", DOC, "early, without a gate", "-"], {}, "Is the gate needed?\n")).code).toBe(0);
+
+    const drafted = await human.state(DOC);
+    const draft = drafted.reviews.find((review) => review.id === drafted.draftReviewId);
+    expect(draft?.author).toBe("Test Reviewer");
+    expect(drafted.threads.map((thread) => [thread.reviewId, thread.anchor.quote, thread.messages[0]?.author])).toEqual(
+      [
+        [draft?.id, "Ship the table first.", "claude"],
+        [draft?.id, "early, without a gate", "claude"],
+      ],
+    );
+    expect((await cli(["show", DOC])).code).toBe(NOTHING_TO_ADDRESS_EXIT_CODE);
+
+    await human.submit(DOC, drafted.version, "comment", "");
+    expect((await cli(["show", DOC])).out).toContain("Backfill first?");
+  });
+
+  it("refuses a comment whose quote is missing or ambiguous", async () => {
+    expect((await cli(["comment", DOC, "Not in the plan", "hi"])).code).toBe(1);
+    expect((await cli(["comment", DOC, "the", "hi"])).code).toBe(1);
+    expect((await human.state(DOC)).threads).toEqual([]);
+  });
+
   it("reports unknown threads and usage errors without a stack trace", async () => {
     await submitReview();
     const unknown = await cli(["reply", DOC, "t-nope", "hi"]);

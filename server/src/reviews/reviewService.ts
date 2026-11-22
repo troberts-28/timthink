@@ -12,6 +12,7 @@ import {
   addReply,
   addThread,
   appendSystemMessage,
+  CLAUDE_ACTOR,
   deleteDraftMessage,
   deleteDraftThread,
   draftReview,
@@ -78,6 +79,15 @@ const VERDICT_STATUS: Record<Verdict, string | null> = {
 
 const ACCEPTED_MESSAGE = "Accepted";
 
+function uniqueQuoteStart(raw: string, quote: string): number {
+  const start = raw.indexOf(quote);
+  if (!quote || start === -1) throw new ReviewOperationError("invalid", "The quoted passage isn't in the plan");
+  if (raw.indexOf(quote, start + 1) !== -1) {
+    throw new ReviewOperationError("invalid", "The quoted passage appears more than once; quote more of it");
+  }
+  return start;
+}
+
 export interface HubDocWrite {
   docPath: string;
   before: string;
@@ -137,6 +147,15 @@ export class ReviewService {
       const anchor = createAnchor(doc.raw, request.start, request.end, doc.hash);
       const suggestion = request.kind === "suggestion" ? request.suggestion : null;
       return addThread(file, { kind: request.kind, anchor, body: request.body, suggestion }, actor, this.now());
+    });
+  }
+
+  async commentAsClaude(docPath: string, quote: string, body: string): Promise<ReviewView> {
+    const reviewer = await this.humanActor();
+    return this.mutate(docPath, null, (file, doc) => {
+      const start = uniqueQuoteStart(doc.raw, quote);
+      const anchor = createAnchor(doc.raw, start, start + quote.length, doc.hash);
+      return addThread(file, { kind: "comment", anchor, body, suggestion: null }, CLAUDE_ACTOR, this.now(), reviewer);
     });
   }
 
