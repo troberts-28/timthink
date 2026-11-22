@@ -1,0 +1,252 @@
+import type {
+  DocKind,
+  IndexedDoc,
+  ProjectActivity,
+  ProjectDetail,
+  ProjectQuestion,
+  ProjectThread,
+} from "@timthink/server";
+import { CircleHelp, FolderKanban, MessageSquare } from "lucide-react";
+import { Link, useParams } from "react-router";
+import { NotFoundError } from "../api/client";
+import { useProject } from "../api/queries";
+import { ArchivedDocs } from "../components/ArchivedDocs";
+import { AttachmentList } from "../components/AttachmentList";
+import { DocList } from "../components/DocList";
+import { EmptyState } from "../components/EmptyState";
+import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
+import { partitionArchived } from "../lib/archive";
+import { pluralise, relativeTime } from "../lib/format";
+import { areaHref, docHref } from "../lib/routes";
+import { ProjectPrs } from "./ProjectPrs";
+import { ProjectStatusPicker } from "./ProjectStatus";
+
+const KIND_ORDER: DocKind[] = ["plan", "design", "research", "decision", "handoff", "notes"];
+
+const KIND_HEADINGS: Record<DocKind, string> = {
+  plan: "Plans",
+  design: "Design",
+  research: "Research",
+  decision: "Decisions",
+  handoff: "Handoffs",
+  notes: "Notes",
+};
+
+export function ProjectPage() {
+  const { "*": projectId = "" } = useParams();
+  const { data: detail, error, isLoading } = useProject(projectId);
+  if (error) {
+    return (
+      <PageContainer>
+        <EmptyState icon={FolderKanban}>
+          {error instanceof NotFoundError ? "There is no project with that id." : "This project couldn't be loaded."}
+        </EmptyState>
+      </PageContainer>
+    );
+  }
+  if (isLoading || !detail) {
+    return <PageContainer>{null}</PageContainer>;
+  }
+  return <ProjectOverview detail={detail} />;
+}
+
+function ProjectOverview({ detail }: { detail: ProjectDetail }) {
+  const { project } = detail;
+  const { active, archived } = partitionArchived(project.docs);
+  const yourQuestions = detail.questions.filter((question) => !question.answered);
+  const yourThreads = detail.threads.filter((thread) => thread.waitingOn === "you");
+  const claudeThreads = detail.threads.filter((thread) => thread.waitingOn === "claude");
+  const answeredQuestions = detail.questions.filter((question) => question.answered);
+  return (
+    <PageContainer>
+      <PageHeader
+        eyebrow={
+          detail.area ? (
+            <Link to={areaHref(detail.area.id)} className="hover:text-ink">
+              {detail.area.title}
+            </Link>
+          ) : (
+            "Project"
+          )
+        }
+        title={project.title}
+        meta={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <ProjectStatusPicker projectId={project.id} status={project.status} />
+            {project.repos.length > 0 ? <span>{project.repos.join(", ")}</span> : null}
+            <span>· {pluralise(active.length, "active doc")}</span>
+          </span>
+        }
+      />
+      {project.summary ? (
+        <p className="m-0 -mt-4 mb-8 max-w-[72ch] text-[16px] leading-[1.6] text-ink-64">{project.summary}</p>
+      ) : null}
+      {project.problems.length > 0 ? <ManifestProblems problems={project.problems} /> : null}
+      {yourQuestions.length + yourThreads.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading aside={pluralise(yourQuestions.length + yourThreads.length, "item")}>
+            Needs you
+          </SectionHeading>
+          <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
+            {yourQuestions.map((question) => (
+              <QuestionRow key={`${question.docPath}:${question.line}`} question={question} />
+            ))}
+            {yourThreads.map((thread) => (
+              <ThreadRow key={thread.threadId} thread={thread} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <section className="mb-10">
+        <SectionHeading>Pull requests</SectionHeading>
+        <ProjectPrs
+          projectId={project.id}
+          prs={detail.prs}
+          repoLinks={detail.repoLinks}
+          showRepo={project.repos.length > 1}
+        />
+      </section>
+      {KIND_ORDER.map((kind) => (
+        <DocsOfKind key={kind} kind={kind} docs={active.filter((doc) => doc.kind === kind)} />
+      ))}
+      {active.length === 0 ? (
+        <div className="mb-10 rounded-card border border-line bg-surface">
+          <EmptyState>
+            {archived.length > 0 ? "Every doc here is archived." : "No docs yet. Write one into this project's folder."}
+          </EmptyState>
+        </div>
+      ) : null}
+      <ArchivedDocs docs={archived} />
+      {claudeThreads.length + answeredQuestions.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading>Waiting on Claude</SectionHeading>
+          <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
+            {answeredQuestions.map((question) => (
+              <QuestionRow key={`${question.docPath}:${question.line}`} question={question} />
+            ))}
+            {claudeThreads.map((thread) => (
+              <ThreadRow key={thread.threadId} thread={thread} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {detail.activity.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading>Activity</SectionHeading>
+          <ol className="m-0 list-none p-0">
+            {detail.activity.map((entry) => (
+              <ActivityRow key={`${entry.kind}:${entry.at}:${entry.docPath ?? entry.pr?.number}`} entry={entry} />
+            ))}
+          </ol>
+        </section>
+      ) : null}
+      {detail.attachments.length > 0 ? (
+        <section>
+          <SectionHeading aside={pluralise(detail.attachments.length, "file")}>Files</SectionHeading>
+          <div className="rounded-card border border-line bg-surface px-2 py-1.5">
+            <AttachmentList attachments={detail.attachments} stripPrefix={`${project.id}/`} />
+          </div>
+        </section>
+      ) : null}
+    </PageContainer>
+  );
+}
+
+function DocsOfKind({ kind, docs }: { kind: DocKind; docs: IndexedDoc[] }) {
+  if (docs.length === 0) {
+    return null;
+  }
+  return (
+    <section className="mb-10">
+      <SectionHeading aside={pluralise(docs.length, "doc")}>{KIND_HEADINGS[kind]}</SectionHeading>
+      <DocList docs={docs} />
+    </section>
+  );
+}
+
+function ManifestProblems({ problems }: { problems: string[] }) {
+  return (
+    <div className="mb-8 rounded-card border border-line bg-bad-soft px-4 py-3 text-ui text-ink">
+      <p className="m-0 font-medium">project.yaml has problems, so some fields fell back to defaults:</p>
+      <ul className="m-0 mt-1 pl-5">
+        {problems.map((problem) => (
+          <li key={problem}>{problem}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function QuestionRow({ question }: { question: ProjectQuestion }) {
+  return (
+    <li className="border-b border-line-soft last:border-b-0">
+      <Link
+        to={docHref(question.docPath)}
+        className="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-bg/60"
+      >
+        <CircleHelp className="mt-0.5 size-4 flex-none text-accent-ink" strokeWidth={1.75} aria-hidden />
+        <span className="min-w-0">
+          <span className="block text-ui font-medium text-ink">{question.prompt}</span>
+          <span className="block truncate text-meta text-ink-64">
+            {question.answered ? "Answered, waiting for Claude · " : "Open question · "}
+            {question.docTitle}
+          </span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+function ThreadRow({ thread }: { thread: ProjectThread }) {
+  return (
+    <li className="border-b border-line-soft last:border-b-0">
+      <Link
+        to={docHref(thread.docPath)}
+        className="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-bg/60"
+      >
+        <MessageSquare className="mt-0.5 size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
+        <span className="min-w-0">
+          <span className="block truncate text-ui text-ink">{thread.body || thread.quote}</span>
+          <span className="block truncate text-meta text-ink-64">
+            {thread.waitingOn === "you" ? "Claude replied · " : "Your comment · "}
+            {thread.docTitle} · “{thread.quote}”
+          </span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+const ACTIVITY_VERBS: Record<ProjectActivity["kind"], string> = {
+  "doc-updated": "Updated",
+  "review-submitted": "You reviewed",
+  "review-addressed": "Claude addressed your review of",
+  "pr-merged": "Merged",
+  "pr-closed": "Closed",
+  "pr-updated": "Updated",
+};
+
+function ActivityRow({ entry }: { entry: ProjectActivity }) {
+  const subject = entry.pr ? `#${entry.pr.number} ${entry.title}` : entry.title;
+  return (
+    <li className="flex items-baseline gap-3 py-1.5 text-ui">
+      <time dateTime={entry.at} className="w-20 flex-none text-meta text-ink-32 tabular-nums">
+        {relativeTime(Date.parse(entry.at))}
+      </time>
+      <span className="min-w-0 truncate text-ink-64">
+        {ACTIVITY_VERBS[entry.kind]}{" "}
+        {entry.docPath ? (
+          <Link to={docHref(entry.docPath)} className="text-ink hover:underline">
+            {subject}
+          </Link>
+        ) : entry.pr ? (
+          <a href={entry.pr.url} target="_blank" rel="noreferrer" className="text-ink hover:underline">
+            {subject}
+          </a>
+        ) : (
+          <span className="text-ink">{subject}</span>
+        )}
+      </span>
+    </li>
+  );
+}

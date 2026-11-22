@@ -1,6 +1,7 @@
 import type { DocsIndex, IndexedDoc, RepoIndex } from "@timthink/server";
 import { describe, expect, it } from "vitest";
 import { parentHref, searchIndex } from "./navigation";
+import { selectionFromPath } from "./selection";
 
 function doc(path: string, title: string, overrides: Partial<IndexedDoc> = {}): IndexedDoc {
   const [repo = "", ...rest] = path.split("/");
@@ -50,13 +51,40 @@ const billingA = doc("acme/billing/a.md", "Billing cutover");
 const billingB = doc("acme/billing/b.md", "Billing rollback");
 const solo = doc("acme/solo/only.md", "Solo plan");
 const rateLimiter = doc("acme/rate-limiter.md", "Rate limiter", { mtime: 5 });
+const checkoutPlan = doc("payments/checkout/plan.md", "Checkout plan", { projectId: "payments/checkout" });
+const areaResearch = doc("payments/research.md", "Processor research", { kind: "research" });
 const oldPlan = doc("garden/old.md", "Old billing idea", { archive: { state: "auto" }, mtime: 9 });
 
 const INDEX: DocsIndex = {
   generatedAt: "",
   groups: null,
   sidebarQuotes: [],
-  areas: [],
+  areas: [
+    {
+      id: "payments",
+      title: "Payments",
+      summary: null,
+      repos: ["acme"],
+      problems: [],
+      docs: [areaResearch],
+      lastActivity: 0,
+      projects: [
+        {
+          id: "payments/checkout",
+          area: "payments",
+          slug: "checkout",
+          title: "Checkout",
+          summary: null,
+          status: "active",
+          repos: ["acme"],
+          problems: [],
+          docs: [checkoutPlan],
+          attachmentCount: 0,
+          lastActivity: 0,
+        },
+      ],
+    },
+  ],
   projects: [],
   codeRepos: {},
   repos: [
@@ -74,11 +102,18 @@ const INDEX: DocsIndex = {
 
 describe("parentHref", () => {
   it("goes plan → folder → repo → inbox, skipping single-plan folders", () => {
-    expect(parentHref(INDEX, { repo: "acme", project: null, docPath: billingA.path })).toBe("/r/acme/billing");
-    expect(parentHref(INDEX, { repo: "acme", project: null, docPath: solo.path })).toBe("/r/acme");
-    expect(parentHref(INDEX, { repo: "acme", project: "billing", docPath: null })).toBe("/r/acme");
-    expect(parentHref(INDEX, { repo: "acme", project: null, docPath: null })).toBe("/");
-    expect(parentHref(INDEX, { repo: null, project: null, docPath: null })).toBeNull();
+    expect(parentHref(INDEX, selectionFromPath(`/d/${billingA.path}`))).toBe("/r/acme/billing");
+    expect(parentHref(INDEX, selectionFromPath(`/d/${solo.path}`))).toBe("/r/acme");
+    expect(parentHref(INDEX, selectionFromPath("/r/acme/billing"))).toBe("/r/acme");
+    expect(parentHref(INDEX, selectionFromPath("/r/acme"))).toBe("/");
+    expect(parentHref(INDEX, selectionFromPath("/"))).toBeNull();
+  });
+
+  it("goes project doc → project → area → inbox", () => {
+    expect(parentHref(INDEX, selectionFromPath(`/d/${checkoutPlan.path}`))).toBe("/p/payments/checkout");
+    expect(parentHref(INDEX, selectionFromPath(`/d/${areaResearch.path}`))).toBe("/a/payments");
+    expect(parentHref(INDEX, selectionFromPath("/p/payments/checkout"))).toBe("/a/payments");
+    expect(parentHref(INDEX, selectionFromPath("/a/payments"))).toBe("/");
   });
 });
 

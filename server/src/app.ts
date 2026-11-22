@@ -438,9 +438,9 @@ export function createApp(deps: AppDeps) {
       const request = c.req.valid("json");
       const doc = store.getDoc(request.doc);
       if (!doc) return c.json<BuildLaunchResponse>({ status: "unavailable", message: "Unknown plan" }, 404);
-      const template = config.repos[doc.repo]?.buildLaunch;
+      const template = config.repos[doc.codeRepo]?.buildLaunch;
       if (!template) {
-        return c.json<BuildLaunchResponse>({ status: "unavailable", message: `No build launcher for ${doc.repo}` });
+        return c.json<BuildLaunchResponse>({ status: "unavailable", message: `No build launcher for ${doc.codeRepo}` });
       }
       const branch = request.branch ?? doc.branch ?? suggestBranch(doc.path);
       try {
@@ -461,13 +461,13 @@ export function createApp(deps: AppDeps) {
     .get("/api/doc-worktree", zValidator("query", docPathQuery), async (c) => {
       const doc = store.getDoc(c.req.valid("query").path);
       if (!doc) return c.json({ error: "Not found" }, 404);
-      const worktree = doc.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      const worktree = doc.branch ? await deps.worktrees.forBranch(doc.codeRepo, doc.branch) : null;
       return c.json({ worktree });
     })
     .post("/api/open-worktree", zValidator("json", openWorktreeBody), async (c) => {
       const { path: docPath, app } = c.req.valid("json");
       const doc = store.getDoc(docPath);
-      const worktree = doc?.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      const worktree = doc?.branch ? await deps.worktrees.forBranch(doc.codeRepo, doc.branch) : null;
       if (!worktree) return c.json({ status: "not-found" as const }, 404);
       try {
         if (app === "zed") await deps.openInEditor(worktree.path);

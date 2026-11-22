@@ -3,7 +3,7 @@ import { Hammer, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useDocSessions, useDocsIndex } from "../api/queries";
 import { Button } from "../components/Button";
-import { findRepo } from "../lib/indexNav";
+import { codeRepoFor } from "../lib/indexNav";
 import { useToast } from "../lib/toast";
 import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "./BuildOptions";
 import { handOffBuild, LAUNCH } from "./buildHandOff";
@@ -13,10 +13,13 @@ function BuildDialogPanel({ doc, close }: { doc: DocDetail; close: () => void })
   const titleId = useId();
   const { data } = useDocSessions(doc.summary.path);
   const { data: index } = useDocsIndex();
-  const repo = findRepo(index, doc.summary.repo);
-  const state = useBuildOptions(planForBuild(doc.summary.path, doc, repo), data?.sessions ?? [], {
-    allowNotNow: false,
-  });
+  const state = useBuildOptions(
+    planForBuild(doc.summary.path, doc, codeRepoFor(index, doc.summary)),
+    data?.sessions ?? [],
+    {
+      allowNotNow: false,
+    },
+  );
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {

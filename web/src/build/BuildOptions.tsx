@@ -1,4 +1,4 @@
-import type { BuildRequest, DocDetail, PhaseSummary, RepoIndex, SessionView } from "@timthink/server";
+import type { BuildRequest, CodeRepoInfo, DocDetail, PhaseSummary, SessionView } from "@timthink/server";
 import { isValidBranchName, suggestBranch } from "@timthink/server/shared";
 import { FolderGit2, Hammer, PauseCircle, SquareSplitHorizontal } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
@@ -49,12 +49,16 @@ export interface PlanForBuild {
   canLaunch: boolean;
 }
 
-export function planForBuild(docPath: string, doc: DocDetail | undefined, repo: RepoIndex | undefined): PlanForBuild {
+export function planForBuild(
+  docPath: string,
+  doc: DocDetail | undefined,
+  codeRepo: CodeRepoInfo | undefined,
+): PlanForBuild {
   return {
     path: docPath,
     branch: doc?.summary.branch ?? null,
     phases: doc?.phases ?? [],
-    canLaunch: repo?.buildLauncher ?? false,
+    canLaunch: codeRepo?.buildLauncher ?? false,
   };
 }
 

@@ -108,6 +108,7 @@ export interface AreaEntry {
 export interface CodeRepoInfo {
   github: GithubRepo | null;
   prLinks: PrLinkHost;
+  buildLauncher: boolean;
 }
 
 export interface DocsIndex {

@@ -1,4 +1,4 @@
-import type { DocDetail, DocsIndex, RepoIndex } from "@timthink/server";
+import type { CodeRepoInfo, DocDetail, DocsIndex } from "@timthink/server";
 import type { Root } from "hast";
 import { FileQuestion } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
@@ -16,7 +16,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ProgressBar } from "../components/TaskProgress";
 import { TopBarSlot } from "../components/TopBarSlot";
 import { pluralise } from "../lib/format";
-import { findRepo } from "../lib/indexNav";
+import { codeRepoFor } from "../lib/indexNav";
 import { MarkdownBody } from "../markdown/Markdown";
 import { PlanContext } from "../markdown/PlanContext";
 import { ArchiveBanner } from "../plan/ArchiveBanner";
@@ -69,14 +69,14 @@ function TaskSummary({ doc, hast }: { doc: DocDetail; hast: Root | null }) {
 interface PaperProps {
   doc: DocDetail;
   hast: Root | null;
-  repo: RepoIndex | undefined;
+  codeRepo: CodeRepoInfo | undefined;
   body: ReactNode;
   bodyRef: (element: HTMLDivElement | null) => void;
   headerActions: ReactNode;
   banner: ReactNode;
 }
 
-function Paper({ doc, hast, repo, body, bodyRef, headerActions, banner }: PaperProps) {
+function Paper({ doc, hast, codeRepo, body, bodyRef, headerActions, banner }: PaperProps) {
   const stripPrefix = doc.summary.relPath.includes("/") ? `${doc.summary.relPath.split("/")[0]}/` : "";
   return (
     <>
@@ -95,7 +95,7 @@ function Paper({ doc, hast, repo, body, bodyRef, headerActions, banner }: PaperP
           </div>
           <h1 className="display m-0 text-plan-title text-ink">{doc.summary.title}</h1>
           <div className="mt-4">
-            <PlanMeta doc={doc.summary} github={repo?.github ?? null} prLinks={repo?.prLinks ?? "graphite"} />
+            <PlanMeta doc={doc.summary} github={codeRepo?.github ?? null} prLinks={codeRepo?.prLinks ?? "graphite"} />
           </div>
           <ReviewChipRow />
           <TaskSummary doc={doc} hast={hast} />
@@ -140,16 +140,9 @@ function useScrollToHash(ready: boolean): void {
   }, [ready, hash]);
 }
 
-function PlanPaper({
-  doc,
-  repo,
-  index,
-}: {
-  doc: DocDetail;
-  repo: RepoIndex | undefined;
-  index: DocsIndex | undefined;
-}) {
-  const rendered = useRenderedMarkdown(doc, repo, index);
+function PlanPaper({ doc, index }: { doc: DocDetail; index: DocsIndex | undefined }) {
+  const rendered = useRenderedMarkdown(doc, index);
+  const codeRepo = codeRepoFor(index, doc.summary);
   const toc = rendered?.toc ?? [];
   const activeId = useActiveHeading(toc, SCROLL_CONTAINER_ID);
   useScrollToHash(rendered !== null);
@@ -160,7 +153,7 @@ function PlanPaper({
   const openBuild = useCallback(() => setBuildOpen(true), []);
   const closeBuild = useCallback(() => setBuildOpen(false), []);
   return (
-    <PlanContext.Provider value={{ repo: doc.summary.repo, docPath: doc.summary.path }}>
+    <PlanContext.Provider value={{ repo: doc.summary.codeRepo, docPath: doc.summary.path }}>
       <ReviewProvider docPath={doc.summary.path} raw={doc.raw} docHash={doc.hash}>
         <ChangesProvider doc={doc}>
           <PlanShortcuts docPath={doc.summary.path} raw={doc.raw} onBuild={openBuild} />
@@ -183,7 +176,7 @@ function PlanPaper({
                 <Paper
                   doc={doc}
                   hast={rendered?.hast ?? null}
-                  repo={repo}
+                  codeRepo={codeRepo}
                   body={body}
                   bodyRef={bodyRef}
                   headerActions={headerActions}
@@ -204,7 +197,6 @@ export function PlanPage() {
   const docPath = `${repoName}/${rest}`;
   const { data: index } = useDocsIndex();
   const { data: doc, error, isLoading } = useDoc(docPath);
-  const repo = findRepo(index, repoName);
 
   if (error) {
     const message =
@@ -222,5 +214,5 @@ export function PlanPage() {
       </div>
     );
   }
-  return <PlanPaper key={doc.summary.path} doc={doc} repo={repo} index={index} />;
+  return <PlanPaper key={doc.summary.path} doc={doc} index={index} />;
 }

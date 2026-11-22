@@ -12,8 +12,10 @@ import { ThemeProvider } from "./lib/theme";
 import { ToastProvider } from "./lib/toast";
 import { InboxPage } from "./pages/InboxPage";
 import { PlanPage } from "./pages/PlanPage";
-import { ProjectPage } from "./pages/ProjectPage";
 import { RepoPage } from "./pages/RepoPage";
+import { RepoProjectPage } from "./pages/RepoProjectPage";
+import { AreaPage } from "./projects/AreaPage";
+import { ProjectPage } from "./projects/ProjectPage";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
@@ -32,7 +34,9 @@ createRoot(rootElement).render(
               <Route element={<AppShell />}>
                 <Route index element={<InboxPage />} />
                 <Route path="r/:repo" element={<RepoPage />} />
-                <Route path="r/:repo/:project" element={<ProjectPage />} />
+                <Route path="r/:repo/:project" element={<RepoProjectPage />} />
+                <Route path="a/:area" element={<AreaPage />} />
+                <Route path="p/*" element={<ProjectPage />} />
                 <Route path="d/:repo/*" element={<PlanPage />} />
                 <Route path="*" element={<EmptyState>Nothing lives at this address.</EmptyState>} />
               </Route>

@@ -1,4 +1,13 @@
-import type { DocsIndex, IndexedDoc, ProjectIndex, RepoIndex } from "@timthink/server";
+import type {
+  AreaEntry,
+  CodeRepoInfo,
+  DocSummary,
+  DocsIndex,
+  IndexedDoc,
+  ProjectEntry,
+  ProjectIndex,
+  RepoIndex,
+} from "@timthink/server";
 import { isArchived } from "./archive";
 
 export function findRepo(index: DocsIndex | undefined, name: string | undefined): RepoIndex | undefined {
@@ -14,7 +23,43 @@ export function repoDocs(repo: RepoIndex): IndexedDoc[] {
 }
 
 export function allDocs(index: DocsIndex): IndexedDoc[] {
-  return index.repos.flatMap(repoDocs);
+  return [
+    ...index.areas.flatMap((area) => [...area.docs, ...area.projects.flatMap((project) => project.docs)]),
+    ...index.projects.flatMap((project) => project.docs),
+    ...index.repos.flatMap(repoDocs),
+  ];
+}
+
+export function allProjects(index: DocsIndex): ProjectEntry[] {
+  return [...index.areas.flatMap((area) => area.projects), ...index.projects];
+}
+
+export function findProjectEntry(index: DocsIndex | undefined, id: string | null | undefined) {
+  return id && index ? allProjects(index).find((project) => project.id === id) : undefined;
+}
+
+export function findArea(index: DocsIndex | undefined, id: string | null | undefined): AreaEntry | undefined {
+  return id ? index?.areas.find((area) => area.id === id) : undefined;
+}
+
+export function codeRepoFor(index: DocsIndex | undefined, doc: DocSummary): CodeRepoInfo | undefined {
+  return index?.codeRepos[doc.codeRepo];
+}
+
+export function neighbourDocPaths(index: DocsIndex | undefined, doc: DocSummary) {
+  if (!index) {
+    return [];
+  }
+  const project = findProjectEntry(index, doc.projectId);
+  if (project) {
+    return project.docs.map((entry) => entry.path);
+  }
+  const area = findArea(index, doc.repo);
+  if (area) {
+    return area.docs.map((entry) => entry.path);
+  }
+  const repo = findRepo(index, doc.repo);
+  return repo ? repoDocs(repo).map((entry) => entry.path) : [];
 }
 
 export function recentDocs(index: DocsIndex, limit: number): IndexedDoc[] {

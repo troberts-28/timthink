@@ -274,7 +274,11 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
             buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
           };
         },
-        codeRepoInfo: (repo) => ({ github: github.get(repo), prLinks: prLinkHostFor(config, repo) }),
+        codeRepoInfo: (repo) => ({
+          github: github.get(repo),
+          prLinks: prLinkHostFor(config, repo),
+          buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
+        }),
         archiveOf: (summary) => archive.stateFor(summary),
         prAttentionOf: (summary) => prs.attentionFor(summary),
         groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),

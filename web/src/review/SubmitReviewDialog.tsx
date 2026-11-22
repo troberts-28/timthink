@@ -6,7 +6,7 @@ import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "../bu
 import { handOffBuild, handOffBuildCommand, NOT_NOW } from "../build/buildHandOff";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
-import { findRepo } from "../lib/indexNav";
+import { codeRepoFor } from "../lib/indexNav";
 import { useToast } from "../lib/toast";
 import { defaultHandOffTarget, HandOffTarget } from "./HandOffTarget";
 import { copyText, handOffToClaude, reviewCommand } from "./handOff";
@@ -65,8 +65,8 @@ export function SubmitReviewDialog() {
   const target = chosenTarget ?? defaultHandOffTarget(sessions);
   const { data: doc } = useDoc(docPath);
   const { data: index } = useDocsIndex();
-  const repo = findRepo(index, docPath.split("/")[0] ?? "");
-  const build = useBuildOptions(planForBuild(docPath, doc, repo), sessions, { allowNotNow: true });
+  const codeRepo = doc ? codeRepoFor(index, doc.summary) : undefined;
+  const build = useBuildOptions(planForBuild(docPath, doc, codeRepo), sessions, { allowNotNow: true });
   const titleId = useId();
   const close = () => {
     setSubmitOpen(false);

@@ -3,6 +3,7 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
+import { fetchProject } from "./projects";
 import { fetchDocPrs, lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 
@@ -24,7 +25,18 @@ export const queryKeys = {
   docPrs: (path: string) => ["doc-prs", path] as const,
   prLookupRoot: ["pr-lookup"] as const,
   prLookup: (owner: string, repo: string, numbers: string) => ["pr-lookup", owner, repo, numbers] as const,
+  projectRoot: ["project"] as const,
+  project: (id: string) => ["project", id] as const,
 };
+
+export function useProject(id: string) {
+  return useQuery({
+    queryKey: queryKeys.project(id),
+    queryFn: () => fetchProject(id),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
 
 export function useDocHistory(path: string) {
   return useQuery({
@@ -128,7 +140,10 @@ function parseEvent(data: string): HubEvent | null {
 export function useLiveUpdates(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const invalidateInbox = () => void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
+    const invalidateInbox = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot });
+    };
     const onIndexChanged = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.index });
       void queryClient.invalidateQueries({ queryKey: queryKeys.attachmentsRoot });
