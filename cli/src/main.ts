@@ -36,7 +36,8 @@ Commands:
                         Print the docs folder for a project, or for the git repo containing dir
   project <command>     List, show, create and update projects (see \`timthink project --help\`)
   docs-root             Print the docs root
-  check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
+  check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links,
+                        or compile and render a project.page.tsx
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
   round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)

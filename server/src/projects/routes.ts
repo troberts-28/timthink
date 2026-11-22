@@ -3,6 +3,7 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import type { DocsStore } from "../docs/store.js";
 import type { DocsIndex, GithubRepo } from "../docs/types.js";
+import type { ProjectPages } from "../pages/pageBundle.js";
 import type { PrService } from "../prs/prService.js";
 import { ReadOnlyError } from "../readOnly.js";
 import type { ReviewStore } from "../reviews/reviewStore.js";
@@ -22,6 +23,7 @@ export interface ProjectRouteDeps {
   prs: PrService;
   githubFor: (repo: string) => GithubRepo | null;
   getIndex: () => DocsIndex;
+  pages: ProjectPages;
 }
 
 const PR_ACTIONS = ["link", "unlink", "reattach"] as const;
@@ -59,6 +61,13 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
       });
       return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
+    })
+    .get("/page", zValidator("query", projectQuery), async (c) => {
+      const record = deps.registry.project(c.req.valid("query").id);
+      if (!record) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      return c.json(await deps.pages.forProject(record.id));
     })
     .post("/pr", zValidator("json", prBody), async (c) => {
       const { id, repo, number, action } = c.req.valid("json");

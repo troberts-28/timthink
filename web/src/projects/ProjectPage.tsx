@@ -25,6 +25,7 @@ import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
 import { areaHref, docHref, roundHref } from "../lib/routes";
 import { useToast } from "../lib/toast";
+import { AuthoredPage } from "../page/AuthoredPage";
 import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
@@ -89,6 +90,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
         <p className="m-0 -mt-4 mb-8 max-w-[72ch] text-[16px] leading-[1.6] text-ink-64">{project.summary}</p>
       ) : null}
       {project.problems.length > 0 ? <ManifestProblems problems={project.problems} /> : null}
+      <AuthoredPage detail={detail} />
       {yourQuestions.length + yourThreads.length > 0 ? (
         <section className="mb-10">
           <SectionHeading aside={pluralise(yourQuestions.length + yourThreads.length, "item")}>

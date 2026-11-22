@@ -79,6 +79,28 @@ In a project folder the folder decides the project, so leave out `project:`. Doc
 1. Run `timthink check <path-to-plan>`. It checks frontmatter, `question`/`mermaid`/`demo` blocks, relative links and the `project.yaml`/`area.yaml` the doc sits under, printing problems with line numbers. Fix every error and every question-block warning, and re-run until it passes before you report back.
 2. When the plan wants input, run `timthink url <path-to-plan>` and end your message with the URL it prints.
 
+## Project pages
+
+A project can carry a `project.page.tsx` in its folder. The hub renders it at the top of the project's page, above the generated sections (PRs, rounds, docs, open questions, activity), so it holds what those can't: what the project is, how to test and demo it, diagrams and decisions.
+
+**When.** Pages are opt-in. Write one when a project has test setup, demos or diagrams worth keeping, or when the user asks; never to restate the generated sections. Once a project has a page, keep it current: update it whenever you write a plan, open a PR or change test setup in that project.
+
+**How.**
+- Default-export one component. Import only from `react`, `timthink/page` and relative files (shared components can live in the area folder and be imported with `../`).
+- Build from the primitives in `timthink/page`:
+  - `<Section id title>`: a titled section; the page's top-level blocks.
+  - `<Callout tone>`: `tone` is `note` (default), `tip`, `warning` or `caution`.
+  - `<Choices options={[{ title, body, chosen }]}>`: the options considered, with the chosen one marked.
+  - `<BeforeAfter before={…} after={…}>` and `<DecisionTable rows={[{ decision, choice, why }]}>`.
+  - `<KvTable rows={{ Gate: <code>x</code>, "Test card": "4000…" }}>`.
+  - `<Diagram caption>` around a raw `<svg>`, `<Mermaid code>` for anything Mermaid draws (flows, sequences, ER diagrams), and `<ScreenFlow before={[{ src, caption }]} after={[…]}>` for screenshot sequences, with `src` relative to the page's folder.
+  - `<CopyCommand command>` for seed and setup commands.
+  - `useProject()` returns the project's live detail: `project` (manifest and docs), `prs`, `questions`, `threads`, `activity` and `rounds`.
+- Plain JSX (`<p>`, `<ul>`, `<table>`, `<code>`) is styled like a plan. Tailwind classes only work when the hub already uses them, so lay things out with the primitives or an inline `style`.
+- Give every primitive an `id` that is unique on the page and stays the same across edits (`id="how-to-test"`): the user's comments on the page anchor to these ids.
+
+**Finishing.** Run `timthink check <project-folder>/project.page.tsx`. It compiles the page, renders it once against stub project data and checks that block ids are unique. Fix every error and re-run until it passes. The hub shows compile and render errors on the project page too.
+
 ## `/timthink review [doc]`
 
 The user submitted a review in the hub. Work through all of it.

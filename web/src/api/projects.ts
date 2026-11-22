@@ -1,4 +1,4 @@
-import type { AppType, ProjectDetail, ProjectStatus } from "@timthink/server";
+import type { AppType, ProjectDetail, ProjectPageView, ProjectStatus } from "@timthink/server";
 import { hc } from "hono/client";
 import { NotFoundError, sessionToken, TOKEN_HEADER } from "./client";
 
@@ -23,6 +23,15 @@ export async function fetchProject(id: string): Promise<ProjectDetail> {
   }
   const detail: ProjectDetail = await response.json();
   return detail;
+}
+
+export async function fetchProjectPage(id: string): Promise<ProjectPageView> {
+  const response = await client.api.project.page.$get({ query: { id } });
+  if (!response.ok) {
+    throw new Error(`Project page request failed (${response.status})`);
+  }
+  const page: ProjectPageView = await response.json();
+  return page;
 }
 
 export async function changeProjectPr(change: ProjectPrChange) {

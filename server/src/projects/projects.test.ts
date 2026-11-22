@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DocsIndex, IndexedDoc } from "../docs/types.js";
+import type { ProjectPageView } from "../pages/pageBundle.js";
 import type { PrInfo } from "../prs/types.js";
 import { TOKEN_HEADER } from "../security.js";
 import { createRuntime, type Runtime } from "../server.js";
@@ -106,6 +107,34 @@ describe("projects API", () => {
     });
     expect(text).toContain("summary: One-page checkout with saved cards.");
     expect((await post("/api/project/status", { id: "nope", status: "paused" })).status).toBe(404);
+  });
+
+  it("serves a project's authored page, rebuilt when an imported file changes", async () => {
+    const page = async () => {
+      const response = await runtime.app.request(`${BASE}/api/project/page?id=${encodeURIComponent(CHECKOUT_ID)}`);
+      const body: ProjectPageView = await response.json();
+      return body;
+    };
+    expect(await page()).toEqual({ kind: "none" });
+
+    const projectDir = path.join(docsRoot, CHECKOUT_ID);
+    await writeFile(path.join(projectDir, "steps.ts"), 'export const steps = ["seed"];\n');
+    await writeFile(
+      path.join(projectDir, "project.page.tsx"),
+      'import { Section } from "timthink/page";\nimport { steps } from "./steps";\nexport default () => <Section id="a" title="A">{steps}</Section>;\n',
+    );
+    const built = await page();
+    expect(built.kind).toBe("built");
+    expect(built.kind === "built" && built.code).toContain('require("timthink/page")');
+    expect(await page()).toEqual(built);
+
+    await writeFile(path.join(projectDir, "steps.ts"), 'export const steps = ["seed", "log in"];\n');
+    const rebuilt = await page();
+    expect(rebuilt.kind === "built" && built.kind === "built" && rebuilt.hash !== built.hash).toBe(true);
+
+    await writeFile(path.join(projectDir, "steps.ts"), "export const steps = [;\n");
+    const failed = await page();
+    expect(failed.kind === "failed" && failed.errors[0]?.file).toBe(`${CHECKOUT_ID}/steps.ts`);
   });
 
   it("keeps a project listed with its problems when the manifest is invalid", async () => {
