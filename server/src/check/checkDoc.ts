@@ -3,6 +3,7 @@ import { isMap, isScalar, isSeq, LineCounter, parseDocument } from "yaml";
 import { canonicalStatus } from "../docs/status.js";
 import { type Fence, parseInfoString, scanFences } from "../markdown/fences.js";
 import { detailsSections, parseQuestionBlock, type QuestionBlock } from "../markdown/questionBlock.js";
+import { linkTargets, relativeTarget } from "../markdown/relativeLinks.js";
 
 export const KNOWN_STATUSES = ["draft", "review", "approved", "in-progress", "done", "abandoned"] as const;
 
@@ -34,11 +35,6 @@ export interface CheckResult {
 const FRONTMATTER_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 const PR_NUMBER = /^#?\d+$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
-const INLINE_LINK = /!?\[(?:[^\]\\]|\\.)*\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*)?\)/g;
-const LINK_DEFINITION = /^ {0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)/;
-const INLINE_CODE = /(`+)[\s\S]*?\1/g;
-const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/)/i;
-const TEMPLATED = /[{}$]/;
 
 function lineAt(raw: string, offset: number): number {
   let line = 1;
@@ -202,41 +198,6 @@ async function checkMermaid(fences: readonly Fence[], input: CheckInput, notes: 
     problems.push({ line, severity: "error", message: `mermaid: ${failure.message}` });
   }
   return problems;
-}
-
-function relativeTarget(target: string): string | null {
-  if (EXTERNAL.test(target) || TEMPLATED.test(target)) return null;
-  const withoutFragment = target.split(/[?#]/)[0] ?? "";
-  if (!withoutFragment) return null;
-  try {
-    return decodeURIComponent(withoutFragment);
-  } catch {
-    return withoutFragment;
-  }
-}
-
-interface LinkTarget {
-  target: string;
-  line: number;
-  image: boolean;
-}
-
-function linkTargets(raw: string, fences: readonly Fence[]): LinkTarget[] {
-  const inFence = (offset: number) => fences.some((fence) => offset >= fence.start && offset < fence.end);
-  const found: LinkTarget[] = [];
-  let offset = 0;
-  raw.split("\n").forEach((line, index) => {
-    if (!inFence(offset)) {
-      const prose = line.replace(INLINE_CODE, (code) => " ".repeat(code.length));
-      for (const match of prose.matchAll(INLINE_LINK)) {
-        if (match[1]) found.push({ target: match[1], line: index + 1, image: match[0].startsWith("!") });
-      }
-      const definition = LINK_DEFINITION.exec(prose);
-      if (definition?.[1]) found.push({ target: definition[1], line: index + 1, image: false });
-    }
-    offset += line.length + 1;
-  });
-  return found;
 }
 
 async function checkFiles(raw: string, fences: readonly Fence[], input: CheckInput): Promise<CheckProblem[]> {

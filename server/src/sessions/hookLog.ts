@@ -57,6 +57,11 @@ export class JsonlFollower {
 
   constructor(readonly filePath: string) {}
 
+  rewind(): void {
+    this.offset = 0;
+    this.remainder = Buffer.alloc(0);
+  }
+
   async readNew(): Promise<FollowResult> {
     const handle = await open(this.filePath, "r").catch(() => null);
     if (!handle) return { lines: [], truncated: false };

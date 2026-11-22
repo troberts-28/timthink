@@ -1,4 +1,4 @@
-import type { RoundItem, RoundOption, RoundOutcome } from "@timthink/server";
+import type { PrCommentItem, RoundOption, RoundOutcome } from "@timthink/server";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useRoundFile } from "../api/queries";
@@ -10,9 +10,9 @@ export interface DraftChange {
   typing: boolean;
 }
 
-interface RoundItemCardProps {
+interface PrCommentItemCardProps {
   roundId: string;
-  item: RoundItem;
+  item: PrCommentItem;
   index: number;
   draft: ItemDraft;
   outcome: RoundOutcome | null;
@@ -34,7 +34,7 @@ export function roundOtherElementId(itemId: string) {
   return `round-other-${itemId}`;
 }
 
-export function RoundItemCard({
+export function PrCommentItemCard({
   roundId,
   item,
   index,
@@ -44,7 +44,7 @@ export function RoundItemCard({
   active,
   onActivate,
   onChange,
-}: RoundItemCardProps) {
+}: PrCommentItemCardProps) {
   return (
     <article
       id={roundItemElementId(item.id)}
@@ -77,12 +77,12 @@ export function RoundItemCard({
   );
 }
 
-function authorLine(item: RoundItem) {
+function authorLine(item: PrCommentItem) {
   const others = item.participants.filter((name) => name !== item.author);
   return others.length > 0 ? `${item.author} (+${others.length}: ${others.join(", ")})` : item.author;
 }
 
-function ThreadContext({ roundId, item }: { roundId: string; item: RoundItem }) {
+function ThreadContext({ roundId, item }: { roundId: string; item: PrCommentItem }) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
@@ -172,7 +172,7 @@ function CodeAtHead({ roundId, itemId }: { roundId: string; itemId: string }) {
 }
 
 interface DecisionPanelProps {
-  item: RoundItem;
+  item: PrCommentItem;
   draft: ItemDraft;
   editable: boolean;
   onChange: (change: DraftChange) => void;
@@ -315,9 +315,10 @@ const OUTCOME_CHIPS: Record<RoundOutcome["kind"], { label: string; className: st
   "no-change": { label: "No change", className: "chip-neutral" },
   deferred: { label: "Deferred", className: "chip-accent" },
   skipped: { label: "Skipped", className: "chip-muted" },
+  moved: { label: "Moved", className: "chip-ok-soft" },
 };
 
-function OutcomeChip({ outcome }: { outcome: RoundOutcome }) {
+export function OutcomeChip({ outcome }: { outcome: RoundOutcome }) {
   const chip = OUTCOME_CHIPS[outcome.kind];
   const detail = [outcome.commit?.slice(0, 7), outcome.note].filter(Boolean).join(" · ");
   return (

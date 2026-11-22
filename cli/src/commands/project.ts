@@ -24,6 +24,7 @@ Commands:
   status <id> [status]               Print or set the status: ${PROJECT_STATUSES.join(", ")}
   link-pr <id> <pr>                  Add a PR (123, repo#123 or a PR URL); 123 means the project's first repo
   unlink-pr <id> <pr>                Detach a PR, including one found through a doc or session
+  legacy-docs                        Print every doc outside an area or project as JSON, for a doc-moves round
 
 A project id is <project> for a standalone project, or <area>/<project>.`;
 
@@ -54,6 +55,10 @@ export async function runProject({ config, args, flags, io }: ProjectCommand): P
   try {
     if (subcommand === "list") {
       io.out(listProjects(registry, flags.repo));
+      return 0;
+    }
+    if (subcommand === "legacy-docs") {
+      io.out(JSON.stringify(await legacyDocs(config, registry), null, 2));
       return 0;
     }
     if (!id) {
@@ -96,6 +101,27 @@ export async function runProject({ config, args, flags, io }: ProjectCommand): P
   }
   io.err(PROJECT_USAGE);
   return 1;
+}
+
+async function legacyDocs(config: TimthinkConfig, registry: ProjectRegistry) {
+  const store = new DocsStore(config.docsRoot, registry);
+  await store.scanAll();
+  const legacyFolders = new Set(store.legacyRepoNames());
+  return store
+    .allDocs()
+    .filter((doc) => legacyFolders.has(doc.repo))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((doc) => ({
+      path: doc.path,
+      title: doc.title,
+      kind: doc.kind,
+      status: doc.status,
+      date: doc.date,
+      branch: doc.branch,
+      prs: doc.prs,
+      linear: doc.linear,
+      project: doc.project,
+    }));
 }
 
 function listProjects(registry: ProjectRegistry, repo: string | undefined) {

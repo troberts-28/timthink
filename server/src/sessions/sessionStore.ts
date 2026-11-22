@@ -66,6 +66,7 @@ export interface SessionStoreOptions {
   claudeProjectsDir: string;
   scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   onChange?: (change: SessionChange) => void;
+  resolveMovedDoc?: (docPath: string) => string;
 }
 
 function newestProcessPerSession(processes: readonly LiveClaudeProcess[]): Map<string, LiveClaudeProcess> {
@@ -169,6 +170,15 @@ export class SessionStore {
     return this.finishChange(change);
   }
 
+  async reloadHookLogs(): Promise<SessionChange> {
+    this.clearHookState();
+    this.sessionsLog.rewind();
+    this.docSessionsLog.rewind();
+    const change = await this.readHookLogs();
+    this.notify({ sessionIds: [], docPaths: [] });
+    return change;
+  }
+
   runBackfill(): Promise<BackfillStats> {
     this.backfillRunning ??= this.backfill
       .run((summary) => this.applyTranscript(summary))
@@ -246,13 +256,15 @@ export class SessionStore {
     if (argument.startsWith("~/")) return this.docPathFor(path.join(homedir(), argument.slice(2)));
     if (path.isAbsolute(argument)) return this.docPathFor(argument);
     const normalised = path.posix.normalize(argument);
-    return normalised.startsWith("../") || normalised === ".." || normalised === "." ? null : normalised;
+    if (normalised.startsWith("../") || normalised === ".." || normalised === ".") return null;
+    return this.options.resolveMovedDoc?.(normalised) ?? normalised;
   }
 
   docPathFor(filePath: string): string | null {
     if (!path.isAbsolute(filePath)) return null;
+    const resolve = this.options.resolveMovedDoc ?? ((docPath: string) => docPath);
     for (const root of this.docsRoots) {
-      if (isInside(root, filePath) && filePath !== root) return toPosix(path.relative(root, filePath));
+      if (isInside(root, filePath) && filePath !== root) return resolve(toPosix(path.relative(root, filePath)));
     }
     return null;
   }

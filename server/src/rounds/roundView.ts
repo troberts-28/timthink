@@ -22,6 +22,7 @@ export interface RoundView {
   waiting: boolean;
   session: SessionView | null;
   resumePrompt: string;
+  canUndo: boolean;
 }
 
 export function summarizeRound(round: Round): RoundSummary {
@@ -31,7 +32,7 @@ export function summarizeRound(round: Round): RoundSummary {
     title: round.title,
     repo: round.repo,
     project: round.project,
-    prs: round.prs.map(({ number, link }) => ({ number, link })),
+    prs: round.kind === "pr-comments" ? round.prs.map(({ number, link }) => ({ number, link })) : [],
     state: round.state,
     createdAt: round.createdAt,
     submittedAt: round.submittedAt,
@@ -44,6 +45,10 @@ export function summarizeRound(round: Round): RoundSummary {
 
 export function roundResumePrompt(round: Pick<Round, "id">) {
   return `/timthink comments --round ${round.id}`;
+}
+
+export function awaitsSession(round: Round) {
+  return round.kind === "pr-comments";
 }
 
 export function hasLiveWaiter(round: Round) {

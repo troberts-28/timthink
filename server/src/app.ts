@@ -22,6 +22,8 @@ import { parseFrontmatter } from "./frontmatter.js";
 import type { HistoryService } from "./history/historyService.js";
 import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
+import type { DocMoveService } from "./migration/docMoveService.js";
+import type { MovedDocs } from "./migration/movedDocs.js";
 import { mimeTypeFor } from "./mime.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
 import type { ProjectService } from "./projects/projectService.js";
@@ -68,6 +70,8 @@ export interface AppDeps {
   prs: PrService;
   projects: ProjectRegistry;
   rounds: RoundStore;
+  docMoves: DocMoveService;
+  movedDocs: MovedDocs;
   projectService: ProjectService;
   githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
@@ -324,6 +328,8 @@ export function createApp(deps: AppDeps) {
     .get("/api/doc", zValidator("query", docPathQuery), async (c) => {
       const { path: docPath } = c.req.valid("query");
       const summary = store.getDoc(docPath);
+      const movedTo = summary ? null : deps.movedDocs.movedTo(docPath);
+      if (movedTo) return c.json({ error: "Moved", movedTo }, 404);
       if (!summary) return c.json({ error: "Not found" }, 404);
       const absolute = await resolveInsideRoot(config.docsRoot, docPath).catch(() => null);
       const raw = absolute ? await readFile(absolute, "utf8").catch(() => null) : null;
@@ -423,6 +429,7 @@ export function createApp(deps: AppDeps) {
       "/api/round",
       roundRoutes({
         rounds: deps.rounds,
+        docMoves: deps.docMoves,
         hostCheckout: (repo) => hostCheckout(config, repo),
         sessionFor: async (round) => {
           await sessions.refreshLiveness();

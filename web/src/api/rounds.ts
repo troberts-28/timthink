@@ -32,6 +32,20 @@ export async function saveRoundDecision(id: string, itemId: string, decision: Ro
   );
 }
 
+export async function saveRoundDecisions(id: string, decisions: Record<string, RoundDecision>): Promise<RoundView> {
+  return roundMutation(
+    client.api.round.decisions.$post({ json: { id, decisions } }, { headers: await tokenHeaders() }),
+    "Couldn't save the decisions",
+  );
+}
+
+export async function undoRound(id: string): Promise<RoundView> {
+  return roundMutation(
+    client.api.round.undo.$post({ json: { id } }, { headers: await tokenHeaders() }),
+    "Couldn't undo the moves",
+  );
+}
+
 export async function submitRound(id: string): Promise<RoundView> {
   return roundMutation(
     client.api.round.submit.$post({ json: { id } }, { headers: await tokenHeaders() }),

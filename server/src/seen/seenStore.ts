@@ -121,6 +121,31 @@ export class SeenStore {
     await this.persist();
   }
 
+  async moveDocs(moves: ReadonlyMap<string, string>): Promise<void> {
+    const state = this.current();
+    for (const [from, to] of moves) {
+      const entry = state.docs[from];
+      if (entry) {
+        state.docs[to] = entry;
+        delete state.docs[from];
+      }
+    }
+    for (const [key, at] of Object.entries(state.threads)) {
+      const separator = key.lastIndexOf("#");
+      const to = moves.get(key.slice(0, separator));
+      if (to) {
+        state.threads[`${to}${key.slice(separator)}`] = at;
+        delete state.threads[key];
+      }
+    }
+    await this.persist();
+  }
+
+  async reload(): Promise<void> {
+    await this.writing;
+    this.state = (await this.load()) ?? this.state;
+  }
+
   private current(): SeenFile {
     if (!this.state) throw new Error("SeenStore used before init()");
     return this.state;

@@ -1,4 +1,4 @@
-import type { Round, RoundDecision, RoundOutcome, RoundWaiter } from "./schema.js";
+import { projectIdSchema, type Round, type RoundDecision, type RoundOutcome, type RoundWaiter } from "./schema.js";
 
 export type RoundErrorCode = "not-found" | "invalid" | "conflict";
 
@@ -22,7 +22,17 @@ export function decideRoundItem(round: Round, itemId: string, decision: RoundDec
   if (choice.kind === "option" && !item.options.some((option) => option.id === choice.optionId)) {
     throw new RoundError("invalid", `Item ${itemId} has no option ${choice.optionId}`);
   }
+  if (round.kind === "doc-moves" && choice.kind === "other" && !projectIdSchema.safeParse(choice.text).success) {
+    throw new RoundError("invalid", `"${choice.text}" isn't a project id: use <project> or <area>/<project>`);
+  }
   return { ...round, decisions: { ...round.decisions, [itemId]: decision } };
+}
+
+export function decideRoundItems(round: Round, decisions: Record<string, RoundDecision>): Round {
+  return Object.entries(decisions).reduce(
+    (decided, [itemId, decision]) => decideRoundItem(decided, itemId, decision),
+    round,
+  );
 }
 
 export function undecidedItems(round: Round) {
@@ -43,6 +53,13 @@ export function abandonRound(round: Round): Round {
     throw new RoundError("conflict", `${round.id} is already ${round.state}`);
   }
   return { ...round, state: "abandoned" };
+}
+
+export function reopenRound(round: Round): Round {
+  if (round.kind === "doc-moves") {
+    return { ...round, state: "open", submittedAt: null, outcomes: {}, applyError: null };
+  }
+  return { ...round, state: "open", submittedAt: null, outcomes: {} };
 }
 
 export function setRoundWaiter(round: Round, waiter: RoundWaiter | null): Round {

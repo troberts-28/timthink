@@ -5,11 +5,13 @@ import {
   abandonRound,
   BIND_HOST,
   DocsStore,
+  docMoveTarget,
   OUTCOME_KINDS,
+  type PrCommentItem,
+  type PrCommentsRound,
   ProjectRegistry,
   type Round,
   RoundError,
-  type RoundItem,
   RoundStore,
   reportRoundOutcomes,
   roundOutcomesSchema,
@@ -118,7 +120,9 @@ async function createRound({
     [
       `Created ${created.id} with ${created.items.length} item(s)${project ? ` in ${project}` : ""}.`,
       roundUrl(config, created.id),
-      `Wait for the decisions in the background: timthink round wait ${created.id}`,
+      created.kind === "pr-comments"
+        ? `Wait for the decisions in the background: timthink round wait ${created.id}`
+        : "The hub moves the docs when the round is submitted; nothing needs to wait.",
     ].join("\n"),
   );
   return 0;
@@ -202,6 +206,22 @@ async function reportOutcomes({
 }
 
 function decisionsReport(round: Round) {
+  if (round.kind === "doc-moves") {
+    return {
+      round: round.id,
+      state: round.state,
+      moves: round.items.map((item) => {
+        const decision = round.decisions[item.id];
+        return {
+          item: item.id,
+          doc: item.doc,
+          decided: decision !== undefined,
+          target: decision ? docMoveTarget(item, decision) : null,
+          outcome: round.outcomes[item.id] ?? null,
+        };
+      }),
+    };
+  }
   return {
     round: round.id,
     state: round.state,
@@ -210,7 +230,7 @@ function decisionsReport(round: Round) {
   };
 }
 
-function decisionLine(round: Round, item: RoundItem) {
+function decisionLine(round: PrCommentsRound, item: PrCommentItem) {
   const decision = round.decisions[item.id];
   const choice = decision?.choice;
   const option = choice?.kind === "option" ? item.options.find((candidate) => candidate.id === choice.optionId) : null;
@@ -233,7 +253,7 @@ function describeRound(round: Round) {
   const header = [
     `${round.id}: ${round.title}`,
     `State: ${round.state} · ${summary.decidedCount}/${summary.itemCount} decided · ${summary.reportedCount} reported${summary.waiting ? " · a session is waiting" : ""}`,
-    `PRs: ${round.prs.map((pr) => `#${pr.number}`).join(", ")}`,
+    ...(summary.prs.length > 0 ? [`PRs: ${summary.prs.map((pr) => `#${pr.number}`).join(", ")}`] : []),
   ];
   if (round.state === "open") {
     return header.join("\n");
@@ -254,6 +274,9 @@ function listRounds(rounds: readonly Round[]) {
 }
 
 async function projectForPrs(config: TimthinkConfig, round: Round) {
+  if (round.kind !== "pr-comments") {
+    return null;
+  }
   const registry = new ProjectRegistry(config.docsRoot);
   await registry.scan();
   const store = new DocsStore(config.docsRoot, registry);

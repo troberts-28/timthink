@@ -16,7 +16,7 @@ export const ARCHIVE_SCHEMA_VERSION = 1;
 export const ARCHIVE_ACTIONS = ["archive", "keep-active", "clear"] as const;
 export type ArchiveAction = (typeof ARCHIVE_ACTIONS)[number];
 
-const archiveFileSchema = z.object({
+export const archiveFileSchema = z.object({
   schemaVersion: z.literal(ARCHIVE_SCHEMA_VERSION),
   version: z.number().int().nonnegative(),
   archived: z.record(z.string(), z.string()),

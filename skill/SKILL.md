@@ -1,6 +1,6 @@
 ---
 name: timthink
-description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, act on reviews submitted from it, and build approved plans. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", runs "/timthink review" (with or without a doc path), "/timthink build <doc>" or "/timthink comments", asks you to address, answer or work through review comments on a plan, or asks you to implement a plan.
+description: Write implementation plans, design notes and specs as markdown that renders in the timthink hub, act on reviews submitted from it, and build approved plans. Use whenever you write or update a plan or planning doc, when the user says "write a plan", "plan this out", "put this in a plan", runs "/timthink review" (with or without a doc path), "/timthink build <doc>", "/timthink comments" or "/timthink migrate", asks you to address, answer or work through review comments on a plan, or asks you to implement a plan.
 ---
 
 # timthink
@@ -131,3 +131,15 @@ Address PR review comments with the decisions made in the hub instead of in chat
 8. **Exit 3** means the user abandoned the round: stop, with nothing edited, pushed or posted.
 
 `--round <id>` resumes a round, usually from the hub's Resume in Warp. Run `timthink round show <id>`: while it's `open`, go back to step 5; once `submitted`, its decisions are printed, so check out the PR's branch and carry on from step 6; once `done`, summarise its outcomes.
+
+## `/timthink migrate`
+
+Propose an area and project for every doc still in a legacy repo folder, as a round the hub applies when the user submits it.
+
+1. **Inventory.** `timthink project list` for the projects that already exist, and `timthink project legacy-docs` for every doc to place (path, title, kind, status, date, branch, PRs, Linear id, frontmatter `project:`). Read a doc when its metadata doesn't place it.
+2. **Propose.** Group docs into projects: one shippable piece of work each, inside an area for a long-running initiative (`car-insurance/annual-payments`). Reuse existing projects. A doc that fits nowhere goes to `misc/<its folder>`. Keep a doc where it is only when moving it would clearly be wrong, and say why.
+3. **Write the round** to a temp file and run `timthink round create <file>`:
+   - `{ "kind": "doc-moves", "title": "File docs into projects", "areas": [...], "projects": [...], "items": [...] }`.
+   - `areas`: `{ id, title, summary }` for each new area. `projects`: `{ id, title, summary, status, repos, prs }` for each new project, with `repos` most-used first and `status` (`active`, `paused`, `shipped` or `dropped`) from its docs and PRs.
+   - One item per doc: `{ id, doc, title, status, date, reason, options }`. `reason` is one line on why it belongs there. `options` are `{ id, label, hint, target }` with your proposal first, up to two plausible alternatives, and `{ "id": "leave", "label": "Leave it", "target": null }` last. `target` is a project id; `label` repeats it.
+4. **Hand over.** Don't wait: the hub moves the docs when the user submits, and Undo on the round page reverses it. End with one line and the round URL.

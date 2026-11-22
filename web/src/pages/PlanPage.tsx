@@ -2,8 +2,8 @@ import type { CodeRepoInfo, DocDetail, DocsIndex } from "@timthink/server";
 import type { Root } from "hast";
 import { FileQuestion } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useParams } from "react-router";
-import { NotFoundError } from "../api/client";
+import { Navigate, useLocation, useParams } from "react-router";
+import { DocMovedError, NotFoundError } from "../api/client";
 import { useDoc, useDocsIndex } from "../api/queries";
 import { BuildButton, BuildDialog } from "../build/BuildDialog";
 import { ChangesBanner } from "../changes/ChangesBanner";
@@ -17,6 +17,7 @@ import { ProgressBar } from "../components/TaskProgress";
 import { TopBarSlot } from "../components/TopBarSlot";
 import { pluralise } from "../lib/format";
 import { codeRepoFor } from "../lib/indexNav";
+import { docHref } from "../lib/routes";
 import { MarkdownBody } from "../markdown/Markdown";
 import { PlanContext } from "../markdown/PlanContext";
 import { ArchiveBanner } from "../plan/ArchiveBanner";
@@ -197,7 +198,11 @@ export function PlanPage() {
   const docPath = `${repoName}/${rest}`;
   const { data: index } = useDocsIndex();
   const { data: doc, error, isLoading } = useDoc(docPath);
+  const { hash } = useLocation();
 
+  if (error instanceof DocMovedError) {
+    return <Navigate to={`${docHref(error.movedTo)}${hash}`} replace />;
+  }
   if (error) {
     const message =
       error instanceof NotFoundError

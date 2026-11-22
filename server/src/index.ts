@@ -155,6 +155,7 @@ export type {
   Verdict,
 } from "./reviews/schema.js";
 export { lineNumberAt } from "./reviews/sections.js";
+export { docMoveTarget } from "./rounds/docMoveTarget.js";
 export {
   abandonRound,
   decideRoundItem,
@@ -168,7 +169,13 @@ export type { RoundSummary, RoundView } from "./rounds/roundView.js";
 export { roundResumePrompt, summarizeRound } from "./rounds/roundView.js";
 export type { RoundFileContext } from "./rounds/routes.js";
 export {
+  type DocMoveItem,
+  type DocMoveOption,
+  type DocMovesRound,
   OUTCOME_KINDS,
+  type PrCommentItem,
+  type PrCommentsRound,
+  type ProposedProject,
   type Round,
   type RoundChoice,
   type RoundDecision,

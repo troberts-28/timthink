@@ -16,6 +16,8 @@ import { EventHub, type HubEvent } from "./events.js";
 import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
+import { DocMoveService } from "./migration/docMoveService.js";
+import { MovedDocs } from "./migration/movedDocs.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
 import { ProjectService } from "./projects/projectService.js";
 import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
@@ -150,6 +152,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const seen = new SeenStore({ stateDir: config.stateDir, log });
   const preferences = new PreferencesStore(config.stateDir);
   await preferences.load();
+  const movedDocs = new MovedDocs(config.stateDir);
+  await movedDocs.load();
   const sessions = new SessionStore({
     docsRoot: config.docsRoot,
     stateDir: config.stateDir,
@@ -160,6 +164,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       prs.invalidateSessions();
       hub.publish({ type: "sessions-changed", ...change, version: hub.nextVersion() });
     },
+    resolveMovedDoc: (docPath) => movedDocs.resolve(docPath),
   });
   const history = new HistoryService({
     docsRoot: config.docsRoot,
@@ -344,6 +349,25 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     log(`re-indexed ${relPaths.length} path(s)`);
   };
 
+  const docMoves = new DocMoveService({
+    docsRoot: config.docsRoot,
+    stateDir: config.stateDir,
+    registry: projects,
+    seen,
+    movedDocs,
+    readOnly: config.readOnly,
+    onMoved: async () => {
+      await projects.scan();
+      store.redecorate();
+      await store.scanAll();
+      await Promise.all([github.refresh(repoNames()), archive.ensureRepos(store.repoNames())]);
+      await Promise.all(store.repoNames().map((repo) => archive.reloadRepo(repo)));
+      await sessions.reloadHookLogs();
+      cachedIndex = null;
+      hub.publish({ type: "index-changed", version: hub.nextVersion() });
+    },
+  });
+
   const app: Hono = createApp({
     config,
     store,
@@ -359,6 +383,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     prs,
     projects,
     rounds,
+    docMoves,
+    movedDocs,
     projectService: new ProjectService({ docsRoot: config.docsRoot, registry: projects, readOnly: config.readOnly }),
     githubFor: (repo) => github.get(repo),
     worktrees: new WorktreeIndex(config),

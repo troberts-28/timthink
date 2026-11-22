@@ -30,10 +30,15 @@ export function decisionFromDraft(draft: ItemDraft): RoundDecision | null {
 }
 
 export function withOption(item: RoundItem, draft: ItemDraft, optionId: string): ItemDraft {
-  const reply = item.reply.kind === "drafted" ? (item.reply.drafts[optionId] ?? "") : draft.reply;
-  return { ...draft, selection: { kind: "option", optionId }, reply };
+  const drafted = "reply" in item && item.reply.kind === "drafted" ? item.reply.drafts : null;
+  return {
+    ...draft,
+    selection: { kind: "option", optionId },
+    reply: drafted ? (drafted[optionId] ?? "") : draft.reply,
+  };
 }
 
 export function withOther(item: RoundItem, draft: ItemDraft): ItemDraft {
-  return { ...draft, selection: { kind: "other" }, reply: item.reply.kind === "drafted" ? "" : draft.reply };
+  const isDrafted = "reply" in item && item.reply.kind === "drafted";
+  return { ...draft, selection: { kind: "other" }, reply: isDrafted ? "" : draft.reply };
 }

@@ -54,21 +54,23 @@ export class RoundStore {
     if (!parsed.success) {
       throw new RoundError("invalid", formatIssues(parsed.error.issues));
     }
-    const { repo: requestedRepo, ...fields } = parsed.data;
-    const roundRepo = requestedRepo ?? repo;
-    const round: Round = {
-      ...fields,
+    const roundRepo = parsed.data.repo ?? repo;
+    const lifecycle = {
       id: newRoundId(roundRepo, parsed.data),
       repo: roundRepo,
       project,
       cwd,
       createdAt: now,
-      state: "open",
+      state: "open" as const,
       submittedAt: null,
       decisions: {},
       outcomes: {},
       waiter: null,
     };
+    const round: Round =
+      parsed.data.kind === "pr-comments"
+        ? { ...parsed.data, ...lifecycle }
+        : { ...parsed.data, ...lifecycle, applyError: null };
     await mkdir(this.dir, { recursive: true });
     await writeFileAtomic(this.filePath(round.id), `${JSON.stringify(round, null, 2)}\n`);
     return round;
@@ -98,10 +100,10 @@ export function roundIdOf(fileName: string) {
   return ROUND_ID_PATTERN.test(id) ? id : null;
 }
 
-function newRoundId(repo: string, input: Pick<RoundInput, "prs">) {
+function newRoundId(repo: string, input: RoundInput) {
   const slug = repo.replace(/[^\w-]+/g, "-").slice(0, 40);
-  const firstPr = input.prs[0]?.number ?? 0;
-  return `${slug}-${firstPr}-${randomBytes(2).toString("hex")}`;
+  const scope = input.kind === "pr-comments" ? (input.prs[0]?.number ?? 0) : "moves";
+  return `${slug}-${scope}-${randomBytes(2).toString("hex")}`;
 }
 
 function parseJson(text: string): unknown {

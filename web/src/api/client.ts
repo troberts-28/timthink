@@ -41,6 +41,12 @@ export function sessionToken(): Promise<string> {
 
 export class NotFoundError extends Error {}
 
+export class DocMovedError extends Error {
+  constructor(readonly movedTo: string) {
+    super(`Moved to ${movedTo}`);
+  }
+}
+
 // hono/client maps a path segment named "index" to "/", so this one route is fetched directly.
 export async function fetchIndex(): Promise<DocsIndex> {
   const response = await fetch("/api/index");
@@ -51,7 +57,11 @@ export async function fetchIndex(): Promise<DocsIndex> {
 
 export async function fetchDoc(path: string): Promise<DocDetail> {
   const response = await client.api.doc.$get({ query: { path } });
-  if (response.status === 404) throw new NotFoundError(path);
+  if (response.status === 404) {
+    const body: unknown = await response.json().catch(() => null);
+    const movedTo = isMovedBody(body) ? body.movedTo : null;
+    throw movedTo ? new DocMovedError(movedTo) : new NotFoundError(path);
+  }
   if (!response.ok) throw new Error(`Doc request failed (${response.status})`);
   return response.json();
 }
@@ -138,4 +148,8 @@ export async function launchBuild(request: BuildRequest): Promise<BuildLaunchRes
   const response = await client.api.build.launch.$post({ json: request }, { headers: { [TOKEN_HEADER]: token } });
   if (!response.ok && response.status !== 404) throw new Error(`Launch failed (${response.status})`);
   return response.json();
+}
+
+function isMovedBody(body: unknown): body is { movedTo: string } {
+  return typeof body === "object" && body !== null && "movedTo" in body && typeof body.movedTo === "string";
 }

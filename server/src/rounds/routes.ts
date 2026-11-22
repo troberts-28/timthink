@@ -2,15 +2,25 @@ import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { runGit } from "../code/git.js";
+import type { DocMoveService } from "../migration/docMoveService.js";
 import type { SessionView } from "../sessions/types.js";
 import { isExistingDirectory } from "../sessions/warp.js";
-import { abandonRound, decideRoundItem, RoundError, submitRound } from "./operations.js";
+import {
+  abandonRound,
+  decideRoundItem,
+  decideRoundItems,
+  RoundError,
+  reopenRound,
+  reportRoundOutcomes,
+  submitRound,
+} from "./operations.js";
 import type { RoundStore } from "./roundStore.js";
 import { hasLiveWaiter, type RoundView, roundResumePrompt, summarizeRound } from "./roundView.js";
-import { ROUND_ID_PATTERN, type Round, roundDecisionSchema } from "./schema.js";
+import { type DocMovesRound, ROUND_ID_PATTERN, type Round, roundDecisionSchema } from "./schema.js";
 
 export interface RoundRouteDeps {
   rounds: RoundStore;
+  docMoves: DocMoveService;
   sessionFor: (round: Round) => Promise<SessionView | null>;
   hostCheckout: (repo: string) => string;
 }
@@ -24,7 +34,9 @@ const CONTEXT_LINES_AROUND = 10;
 const roundId = z.string().regex(ROUND_ID_PATTERN);
 const idQuery = z.object({ id: roundId });
 const idBody = z.object({ id: roundId });
-const decisionBody = z.object({ id: roundId, itemId: z.string().min(1).max(64), decision: roundDecisionSchema });
+const itemId = z.string().min(1).max(64);
+const decisionBody = z.object({ id: roundId, itemId, decision: roundDecisionSchema });
+const decisionsBody = z.object({ id: roundId, decisions: z.record(itemId, roundDecisionSchema) });
 const fileQuery = z.object({ id: roundId, item: z.string().min(1).max(64) });
 
 export function roundRoutes(deps: RoundRouteDeps) {
@@ -33,6 +45,7 @@ export function roundRoutes(deps: RoundRouteDeps) {
     waiting: hasLiveWaiter(round),
     session: await deps.sessionFor(round),
     resumePrompt: roundResumePrompt(round),
+    canUndo: round.kind === "doc-moves" && round.state !== "open" && (await deps.docMoves.canUndo(round)),
   });
 
   return new Hono()
@@ -46,10 +59,20 @@ export function roundRoutes(deps: RoundRouteDeps) {
         view(await deps.rounds.update(id, (round) => decideRoundItem(round, itemId, decision))),
       );
     })
+    .post("/decisions", zValidator("json", decisionsBody), (c) => {
+      const { id, decisions } = c.req.valid("json");
+      return attempt(c, async () => view(await deps.rounds.update(id, (round) => decideRoundItems(round, decisions))));
+    })
     .post("/submit", zValidator("json", idBody), (c) =>
-      attempt(c, async () =>
-        view(await deps.rounds.update(c.req.valid("json").id, (round) => submitRound(round, new Date().toISOString()))),
-      ),
+      attempt(c, async () => {
+        const submitted = await deps.rounds.update(c.req.valid("json").id, (round) =>
+          submitRound(round, new Date().toISOString()),
+        );
+        return view(submitted.kind === "doc-moves" ? await applyDocMoves(deps, submitted) : submitted);
+      }),
+    )
+    .post("/undo", zValidator("json", idBody), (c) =>
+      attempt(c, async () => view(await undoDocMoves(deps, await deps.rounds.read(c.req.valid("json").id)))),
     )
     .post("/abandon", zValidator("json", idBody), (c) =>
       attempt(c, async () => view(await deps.rounds.update(c.req.valid("json").id, abandonRound))),
@@ -60,7 +83,30 @@ export function roundRoutes(deps: RoundRouteDeps) {
     });
 }
 
+async function applyDocMoves(deps: RoundRouteDeps, round: DocMovesRound) {
+  try {
+    const outcomes = await deps.docMoves.apply(round);
+    return await deps.rounds.update(round.id, (current) => reportRoundOutcomes(current, outcomes));
+  } catch (error) {
+    const applyError = error instanceof Error ? error.message : String(error);
+    return deps.rounds.update(round.id, (current) => ({ ...current, applyError }));
+  }
+}
+
+async function undoDocMoves(deps: RoundRouteDeps, round: Round) {
+  if (round.kind !== "doc-moves" || round.state === "open") {
+    throw new RoundError("conflict", `${round.id} has no moves to undo`);
+  }
+  if (await deps.docMoves.canUndo(round)) {
+    await deps.docMoves.undo(round);
+  }
+  return deps.rounds.update(round.id, reopenRound);
+}
+
 async function fileContext(deps: RoundRouteDeps, round: Round, itemId: string): Promise<RoundFileContext> {
+  if (round.kind !== "pr-comments") {
+    return { status: "unavailable", message: "This round has no code" };
+  }
   const item = round.items.find((candidate) => candidate.id === itemId);
   const headSha = round.prs.find((pr) => pr.number === item?.pr)?.headSha;
   if (!item?.path || !item.line || !headSha) {
