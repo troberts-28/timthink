@@ -3,6 +3,7 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import type { DocsStore } from "../docs/store.js";
 import type { DocsIndex, GithubRepo } from "../docs/types.js";
+import { CHECKLIST_ID_PATTERN, type ChecklistStore, MAX_STEP_NOTE_LENGTH } from "../pages/checklistStore.js";
 import type { ProjectPages } from "../pages/pageBundle.js";
 import type { PrService } from "../prs/prService.js";
 import { ReadOnlyError } from "../readOnly.js";
@@ -24,6 +25,7 @@ export interface ProjectRouteDeps {
   githubFor: (repo: string) => GithubRepo | null;
   getIndex: () => DocsIndex;
   pages: ProjectPages;
+  checklists: ChecklistStore;
 }
 
 const PR_ACTIONS = ["link", "unlink", "reattach"] as const;
@@ -36,6 +38,21 @@ const prBody = z.object({
   action: z.enum(PR_ACTIONS),
 });
 const statusBody = z.object({ id: z.string().min(1).max(256), status: z.enum(PROJECT_STATUSES) });
+const checklistId = z.string().regex(CHECKLIST_ID_PATTERN);
+const checklistQuery = projectQuery.extend({ checklist: checklistId });
+const stepBody = checklistQuery.extend({
+  step: checklistId,
+  result: z
+    .object({
+      outcome: z.enum(["pass", "fail"]),
+      note: z.string().max(MAX_STEP_NOTE_LENGTH),
+      sha: z
+        .string()
+        .regex(/^[0-9a-f]{7,64}$/)
+        .nullable(),
+    })
+    .nullable(),
+});
 
 export function projectRoutes(deps: ProjectRouteDeps) {
   return new Hono()
@@ -68,6 +85,29 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         return c.json({ error: "Not found" }, 404);
       }
       return c.json(await deps.pages.forProject(record.id));
+    })
+    .get("/checklist", zValidator("query", checklistQuery), async (c) => {
+      const { id, checklist } = c.req.valid("query");
+      const record = deps.registry.project(id);
+      return record ? c.json(await deps.checklists.read(record, checklist)) : c.json({ error: "Not found" }, 404);
+    })
+    .post("/checklist", zValidator("json", stepBody), async (c) => {
+      const { id, checklist, step, result } = c.req.valid("json");
+      const record = deps.registry.project(id);
+      if (!record) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      try {
+        const stamped = result ? { ...result, at: new Date().toISOString() } : null;
+        return c.json(
+          await deps.checklists.record({ project: record, checklistId: checklist, stepId: step, result: stamped }),
+        );
+      } catch (error) {
+        if (error instanceof ReadOnlyError) {
+          return c.json({ error: error.message }, 403);
+        }
+        throw error;
+      }
     })
     .post("/pr", zValidator("json", prBody), async (c) => {
       const { id, repo, number, action } = c.req.valid("json");

@@ -2,14 +2,16 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DocsIndex, IndexedDoc } from "../docs/types.js";
+import type { ChecklistResults } from "../pages/checklistStore.js";
 import type { ProjectPageView } from "../pages/pageBundle.js";
 import type { PrInfo } from "../prs/types.js";
+import type { ReviewView } from "../reviews/reviewService.js";
 import { TOKEN_HEADER } from "../security.js";
 import { createRuntime, type Runtime } from "../server.js";
 import { copyFixtureDocs, testConfig } from "../test/fixtures.js";
 import { createGitRepo } from "../test/gitRepo.js";
 import { parseProjectManifest } from "./manifest.js";
-import { buildProjectDetail, type ProjectDetail, type ProjectViewDeps } from "./projectView.js";
+import { buildProjectDetail, type ProjectDetail, type ProjectThread, type ProjectViewDeps } from "./projectView.js";
 
 const BASE = "http://127.0.0.1:7420";
 const CHECKOUT_ID = "payments/checkout-v2";
@@ -137,6 +139,65 @@ describe("projects API", () => {
     expect(failed.kind === "failed" && failed.errors[0]?.file).toBe(`${CHECKOUT_ID}/steps.ts`);
   });
 
+  it("reviews a page block by its id and outdates the thread when the id goes", async () => {
+    const pagePath = `${CHECKOUT_ID}/project.page.tsx`;
+    const source =
+      'import { Section } from "timthink/page";\nexport default () => <Section id="setup" title="Setup">Seed</Section>;\n';
+    await writeFile(path.join(docsRoot, pagePath), source);
+    const page = await runtime.app.request(`${BASE}/api/project/page?id=${encodeURIComponent(CHECKOUT_ID)}`);
+    const view: ProjectPageView = await page.json();
+    if (view.kind !== "built") throw new Error(`page didn't build: ${view.kind}`);
+    const start = source.indexOf('id="setup"');
+
+    const created = await post("/api/review/threads", {
+      path: pagePath,
+      version: 0,
+      docHash: view.sourceHash,
+      start,
+      end: start + 'id="setup"'.length,
+      kind: "comment",
+      body: "Add the 3DS card here.",
+      suggestion: null,
+    });
+    const draft: ReviewView = await created.json();
+    expect(created.status).toBe(200);
+    await post("/api/review/submit", { path: pagePath, version: draft.version, verdict: "approve", body: "" });
+    expect(await readFile(path.join(docsRoot, pagePath), "utf8")).toBe(source);
+
+    const { body } = await project(CHECKOUT_ID);
+    expect(body.threads.map((thread: ProjectThread) => [thread.docPath, thread.quote, thread.waitingOn])).toEqual([
+      [pagePath, 'id="setup"', "claude"],
+    ]);
+
+    await writeFile(path.join(docsRoot, pagePath), source.replace('id="setup"', 'id="seeding-households"'));
+    const review = await runtime.app.request(`${BASE}/api/review?path=${encodeURIComponent(pagePath)}`);
+    const after: ReviewView = await review.json();
+    expect(after.threads.map((thread) => thread.status)).toEqual(["outdated"]);
+  });
+
+  it("records checklist steps against a head SHA and clears them", async () => {
+    const checklist = async () => {
+      const response = await runtime.app.request(
+        `${BASE}/api/project/checklist?id=${encodeURIComponent(CHECKOUT_ID)}&checklist=saved-cards`,
+      );
+      const body: ChecklistResults = await response.json();
+      return body;
+    };
+    const step = (result: unknown) =>
+      post("/api/project/checklist", { id: CHECKOUT_ID, checklist: "saved-cards", step: "pay", result });
+    expect(await checklist()).toEqual({ steps: {} });
+
+    expect((await step({ outcome: "fail", note: "3DS loops", sha: "abc1234" })).status).toBe(200);
+    expect((await checklist()).steps.pay).toMatchObject({ outcome: "fail", note: "3DS loops", sha: "abc1234" });
+    expect(
+      await readFile(path.join(docsRoot, "payments/.timthink/checklists/checkout-v2/saved-cards.json"), "utf8"),
+    ).toContain("3DS loops");
+
+    expect((await step({ outcome: "pass", note: "", sha: "../etc" })).status).toBe(400);
+    expect((await step(null)).status).toBe(200);
+    expect(await checklist()).toEqual({ steps: {} });
+  });
+
   it("keeps a project listed with its problems when the manifest is invalid", async () => {
     await writeFile(
       path.join(docsRoot, CHECKOUT_ID, "project.yaml"),
@@ -166,6 +227,7 @@ describe("project PRs", () => {
       review: null,
       unresolvedThreads: 0,
       headRef: `b${number}`,
+      headSha: null,
       baseRef: "main",
       closedAt: null,
       mergedAt: state === "merged" ? "2026-11-01T00:00:00.000Z" : null,

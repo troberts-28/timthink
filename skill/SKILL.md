@@ -95,9 +95,11 @@ A project can carry a `project.page.tsx` in its folder. The hub renders it at th
   - `<KvTable rows={{ Gate: <code>x</code>, "Test card": "4000…" }}>`.
   - `<Diagram caption>` around a raw `<svg>`, `<Mermaid code>` for anything Mermaid draws (flows, sequences, ER diagrams), and `<ScreenFlow before={[{ src, caption }]} after={[…]}>` for screenshot sequences, with `src` relative to the page's folder.
   - `<CopyCommand command>` for seed and setup commands.
+  - `<Checklist id pr={27974}>` with `<Step id="…">text</Step>` children: the user marks each step pass or fail with a note, stamped with the PR's head SHA, and a result goes stale when the PR gets new commits. `pr` must be one of the project's PRs.
   - `useProject()` returns the project's live detail: `project` (manifest and docs), `prs`, `questions`, `threads`, `activity` and `rounds`.
 - Plain JSX (`<p>`, `<ul>`, `<table>`, `<code>`) is styled like a plan. Tailwind classes only work when the hub already uses them, so lay things out with the primitives or an inline `style`.
-- Give every primitive an `id` that is unique on the page and stays the same across edits (`id="how-to-test"`): the user's comments on the page anchor to these ids.
+- Give every primitive an `id` that is unique on the page and stays the same across edits. Write it literally as `id="how-to-test"` in `project.page.tsx` itself: the user comments on blocks by id, and a block whose id lives in an imported component can't take comments.
+- Block comments arrive as a review on `<project-folder>/project.page.tsx`, handled with `/timthink review` like any plan. Each thread quotes the block's `id="…"` and gives its line. Renaming or removing the id makes the thread outdated.
 
 **Finishing.** Run `timthink check <project-folder>/project.page.tsx`. It compiles the page, renders it once against stub project data and checks that block ids are unique. Fix every error and re-run until it passes. The hub shows compile and render errors on the project page too.
 

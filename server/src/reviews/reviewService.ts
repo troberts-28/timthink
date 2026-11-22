@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { isPageFile } from "../pages/pageFile.js";
 import { ReadOnlyError } from "../readOnly.js";
 import { resolveInsideRoot } from "../safePath.js";
 import { createAnchor, locateAnchor, refreshAnchor } from "./anchor.js";
@@ -229,7 +230,7 @@ export class ReviewService {
   }
 
   private async applyVerdictStatus(docPath: string, verdict: Verdict): Promise<StatusUpdate> {
-    const status = VERDICT_STATUS[verdict];
+    const status = isPageFile(docPath) ? null : VERDICT_STATUS[verdict];
     if (!status) return { status: "unchanged" };
     try {
       const doc = await this.readDoc(docPath);

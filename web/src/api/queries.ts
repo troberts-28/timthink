@@ -3,7 +3,7 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
-import { fetchProject, fetchProjectPage } from "./projects";
+import { fetchChecklist, fetchProject, fetchProjectPage } from "./projects";
 import { lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 import { fetchRound, fetchRoundFile } from "./rounds";
@@ -27,6 +27,7 @@ export const queryKeys = {
   projectRoot: ["project"] as const,
   project: (id: string) => ["project", id] as const,
   projectPage: (id: string) => ["project", id, "page"] as const,
+  checklist: (id: string, checklist: string) => ["project", id, "checklist", checklist] as const,
   roundRoot: ["round"] as const,
   round: (id: string) => ["round", id] as const,
   roundFile: (id: string, item: string) => ["round-file", id, item] as const,
@@ -65,6 +66,14 @@ export function useProjectPage(id: string) {
     queryFn: () => fetchProjectPage(id),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
+  });
+}
+
+export function useChecklist(id: string, checklist: string) {
+  return useQuery({
+    queryKey: queryKeys.checklist(id, checklist),
+    queryFn: () => fetchChecklist(id, checklist),
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

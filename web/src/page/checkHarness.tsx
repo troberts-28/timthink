@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ProjectDetail } from "@timthink/server";
 import type { ReactNode } from "react";
 import { ThemeContext } from "../lib/theme";
@@ -8,10 +9,12 @@ const CHECK_THEME = { setting: "light", effective: "light", setSetting: () => {}
 
 export function CheckHarness({ project, children }: { project: ProjectDetail; children: ReactNode }) {
   return (
-    <ThemeContext.Provider value={CHECK_THEME}>
-      <ToastProvider>
-        <ProjectContext.Provider value={project}>{children}</ProjectContext.Provider>
-      </ToastProvider>
-    </ThemeContext.Provider>
+    <QueryClientProvider client={new QueryClient()}>
+      <ThemeContext.Provider value={CHECK_THEME}>
+        <ToastProvider>
+          <ProjectContext.Provider value={project}>{children}</ProjectContext.Provider>
+        </ToastProvider>
+      </ThemeContext.Provider>
+    </QueryClientProvider>
   );
 }

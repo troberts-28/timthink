@@ -602,3 +602,10 @@
   color: var(--ink-64);
   background: var(--bg-sunken);
 }
+
+.page-blocks [data-commented] {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}

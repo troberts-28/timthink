@@ -7,6 +7,7 @@ import type {
   IndexedDoc,
   ProjectEntry,
 } from "../docs/types.js";
+import { PROJECT_PAGE_FILE } from "../pages/pageFile.js";
 import { isTerminal, type PrInfo } from "../prs/types.js";
 import type { ReviewFile } from "../reviews/schema.js";
 import type { RoundSummary } from "../rounds/roundView.js";
@@ -274,7 +275,7 @@ function prActivity(stacks: readonly ProjectStack[]) {
   );
 }
 
-async function reviewItems(deps: ProjectViewDeps, docs: readonly IndexedDoc[]) {
+async function reviewItems(deps: ProjectViewDeps, docs: ReadonlyArray<Pick<IndexedDoc, "path" | "title">>) {
   const questions: ProjectQuestion[] = [];
   const threads: ProjectThread[] = [];
   const activity: ProjectActivity[] = [];
@@ -344,7 +345,8 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
   }
   const area = project.area ? deps.index.areas.find((entry) => entry.id === project.area) : undefined;
   const prs = collectPrs(deps, project.docs);
-  const reviews = await reviewItems(deps, project.docs);
+  const page = { path: `${project.id}/${PROJECT_PAGE_FILE}`, title: "Project page" };
+  const reviews = await reviewItems(deps, [...project.docs, page]);
   const docActivity: ProjectActivity[] = project.docs.map((doc) => ({
     kind: "doc-updated",
     at: new Date(doc.mtime).toISOString(),

@@ -15,6 +15,7 @@ export interface PrInfo {
   review: ReviewDecision | null;
   unresolvedThreads: number;
   headRef: string;
+  headSha: string | null;
   baseRef: string;
   closedAt: string | null;
   mergedAt: string | null;

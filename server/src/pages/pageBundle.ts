@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { type BuildFailure, type BuildOptions, build, type Message, type Plugin } from "esbuild";
+import { docHash } from "../reviews/paths.js";
+import { PROJECT_PAGE_FILE } from "./pageFile.js";
 
-export const PROJECT_PAGE_FILE = "project.page.tsx";
 export const PAGE_MODULE = "timthink/page";
 
 const HUB_EXTERNALS = ["react", "react/jsx-runtime", PAGE_MODULE];
@@ -22,12 +23,8 @@ export type PageBundle =
 
 export type ProjectPageView =
   | { kind: "none" }
-  | { kind: "built"; code: string; hash: string }
+  | { kind: "built"; code: string; hash: string; source: string; sourceHash: string }
   | { kind: "failed"; errors: PageBuildError[] };
-
-export function isPageFile(relPath: string) {
-  return relPath.endsWith(".page.tsx");
-}
 
 export function bundlePageForHub(docsRoot: string, pageFile: string) {
   return runBuild({ absWorkingDir: docsRoot, entryPoints: [pageFile], platform: "browser", external: HUB_EXTERNALS });
@@ -80,7 +77,14 @@ export class ProjectPages {
       return bundle;
     }
     const key = await this.inputsKey(bundle.inputs);
-    const view: ProjectPageView = { kind: "built", code: bundle.code, hash: key.slice(0, 16) };
+    const source = await readFile(pageFile, "utf8");
+    const view: ProjectPageView = {
+      kind: "built",
+      code: bundle.code,
+      hash: key.slice(0, 16),
+      source,
+      sourceHash: docHash(source),
+    };
     this.built.set(projectId, { key, inputs: bundle.inputs, view });
     return view;
   }

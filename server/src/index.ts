@@ -77,13 +77,9 @@ export type {
   InboxResponse,
   InboxRoundItem,
 } from "./inbox/types.js";
-export {
-  bundlePageForCheck,
-  isPageFile,
-  type PageBuildError,
-  PROJECT_PAGE_FILE,
-  type ProjectPageView,
-} from "./pages/pageBundle.js";
+export type { ChecklistResults, StepResult } from "./pages/checklistStore.js";
+export { bundlePageForCheck, type PageBuildError, type ProjectPageView } from "./pages/pageBundle.js";
+export { blockIdOf, isPageFile } from "./pages/pageFile.js";
 export {
   formatPrRef,
   isProjectStatus,

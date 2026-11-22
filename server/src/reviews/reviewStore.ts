@@ -5,7 +5,7 @@ import { ReadOnlyError } from "../readOnly.js";
 import { isInside } from "../safePath.js";
 import { writeFileAtomic } from "./atomicWrite.js";
 import { withFileLock } from "./fileLock.js";
-import { docPathForReviewFile, REVIEWS_DIR, reviewFileFor } from "./paths.js";
+import { docPathForReviewFile, isReviewablePath, REVIEWS_DIR, reviewFileFor } from "./paths.js";
 import { emptyReviewFile, type ReviewFile, reviewFileSchema } from "./schema.js";
 
 export class ReviewConflictError extends Error {
@@ -29,7 +29,7 @@ export function assertDocPath(docPath: string): void {
   if (segments.length < 2 || !segments.every((segment) => SAFE_SEGMENT.test(segment))) {
     throw new InvalidDocPathError(`Invalid doc path: ${docPath}`);
   }
-  if (!docPath.toLowerCase().endsWith(".md")) throw new InvalidDocPathError(`Not a markdown doc: ${docPath}`);
+  if (!isReviewablePath(docPath)) throw new InvalidDocPathError(`Not a markdown doc or page: ${docPath}`);
 }
 
 function isMissing(error: unknown): boolean {

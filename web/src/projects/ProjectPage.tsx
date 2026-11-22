@@ -9,6 +9,7 @@ import type {
   ProjectThread,
   RoundSummary,
 } from "@timthink/server";
+import { blockIdOf, isPageFile } from "@timthink/server/shared";
 import { CircleCheck, CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
@@ -297,23 +298,36 @@ function RoundRow({ round }: { round: RoundSummary }) {
 }
 
 function ThreadRow({ thread }: { thread: ProjectThread }) {
+  const rowClass = "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-bg/60";
+  const content = (
+    <>
+      <MessageSquare className="mt-0.5 size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
+      <span className="min-w-0">
+        <span className="block truncate text-ui text-ink">{thread.body || thread.quote}</span>
+        <span className="block truncate text-meta text-ink-64">
+          {thread.waitingOn === "you" ? "Claude replied · " : "Your comment · "}
+          {thread.docTitle} · “{blockIdOf(thread.quote) ?? thread.quote}”
+        </span>
+      </span>
+    </>
+  );
   return (
     <li className="border-b border-line-soft last:border-b-0">
-      <Link
-        to={docHref(thread.docPath)}
-        className="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-bg/60"
-      >
-        <MessageSquare className="mt-0.5 size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
-        <span className="min-w-0">
-          <span className="block truncate text-ui text-ink">{thread.body || thread.quote}</span>
-          <span className="block truncate text-meta text-ink-64">
-            {thread.waitingOn === "you" ? "Claude replied · " : "Your comment · "}
-            {thread.docTitle} · “{thread.quote}”
-          </span>
-        </span>
-      </Link>
+      {isPageFile(thread.docPath) ? (
+        <button type="button" className={rowClass} onClick={() => scrollToThreadCard(thread.threadId)}>
+          {content}
+        </button>
+      ) : (
+        <Link to={docHref(thread.docPath)} className={rowClass}>
+          {content}
+        </Link>
+      )}
     </li>
   );
+}
+
+function scrollToThreadCard(threadId: string) {
+  document.querySelector(`[data-thread-id="${threadId}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 const ACTIVITY_VERBS: Record<ProjectActivity["kind"], string> = {

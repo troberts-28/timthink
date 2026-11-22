@@ -25,6 +25,7 @@ import type { InboxService } from "./inbox/inboxService.js";
 import type { DocMoveService } from "./migration/docMoveService.js";
 import type { MovedDocs } from "./migration/movedDocs.js";
 import { mimeTypeFor } from "./mime.js";
+import type { ChecklistStore } from "./pages/checklistStore.js";
 import type { ProjectPages } from "./pages/pageBundle.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
 import type { ProjectService } from "./projects/projectService.js";
@@ -75,6 +76,7 @@ export interface AppDeps {
   movedDocs: MovedDocs;
   projectService: ProjectService;
   pages: ProjectPages;
+  checklists: ChecklistStore;
   githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
   launchBuild: BuildLauncher;
@@ -454,6 +456,7 @@ export function createApp(deps: AppDeps) {
         githubFor: deps.githubFor,
         getIndex: deps.getIndex,
         pages: deps.pages,
+        checklists: deps.checklists,
       }),
     )
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {

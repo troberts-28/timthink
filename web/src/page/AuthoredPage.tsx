@@ -1,9 +1,12 @@
 import type { PageBuildError, ProjectDetail } from "@timthink/server";
+import { PROJECT_PAGE_FILE } from "@timthink/server/shared";
 import * as React from "react";
 import { Component, type ComponentType, type ErrorInfo, type ReactNode, useMemo } from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { useProjectPage } from "../api/queries";
+import { ReviewProvider } from "../review/ReviewContext";
 import * as pageApi from "./index";
+import { CommentableBlocks, PageThreads } from "./PageComments";
 import { ProjectContext } from "./projectContext";
 
 const PAGE_MODULES: Record<string, unknown> = {
@@ -24,12 +27,12 @@ export function AuthoredPage({ detail }: { detail: ProjectDetail }) {
       </PageProblem>
     );
   }
+  const pagePath = `${detail.project.id}/${PROJECT_PAGE_FILE}`;
   return (
-    <BuiltPage
-      code={`${page.code}\n//# sourceURL=${detail.project.id}/project.page.tsx`}
-      hash={page.hash}
-      detail={detail}
-    />
+    <ReviewProvider docPath={pagePath} raw={page.source} docHash={page.sourceHash}>
+      <BuiltPage code={`${page.code}\n//# sourceURL=${pagePath}`} hash={page.hash} detail={detail} />
+      <PageThreads />
+    </ReviewProvider>
   );
 }
 
@@ -42,9 +45,11 @@ function BuiltPage({ code, hash, detail }: { code: string; hash: string; detail:
   return (
     <PageErrorBoundary key={hash}>
       <ProjectContext.Provider value={detail}>
-        <div className="plan-body mb-12">
-          <Page />
-        </div>
+        <CommentableBlocks>
+          <div className="plan-body mb-12">
+            <Page />
+          </div>
+        </CommentableBlocks>
       </ProjectContext.Provider>
     </PageErrorBoundary>
   );
