@@ -5,13 +5,27 @@ import { isInside, toPosix } from "../safePath.js";
 import { DOC_SESSIONS_LOG, JsonlFollower, parseDocWrite, parseSessionEvent, SESSIONS_LOG } from "./hookLog.js";
 import type { LiveClaudeProcess } from "./liveProcesses.js";
 import { BACKFILL_CACHE_FILE, type BackfillStats, TranscriptBackfill } from "./transcripts.js";
-import type { HookDocWrite, HookSessionEvent, SubmittedPr, TranscriptDocTouch, TranscriptSummary } from "./types.js";
+import type {
+  HookDocWrite,
+  HookSessionEvent,
+  SessionLogEvent,
+  SessionStatus,
+  SubmittedPr,
+  TranscriptDocTouch,
+  TranscriptSummary,
+  TurnEventName,
+} from "./types.js";
 
 export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHORT_ID_LENGTH = 8;
 const LIVENESS_MAX_AGE_MS = 3000;
 const ANY_TOUCH: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write", "use"]);
 const WRITES_ONLY: ReadonlySet<TranscriptDocTouch["kind"]> = new Set(["write"]);
+const TURN_STATUSES: Record<TurnEventName, SessionStatus> = {
+  UserPromptSubmit: "working",
+  Notification: "waiting",
+  Stop: "finished",
+};
 
 export interface SessionRecord {
   id: string;
@@ -22,6 +36,9 @@ export interface SessionRecord {
   lastActivity: string | null;
   live: boolean;
   livenessKnown: boolean;
+  status: SessionStatus | null;
+  label: string | null;
+  boundProjects: string[];
   warpFocusUrl: string | null;
   transcriptPath: string | null;
   docPaths: string[];
@@ -48,6 +65,9 @@ interface SessionState {
   hookTranscriptPath: string | null;
   hookDocPaths: Set<string>;
   hookDocWrites: { docPath: string; at: string }[];
+  turn: { status: SessionStatus; at: string } | null;
+  label: { text: string; at: string } | null;
+  boundProjects: Set<string>;
 }
 
 interface DocWriteTime {
@@ -66,6 +86,7 @@ export interface SessionStoreOptions {
   claudeProjectsDir: string;
   scanLiveProcesses?: () => Promise<LiveClaudeProcess[] | null>;
   onChange?: (change: SessionChange) => void;
+  resolveMovedDoc?: (docPath: string) => string;
 }
 
 function newestProcessPerSession(processes: readonly LiveClaudeProcess[]): Map<string, LiveClaudeProcess> {
@@ -91,6 +112,15 @@ function earlier(a: string | null, b: string | null): string | null {
 
 function newestFirst(a: SessionRecord, b: SessionRecord): number {
   return (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "") || a.id.localeCompare(b.id);
+}
+
+function sessionStatus(state: SessionState, live: boolean, livenessKnown: boolean): SessionStatus | null {
+  if (!live) {
+    return livenessKnown ? "ended" : null;
+  }
+  const { turn, latestStart } = state;
+  const startedAfterTurn = latestStart !== null && turn !== null && latestStart.at > turn.at;
+  return turn && !startedAfterTurn ? turn.status : null;
 }
 
 export class SessionStore {
@@ -167,6 +197,15 @@ export class SessionStore {
       if (write) this.applyDocWrite(write, change);
     }
     return this.finishChange(change);
+  }
+
+  async reloadHookLogs(): Promise<SessionChange> {
+    this.clearHookState();
+    this.sessionsLog.rewind();
+    this.docSessionsLog.rewind();
+    const change = await this.readHookLogs();
+    this.notify({ sessionIds: [], docPaths: [] });
+    return change;
   }
 
   runBackfill(): Promise<BackfillStats> {
@@ -246,13 +285,15 @@ export class SessionStore {
     if (argument.startsWith("~/")) return this.docPathFor(path.join(homedir(), argument.slice(2)));
     if (path.isAbsolute(argument)) return this.docPathFor(argument);
     const normalised = path.posix.normalize(argument);
-    return normalised.startsWith("../") || normalised === ".." || normalised === "." ? null : normalised;
+    if (normalised.startsWith("../") || normalised === ".." || normalised === ".") return null;
+    return this.options.resolveMovedDoc?.(normalised) ?? normalised;
   }
 
   docPathFor(filePath: string): string | null {
     if (!path.isAbsolute(filePath)) return null;
+    const resolve = this.options.resolveMovedDoc ?? ((docPath: string) => docPath);
     for (const root of this.docsRoots) {
-      if (isInside(root, filePath) && filePath !== root) return toPosix(path.relative(root, filePath));
+      if (isInside(root, filePath) && filePath !== root) return resolve(toPosix(path.relative(root, filePath)));
     }
     return null;
   }
@@ -279,6 +320,9 @@ export class SessionStore {
         hookTranscriptPath: null,
         hookDocPaths: new Set(),
         hookDocWrites: [],
+        turn: null,
+        label: null,
+        boundProjects: new Set(),
       };
       this.states.set(id, state);
     }
@@ -295,6 +339,9 @@ export class SessionStore {
       state.hookTranscriptPath = null;
       state.hookDocPaths.clear();
       state.hookDocWrites = [];
+      state.turn = null;
+      state.label = null;
+      state.boundProjects.clear();
     }
     this.writeTimes = null;
   }
@@ -306,15 +353,28 @@ export class SessionStore {
     if (transcriptPath) state.hookTranscriptPath = transcriptPath;
   }
 
-  private applySessionEvent(event: HookSessionEvent, change: { sessionIds: Set<string> }): void {
+  private applySessionEvent(event: SessionLogEvent, change: { sessionIds: Set<string> }): void {
     const state = this.stateFor(event.sessionId);
-    this.touchHook(state, event.at, event.cwd, event.transcriptPath);
-    if (event.event === "SessionStart") {
-      if (!state.latestStart || event.at >= state.latestStart.at) state.latestStart = event;
-    } else {
-      state.latestEndAt = later(state.latestEndAt, event.at);
-    }
     change.sessionIds.add(event.sessionId);
+    switch (event.event) {
+      case "SessionStart":
+        this.touchHook(state, event.at, event.cwd, event.transcriptPath);
+        if (!state.latestStart || event.at >= state.latestStart.at) state.latestStart = event;
+        return;
+      case "SessionEnd":
+        this.touchHook(state, event.at, event.cwd, event.transcriptPath);
+        state.latestEndAt = later(state.latestEndAt, event.at);
+        return;
+      case "Label":
+        if (!state.label || event.at >= state.label.at) state.label = { text: event.label, at: event.at };
+        return;
+      case "Bind":
+        state.boundProjects.add(event.project);
+        return;
+      default:
+        this.touchHook(state, event.at, event.cwd, null);
+        if (!state.turn || event.at >= state.turn.at) state.turn = { status: TURN_STATUSES[event.event], at: event.at };
+    }
   }
 
   private applyDocWrite(write: HookDocWrite, change: { sessionIds: Set<string>; docPaths: Set<string> }): void {
@@ -431,15 +491,24 @@ export class SessionStore {
       (latest, write) => later(latest, write.at),
       null,
     );
+    const live = this.liveProcesses ? liveProcess !== undefined : this.isLive(state, owners);
+    const livenessKnown = this.liveProcesses !== null || latestStart !== null;
     return {
       id: state.id,
-      title: transcript?.title ?? transcript?.firstPrompt ?? `Session ${state.id.slice(0, SHORT_ID_LENGTH)}`,
+      title:
+        state.label?.text ??
+        transcript?.title ??
+        transcript?.firstPrompt ??
+        `Session ${state.id.slice(0, SHORT_ID_LENGTH)}`,
       cwd: state.hookCwd ?? transcript?.cwd ?? null,
       branch: transcript?.gitBranch ?? latestStart?.gitBranch ?? null,
       firstSeen: earlier(transcript?.firstSeen ?? null, state.firstHookAt),
       lastActivity: later(later(transcript?.lastActivity ?? null, lastDocTouch), state.lastHookAt),
-      live: this.liveProcesses ? liveProcess !== undefined : this.isLive(state, owners),
-      livenessKnown: this.liveProcesses !== null || latestStart !== null,
+      live,
+      livenessKnown,
+      status: sessionStatus(state, live, livenessKnown),
+      label: state.label?.text ?? null,
+      boundProjects: [...state.boundProjects],
       warpFocusUrl: liveProcess?.warpFocusUrl ?? latestStart?.warpFocusUrl ?? null,
       transcriptPath: state.hookTranscriptPath ?? transcript?.transcriptPath ?? null,
       docPaths: this.docPathsOf(state, ANY_TOUCH),

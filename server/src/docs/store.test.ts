@@ -1,6 +1,7 @@
 import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { ProjectRegistry } from "../projects/registry.js";
 import { copyFixtureDocs } from "../test/fixtures.js";
 import { DocsStore, type IndexOptions } from "./store.js";
 import type { RepoIndex } from "./types.js";
@@ -23,7 +24,9 @@ describe("DocsStore", () => {
 
   beforeEach(async () => {
     root = await copyFixtureDocs();
-    store = new DocsStore(root);
+    const projects = new ProjectRegistry(root);
+    await projects.scan();
+    store = new DocsStore(root, projects);
     await store.scanAll();
   });
 

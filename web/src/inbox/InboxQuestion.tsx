@@ -1,7 +1,7 @@
 import type { InboxDoc, InboxQuestion as InboxQuestionData } from "@timthink/server";
 import { useMemo, useState } from "react";
 import { useDocsIndex } from "../api/queries";
-import { findRepo } from "../lib/indexNav";
+import { findDoc } from "../lib/indexNav";
 import { InlineText } from "../markdown/InlineText";
 import { MarkdownElement } from "../markdown/Markdown";
 import { PlanContext } from "../markdown/PlanContext";
@@ -12,10 +12,11 @@ import { useAutoLinkOptions } from "../plan/useRenderedMarkdown";
 
 function DetailsMarkdown({ markdown, doc }: { markdown: string; doc: InboxDoc }) {
   const { data: index } = useDocsIndex();
-  const options = useAutoLinkOptions(doc.path, findRepo(index, doc.repo), index);
+  const summary = findDoc(index, doc.path);
+  const options = useAutoLinkOptions(summary, index);
   const element = useMemo(() => questionDetailsHast(markdown, options, null), [markdown, options]);
   return (
-    <PlanContext.Provider value={{ repo: doc.repo, docPath: doc.path }}>
+    <PlanContext.Provider value={{ repo: summary?.codeRepo ?? doc.repo, docPath: doc.path }}>
       <MarkdownElement element={element} />
     </PlanContext.Provider>
   );

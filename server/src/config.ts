@@ -25,13 +25,6 @@ const groupSchema = z.object({
   default: z.boolean().optional(),
 });
 
-const archiveSchema = z.object({
-  auto: z.boolean().optional(),
-  staleAfterDays: z.number().positive().optional(),
-  inFlightStaleAfterDays: z.number().positive().optional(),
-  finishedAfterDays: z.number().nonnegative().optional(),
-});
-
 const prsSchema = z.object({
   enabled: z.boolean().optional(),
   ghPath: z.string().optional(),
@@ -54,7 +47,6 @@ const configFileSchema = z.object({
   repos: z.record(z.string(), repoOverrideSchema).optional(),
   groups: z.array(groupSchema).optional(),
   sidebarQuotes: z.array(z.string().trim().min(1).max(280)).max(200).optional(),
-  archive: archiveSchema.optional(),
   prs: prsSchema.optional(),
   readOnly: z.boolean().optional(),
 });
@@ -75,20 +67,6 @@ export interface RepoGroupConfig {
   repos: string[];
   default: boolean;
 }
-
-export interface ArchiveSettings {
-  auto: boolean;
-  staleAfterDays: number;
-  inFlightStaleAfterDays: number;
-  finishedAfterDays: number;
-}
-
-export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = {
-  auto: true,
-  staleAfterDays: 21,
-  inFlightStaleAfterDays: 60,
-  finishedAfterDays: 3,
-};
 
 export interface PrSettings {
   enabled: boolean;
@@ -113,7 +91,6 @@ export interface TimthinkConfig {
   repos: Record<string, RepoOverride>;
   groups: RepoGroupConfig[] | null;
   sidebarQuotes: string[];
-  archive: ArchiveSettings;
   prs: PrSettings;
   readOnly: boolean;
 }
@@ -201,7 +178,6 @@ export function loadConfig(env: Env = process.env): TimthinkConfig {
     repos,
     groups: resolveGroups(file?.groups),
     sidebarQuotes: file?.sidebarQuotes ?? [],
-    archive: { ...DEFAULT_ARCHIVE_SETTINGS, ...file?.archive },
     prs: {
       enabled: file?.prs?.enabled ?? DEFAULT_PR_SETTINGS.enabled,
       ghPath: file?.prs?.ghPath ? path.resolve(expandHome(file.prs.ghPath)) : null,

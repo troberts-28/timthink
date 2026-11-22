@@ -3,8 +3,8 @@ import { Inbox, Keyboard, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Fragment } from "react";
 import { Link, NavLink } from "react-router";
 import { useInbox } from "../api/queries";
-import { findDoc } from "../lib/indexNav";
-import { projectHref, repoHref } from "../lib/routes";
+import { findArea, findDoc, findProjectEntry } from "../lib/indexNav";
+import { areaHref, projectEntryHref, projectHref, repoHref } from "../lib/routes";
 import { useSelection } from "../lib/selection";
 import { useSidebarCollapsed } from "../lib/sidebar";
 import { AttentionCount } from "./AttentionCount";
@@ -16,8 +16,29 @@ interface Crumb {
   to?: string;
 }
 
+function projectCrumbs(index: DocsIndex | undefined, projectId: string | null, areaId: string | null) {
+  const crumbs: Crumb[] = [];
+  const project = findProjectEntry(index, projectId);
+  const area = findArea(index, project?.area ?? areaId);
+  if (area) {
+    crumbs.push({ label: area.title, to: areaHref(area.id) });
+  }
+  if (project) {
+    crumbs.push({ label: project.title, to: projectEntryHref(project.id) });
+  }
+  return crumbs;
+}
+
 function useCrumbs(index: DocsIndex | undefined): Crumb[] {
   const selection = useSelection();
+  if (selection.projectId || selection.area) {
+    const crumbs = projectCrumbs(index, selection.projectId, selection.area);
+    return crumbs.map((crumb, position) => (position === crumbs.length - 1 ? { label: crumb.label } : crumb));
+  }
+  const managedDoc = selection.docPath ? findDoc(index, selection.docPath) : undefined;
+  if (managedDoc && (managedDoc.projectId || findArea(index, managedDoc.repo))) {
+    return [...projectCrumbs(index, managedDoc.projectId, managedDoc.repo), { label: managedDoc.title }];
+  }
   if (!selection.repo) return [{ label: "Inbox" }];
   const crumbs: Crumb[] = [{ label: selection.repo, to: repoHref(selection.repo) }];
   if (selection.docPath) {

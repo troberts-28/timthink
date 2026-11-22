@@ -252,6 +252,11 @@ describe("Claude hook settings", () => {
         },
       ],
       SessionEnd: [{ hooks: [{ type: "command", command: `${NODE} ${SCRIPT} session-end || true`, timeout: 5 }] }],
+      UserPromptSubmit: [
+        { hooks: [{ type: "command", command: `${NODE} ${SCRIPT} user-prompt-submit || true`, timeout: 5 }] },
+      ],
+      Notification: [{ hooks: [{ type: "command", command: `${NODE} ${SCRIPT} notification || true`, timeout: 5 }] }],
+      Stop: [{ hooks: [{ type: "command", command: `${NODE} ${SCRIPT} stop || true`, timeout: 5 }] }],
     });
   });
 

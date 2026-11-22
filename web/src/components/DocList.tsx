@@ -12,6 +12,9 @@ interface DocListProps {
 }
 
 function location(doc: DocSummary): string {
+  if (doc.projectId) {
+    return doc.projectId.replace("/", " / ");
+  }
   return doc.project && doc.project !== doc.repo ? `${doc.repo} / ${doc.project}` : doc.repo;
 }
 

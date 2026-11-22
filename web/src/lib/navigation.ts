@@ -1,15 +1,28 @@
 import type { DocsIndex, IndexedDoc, SearchHit } from "@timthink/server";
 import type { SidebarSelection } from "../components/Sidebar";
 import { isArchived } from "./archive";
-import { allDocs, findDoc, findProject, findRepo } from "./indexNav";
-import { projectHref, repoHref } from "./routes";
+import { allDocs, findDoc, findProject, findProjectEntry, findRepo } from "./indexNav";
+import { areaHref, projectEntryHref, projectHref, repoHref } from "./routes";
 
 const INBOX_HREF = "/";
 const MAX_RESULTS = 40;
 
 export function parentHref(index: DocsIndex | undefined, selection: SidebarSelection): string | null {
   const { repo, project, docPath } = selection;
+  if (selection.projectId) {
+    return selection.area ? areaHref(selection.area) : INBOX_HREF;
+  }
+  if (selection.area) {
+    return INBOX_HREF;
+  }
   if (!repo) return null;
+  const projectDoc = docPath ? findDoc(index, docPath) : undefined;
+  if (projectDoc?.projectId && findProjectEntry(index, projectDoc.projectId)) {
+    return projectEntryHref(projectDoc.projectId);
+  }
+  if (index?.areas.some((area) => area.id === repo)) {
+    return areaHref(repo);
+  }
   if (docPath) {
     const doc = findDoc(index, docPath);
     const folder = doc?.project && doc.project !== repo ? findProject(findRepo(index, repo), doc.project) : undefined;

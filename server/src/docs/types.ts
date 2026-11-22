@@ -3,10 +3,18 @@ export interface TaskProgress {
   total: number;
 }
 
+export const DOC_KINDS = ["plan", "research", "design", "handoff", "decision", "notes"] as const;
+
+export type DocKind = (typeof DOC_KINDS)[number];
+
 export interface DocSummary {
   path: string;
   repo: string;
   project: string | null;
+  projectId: string | null;
+  codeRepo: string;
+  repoOverride: string | null;
+  kind: DocKind;
   relPath: string;
   title: string;
   date: string;
@@ -70,10 +78,46 @@ export interface RepoIndex {
   rootAttachmentCount: number;
 }
 
+export type ProjectStatus = "active" | "paused" | "shipped" | "dropped";
+
+export interface ProjectEntry {
+  id: string;
+  area: string | null;
+  slug: string;
+  title: string;
+  summary: string | null;
+  status: ProjectStatus;
+  repos: string[];
+  problems: string[];
+  docs: IndexedDoc[];
+  attachmentCount: number;
+  lastActivity: number;
+}
+
+export interface AreaEntry {
+  id: string;
+  title: string;
+  summary: string | null;
+  repos: string[];
+  problems: string[];
+  projects: ProjectEntry[];
+  docs: IndexedDoc[];
+  lastActivity: number;
+}
+
+export interface CodeRepoInfo {
+  github: GithubRepo | null;
+  prLinks: PrLinkHost;
+  buildLauncher: boolean;
+}
+
 export interface DocsIndex {
   generatedAt: string;
   groups: string[] | null;
   sidebarQuotes: string[];
+  areas: AreaEntry[];
+  projects: ProjectEntry[];
+  codeRepos: Record<string, CodeRepoInfo>;
   repos: RepoIndex[];
 }
 

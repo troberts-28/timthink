@@ -12,7 +12,7 @@ interface ThemeContextValue {
   setSetting: (setting: ThemeSetting) => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredSetting(): ThemeSetting {
   try {

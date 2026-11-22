@@ -12,7 +12,11 @@ const EVENT_ALIASES = {
   "session-start": "SessionStart",
   "session-end": "SessionEnd",
   "post-tool-use": "PostToolUse",
+  "user-prompt-submit": "UserPromptSubmit",
+  notification: "Notification",
+  stop: "Stop",
 };
+const STATUS_EVENTS = new Set(["UserPromptSubmit", "Notification", "Stop"]);
 
 function expandHome(input) {
   if (input === "~") return homedir();
@@ -110,6 +114,17 @@ function run() {
   );
   if (event === "SessionStart" || event === "SessionEnd") {
     appendRecord(stateDir, "sessions.jsonl", sessionRecord(event, input));
+    return;
+  }
+  if (STATUS_EVENTS.has(event)) {
+    const record = {
+      v: 1,
+      event,
+      sessionId: input.session_id,
+      cwd: stringOrNull(input.cwd),
+      at: new Date().toISOString(),
+    };
+    appendRecord(stateDir, "sessions.jsonl", record);
     return;
   }
   if (event === "PostToolUse") {

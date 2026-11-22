@@ -1,0 +1,8 @@
+title: Checkout v2
+summary: One-page checkout with saved cards.
+status: active
+repos:
+  - acme-api
+  - garden-app
+prs:
+  - acme-api#4300

@@ -1,4 +1,4 @@
-import type { DocsIndex, IndexedDoc, ProjectIndex, RepoIndex } from "@timthink/server";
+import type { AreaEntry, DocsIndex, IndexedDoc, ProjectEntry, ProjectIndex, RepoIndex } from "@timthink/server";
 import { Archive, ChevronRight, Eye, EyeOff, Folder, Inbox, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router";
@@ -8,8 +8,9 @@ import { compactDate, pluralise } from "../lib/format";
 import { useLocalNameSet } from "../lib/localSetting";
 import { repoSections } from "../lib/repoGroups";
 import { useRepoVisibility } from "../lib/repoVisibility";
-import { docHref, projectHref, repoHref } from "../lib/routes";
+import { areaHref, docHref, projectEntryHref, projectHref, repoHref } from "../lib/routes";
 import { usePlanArchive } from "../plan/usePlanArchive";
+import { ProjectStatusDot } from "../projects/ProjectStatus";
 import { PrAttentionIcon } from "../prs/PrVisuals";
 import { AttentionCount } from "./AttentionCount";
 import { StatusDot } from "./StatusChip";
@@ -24,6 +25,8 @@ export interface SidebarSelection {
   repo: string | null;
   project: string | null;
   docPath: string | null;
+  area: string | null;
+  projectId: string | null;
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -412,6 +415,111 @@ function RepoNode({ repo, selection, attention }: { repo: RepoIndex; selection: 
   );
 }
 
+function isSettledProject(project: ProjectEntry) {
+  return project.status === "shipped" || project.status === "dropped";
+}
+
+function ProjectEntryNode({
+  project,
+  selection,
+  indent,
+}: {
+  project: ProjectEntry;
+  selection: SidebarSelection;
+  indent: number;
+}) {
+  const containsSelection = selection.projectId === project.id || containsDoc(project.docs, selection.docPath);
+  const [open, setOpen] = useState(containsSelection);
+  useEffect(() => {
+    if (containsSelection) {
+      setOpen(true);
+    }
+  }, [containsSelection]);
+  const { active } = partitionArchived(project.docs);
+  return (
+    <div>
+      <ToggleRow
+        open={open}
+        onToggle={() => setOpen((current) => !current)}
+        to={projectEntryHref(project.id)}
+        active={selection.projectId === project.id}
+        indent={indent}
+        icon={<ProjectStatusDot status={project.status} />}
+        label={project.title}
+        count={active.length}
+        dimmed={isSettledProject(project)}
+      />
+      {open && active.length > 0 ? (
+        <DocRows docs={active} selection={selection} indent={indent + 24} preview={PROJECT_PREVIEW} />
+      ) : null}
+    </div>
+  );
+}
+
+function AreaNode({ area, selection }: { area: AreaEntry; selection: SidebarSelection }) {
+  const containsSelection = selection.area === area.id || (selection.docPath?.startsWith(`${area.id}/`) ?? false);
+  const [open, setOpen] = useState(containsSelection);
+  useEffect(() => {
+    if (containsSelection) {
+      setOpen(true);
+    }
+  }, [containsSelection]);
+  const live = area.projects.filter((project) => !isSettledProject(project));
+  const settled = area.projects.filter(isSettledProject);
+  const reference = partitionArchived(area.docs).active;
+  const settledSelected = settled.some(
+    (project) => selection.projectId === project.id || containsDoc(project.docs, selection.docPath),
+  );
+  return (
+    <div>
+      <ToggleRow
+        open={open}
+        onToggle={() => setOpen((current) => !current)}
+        to={areaHref(area.id)}
+        active={selection.area === area.id && !selection.projectId}
+        indent={10}
+        label={area.title}
+        count={live.length}
+        strong
+      />
+      {open ? (
+        <div className="pb-1.5">
+          {live.map((project) => (
+            <ProjectEntryNode key={project.id} project={project} selection={selection} indent={22} />
+          ))}
+          <DocRows docs={reference} selection={selection} indent={26} preview={UNGROUPED_PREVIEW} />
+          <ArchivedSection count={settled.length} indent={REPO_ARCHIVE_INDENT} containsSelection={settledSelected}>
+            {settled.map((project) => (
+              <ProjectEntryNode key={project.id} project={project} selection={selection} indent={22} />
+            ))}
+          </ArchivedSection>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ProjectsTree({ index, selection }: { index: DocsIndex; selection: SidebarSelection }) {
+  if (index.areas.length === 0 && index.projects.length === 0) {
+    return null;
+  }
+  return (
+    <section aria-label="Projects" className="mb-4">
+      <p className="m-0 mb-1.5 px-2.5">
+        <SectionLabel>Projects</SectionLabel>
+      </p>
+      <div className="flex flex-col gap-0.5">
+        {index.areas.map((area) => (
+          <AreaNode key={area.id} area={area} selection={selection} />
+        ))}
+        {index.projects.map((project) => (
+          <ProjectEntryNode key={project.id} project={project} selection={selection} indent={10} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <span className="text-[11px] font-semibold uppercase leading-4 tracking-[0.06em] text-ink-32">{children}</span>
@@ -568,7 +676,10 @@ export function Sidebar({ index, selection }: { index: DocsIndex | undefined; se
           <AttentionCount count={inbox?.attention.total ?? 0} className="ml-auto" />
         </NavLink>
         {index ? (
-          <RepoTree index={index} selection={selection} />
+          <>
+            <ProjectsTree index={index} selection={selection} />
+            <RepoTree index={index} selection={selection} />
+          </>
         ) : (
           <div className="flex flex-col gap-2 px-2.5 pt-1" aria-hidden>
             {[72, 56, 64, 48].map((width) => (

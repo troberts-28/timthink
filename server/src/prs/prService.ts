@@ -13,8 +13,6 @@ import {
   type PlanCompletion,
   type PrInfo,
   type PrLookupResponse,
-  type PrSignal,
-  type PrSignalReason,
   type PrSource,
   prKey,
   type StackItem,
@@ -46,7 +44,6 @@ interface StateFile {
   stacks: Record<string, number[]>;
   unlinked: Record<string, number[]>;
   completed: Record<string, PlanCompletion>;
-  dismissed: Record<string, number[]>;
   awaiting: Record<string, AwaitingCompletion>;
 }
 
@@ -63,7 +60,6 @@ function emptyState(): StateFile {
     stacks: {},
     unlinked: {},
     completed: {},
-    dismissed: {},
     awaiting: {},
   };
 }
@@ -75,6 +71,7 @@ export interface PrServiceOptions {
   sessions: { all(): SessionRecord[] };
   githubFor: (repo: string) => GithubRepo | null;
   isArchived: (doc: DocSummary) => boolean;
+  detachedFor: (doc: DocSummary) => readonly number[];
   runner: GraphqlRunner;
   onChange: (docPaths: string[]) => void;
   onPrsSettled?: (docPaths: string[]) => void;
@@ -147,7 +144,7 @@ export class PrService {
   }
 
   linkedNumbers(doc: DocSummary): Map<number, PrSource[]> {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     const linked = new Map<number, PrSource[]>();
     const add = (number: number, source: PrSource) => {
       const sources = linked.get(number) ?? [];
@@ -158,13 +155,15 @@ export class PrService {
     if (github) {
       for (const pr of this.sessionPrs().get(doc.path) ?? []) if (sameRepo(pr, github)) add(pr.number, "session");
     }
-    for (const number of this.state.unlinked[doc.path] ?? []) linked.delete(number);
+    for (const number of [...(this.state.unlinked[doc.path] ?? []), ...this.options.detachedFor(doc)]) {
+      linked.delete(number);
+    }
     return linked;
   }
 
   docPrs(docPath: string): DocPrsResponse {
     const doc = this.options.docs.getDoc(docPath);
-    const github = doc ? this.options.githubFor(doc.repo) : null;
+    const github = doc ? this.options.githubFor(doc.codeRepo) : null;
     const base = {
       github: github ? { owner: github.owner, repo: github.repo } : null,
       trunk: github ? (this.state.trunks[repoKey(github)] ?? null) : null,
@@ -197,7 +196,7 @@ export class PrService {
   }
 
   attentionFor(doc: DocSummary): PrAttention | null {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     if (!github || !this.options.settings.enabled) return null;
     const open = [...this.linkedNumbers(doc).keys()].flatMap((number) => {
       const info = this.cached(github, number)?.info;
@@ -222,16 +221,34 @@ export class PrService {
     return { status: this.lastError?.kind === "unavailable" ? "unavailable" : "ok", prs };
   }
 
+  infoFor(github: GithubRepo, number: number): PrInfo | null {
+    return this.cached(github, number)?.info ?? null;
+  }
+
+  stackOf(github: GithubRepo, numbers: readonly number[]): number[] {
+    const known = numbers.filter((number) => this.cached(github, number));
+    return known.length > 0 ? this.connectedStack(github, known) : [...numbers];
+  }
+
+  get enabled(): boolean {
+    return this.options.settings.enabled;
+  }
+
+  get unavailableMessage(): string | null {
+    return this.lastError?.kind === "unavailable" ? this.lastError.message : null;
+  }
+
   completion(docPath: string): PlanCompletion | null {
     return this.state.completed[docPath] ?? null;
   }
 
   completionMarker(doc: DocSummary): string | null {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     const numbers = [...this.linkedNumbers(doc).keys()].sort((a, b) => a - b);
     if (!github || numbers.length === 0) return null;
-    const allMerged = numbers.every((number) => this.cached(github, number)?.info.state === "merged");
-    if (!allMerged) return null;
+    const states = numbers.map((number) => this.cached(github, number)?.info.state);
+    const isLanded = states.every((state) => state === "merged" || state === "closed");
+    if (!isLanded || !states.includes("merged")) return null;
     const marker = numbers.join(",");
     return this.state.completed[doc.path]?.marker === marker ? null : marker;
   }
@@ -256,75 +273,23 @@ export class PrService {
     this.options.onChange([docPath]);
   }
 
+  async moveDocs(moves: ReadonlyMap<string, string>): Promise<void> {
+    let changed = false;
+    for (const [from, to] of moves) {
+      const moved = [
+        moveDocKey(this.state.unlinked, from, to),
+        moveDocKey(this.state.completed, from, to),
+        moveDocKey(this.state.awaiting, from, to),
+      ];
+      changed ||= moved.includes(true);
+    }
+    if (changed) {
+      await this.save();
+    }
+  }
+
   awaitingCompletion(docPath: string): AwaitingCompletion | null {
     return this.state.awaiting[docPath] ?? null;
-  }
-
-  signalsFor(doc: DocSummary): PrSignal[] {
-    const github = this.options.githubFor(doc.repo);
-    if (!github || !this.options.settings.enabled) return [];
-    const dismissed = new Set(this.state.dismissed[doc.path] ?? []);
-    const infos = [...this.linkedNumbers(doc).keys()].flatMap((number) => this.cached(github, number)?.info ?? []);
-    const live = infos.filter((info) => !isTerminal(info));
-    const signal = (reason: PrSignalReason, matching: PrInfo[], detail: (info: PrInfo) => string): PrSignal[] =>
-      matching.length === 0
-        ? []
-        : [
-            {
-              reason,
-              numbers: matching.map((info) => info.number),
-              detail: matching.map(detail).join("; "),
-              at:
-                matching
-                  .map((info) => info.updatedAt)
-                  .sort()
-                  .at(-1) ?? new Date(this.now()).toISOString(),
-            },
-          ];
-    const failing = live.filter((info) => info.ci === "failing");
-    const changes = live.filter((info) => info.review === "changes_requested");
-    const comments = live.filter((info) => info.review !== "changes_requested" && info.unresolvedThreads > 0);
-    const closed = infos.filter((info) => info.state === "closed" && !dismissed.has(info.number));
-    const awaiting = this.state.awaiting[doc.path];
-    const merged: PrSignal[] = awaiting
-      ? [
-          {
-            reason: "merged-tasks-open",
-            numbers: awaiting.marker.split(",").map(Number),
-            detail: `${awaiting.marker.includes(",") ? "All its PRs" : "Its PR"} merged, but ${awaiting.openTasks === 1 ? "1 task is" : `${awaiting.openTasks} tasks are`} still open`,
-            at: awaiting.at,
-          },
-        ]
-      : [];
-    return [
-      ...signal("ci-failing", failing, (info) =>
-        info.failingChecks.length > 0
-          ? `#${info.number}: ${info.failingChecks.slice(0, 2).join(", ")}`
-          : `#${info.number}`,
-      ),
-      ...signal("changes-requested", changes, (info) => `#${info.number}`),
-      ...signal("review-comments", comments, (info) => `#${info.number}: ${info.unresolvedThreads} unresolved`),
-      ...signal("pr-closed-unmerged", closed, (info) => `#${info.number} ${info.title}`),
-      ...merged,
-    ];
-  }
-
-  async dismissClosed(docPath: string, numbers: readonly number[]): Promise<void> {
-    this.state.dismissed[docPath] = [...new Set([...(this.state.dismissed[docPath] ?? []), ...numbers])];
-    await this.save();
-    this.options.onChange([docPath]);
-  }
-
-  async setUnlinked(docPath: string, number: number, unlinked: boolean): Promise<void> {
-    const current = new Set(this.state.unlinked[docPath] ?? []);
-    if (unlinked) current.add(number);
-    else current.delete(number);
-    if (current.size > 0) this.state.unlinked[docPath] = [...current].sort((a, b) => a - b);
-    else delete this.state.unlinked[docPath];
-    const doc = this.options.docs.getDoc(docPath);
-    if (doc) this.recomputeStack(doc);
-    await this.save();
-    this.options.onChange([docPath]);
   }
 
   refresh(request: { docPaths?: string[]; extra?: Map<string, Set<number>> } = {}): Promise<void> {
@@ -370,7 +335,7 @@ export class PrService {
       return entry;
     };
     for (const doc of docs) {
-      const github = this.options.githubFor(doc.repo);
+      const github = this.options.githubFor(doc.codeRepo);
       if (!github) continue;
       const linked = this.linkedNumbers(doc);
       if (linked.size === 0 && !(doc.path in this.state.stacks)) continue;
@@ -508,7 +473,7 @@ export class PrService {
   }
 
   private recomputeStack(doc: DocSummary): void {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     if (!github) return;
     const linked = [...this.linkedNumbers(doc).keys()];
     if (linked.length === 0) {
@@ -610,4 +575,14 @@ export class PrService {
     await writeFile(temporary, JSON.stringify(this.state));
     await rename(temporary, this.statePath);
   }
+}
+
+function moveDocKey<T>(byDoc: Record<string, T>, from: string, to: string) {
+  const entry = byDoc[from];
+  if (entry === undefined) {
+    return false;
+  }
+  byDoc[to] ??= entry;
+  delete byDoc[from];
+  return true;
 }

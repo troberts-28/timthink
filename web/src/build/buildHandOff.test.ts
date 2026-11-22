@@ -1,6 +1,14 @@
 import type { SessionView } from "@timthink/server";
 import { describe, expect, it } from "vitest";
-import { LAUNCH, NEW_SESSION, NOT_NOW, newSessionCommand, plannerOf, targetFor } from "./buildHandOff";
+import {
+  handOffBuildCommand,
+  LAUNCH,
+  NEW_SESSION,
+  NOT_NOW,
+  newSessionCommand,
+  plannerOf,
+  targetFor,
+} from "./buildHandOff";
 
 function session(overrides: Partial<SessionView>): SessionView {
   return {
@@ -11,6 +19,7 @@ function session(overrides: Partial<SessionView>): SessionView {
     firstSeen: null,
     lastActivity: null,
     live: false,
+    status: null,
     warpFocusUrl: null,
     canResume: true,
     mayBeOpenUntracked: false,
@@ -54,6 +63,21 @@ describe("targetFor", () => {
   it("only offers not-now where it's allowed", () => {
     expect(targetFor("not-now", sessions, { allowNotNow: true, canLaunch: false })).toBe(NOT_NOW);
     expect(targetFor("not-now", sessions, { allowNotNow: false, canLaunch: false })).toBe(NEW_SESSION);
+  });
+});
+
+describe("handOffBuildCommand", () => {
+  const request = { doc: "repo/plan.md" };
+  const sessions = [session({ id: "planner", plannedDoc: true, cwd: "/code/repo-4" })];
+
+  it("matches the command each hand-off copies", () => {
+    expect(handOffBuildCommand(NEW_SESSION, request, sessions)).toBe(newSessionCommand(request, sessions));
+    expect(handOffBuildCommand("planner", request, sessions)).toBe("/timthink build repo/plan.md");
+  });
+
+  it("copies nothing when no command is handed off", () => {
+    expect(handOffBuildCommand(NOT_NOW, request, sessions)).toBeNull();
+    expect(handOffBuildCommand(LAUNCH, request, sessions)).toBeNull();
   });
 });
 

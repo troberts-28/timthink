@@ -1,5 +1,7 @@
 import {
   type Answer,
+  blockIdOf,
+  isPageFile,
   lineNumberAt,
   type Message,
   type Review,
@@ -68,7 +70,9 @@ function lineLabel(raw: string, thread: Thread): string {
   return first === last ? `Line ${first}` : `Lines ${first}–${last}`;
 }
 
-function sectionLabel(thread: Thread): string {
+function sectionLabel(docPath: string, thread: Thread): string {
+  const blockId = isPageFile(docPath) ? blockIdOf(thread.anchor.quote) : null;
+  if (blockId) return `block \`${blockId}\``;
   return thread.anchor.headingPath.length > 0 ? thread.anchor.headingPath.join(" › ") : "(before the first heading)";
 }
 
@@ -85,8 +89,15 @@ function messageLines(review: ReviewView, thread: Thread): string[] {
     });
 }
 
-function threadSection(review: ReviewView, raw: string, thread: Thread, outdated: boolean): string {
-  const parts = [`### Thread \`${thread.id}\` · ${thread.kind}`, "", `Section: ${sectionLabel(thread)}`];
+interface ThreadSectionInput {
+  docPath: string;
+  review: ReviewView;
+  raw: string;
+  outdated: boolean;
+}
+
+function threadSection(thread: Thread, { docPath, review, raw, outdated }: ThreadSectionInput): string {
+  const parts = [`### Thread \`${thread.id}\` · ${thread.kind}`, "", `Section: ${sectionLabel(docPath, thread)}`];
   if (outdated) {
     parts.push("The commented passage is no longer in the plan. Original quote:");
   } else {
@@ -135,13 +146,13 @@ export function formatReviewReport({ docPath, absolutePath, raw, review }: Repor
   sections.push(...work.reviews.map(reviewHeading));
   if (work.threads.length > 0) {
     sections.push(`## Threads to address (${work.threads.length})`);
-    sections.push(...work.threads.map((thread) => threadSection(review, raw, thread, false)));
+    sections.push(...work.threads.map((thread) => threadSection(thread, { docPath, review, raw, outdated: false })));
   } else {
     sections.push("## Threads to address\n\nNo open threads.");
   }
   if (work.outdated.length > 0) {
     sections.push(`## Outdated threads (${work.outdated.length})`);
-    sections.push(...work.outdated.map((thread) => threadSection(review, raw, thread, true)));
+    sections.push(...work.outdated.map((thread) => threadSection(thread, { docPath, review, raw, outdated: true })));
   }
   if (work.answers.length > 0) {
     sections.push(`## Answers to open questions (${work.answers.length})`);

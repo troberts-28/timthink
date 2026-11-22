@@ -3,7 +3,15 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfig, type TimthinkConfig } from "@timthink/server";
+import {
+  BIND_HOST,
+  claudeSessionOfAncestor,
+  createPsRunner,
+  loadConfig,
+  type ProjectDetail,
+  ProjectRegistry,
+  type TimthinkConfig,
+} from "@timthink/server";
 import { ARCHIVE_USAGE, runArchive } from "./commands/archive.js";
 import { runCheck } from "./commands/check.js";
 import { findDocsDir } from "./commands/docsDir.js";
@@ -20,8 +28,12 @@ import {
   planUninstall,
   runCommand,
 } from "./commands/install.js";
+import { PROJECT_USAGE, runProject } from "./commands/project.js";
+import { PUBLISH_USAGE, runPublish, runUnpublish } from "./commands/publish.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
+import { ROUND_USAGE, runRound } from "./commands/round.js";
 import { serve } from "./commands/serve.js";
+import { runSession, SESSION_USAGE } from "./commands/session.js";
 import { runStatus, STATUS_USAGE } from "./commands/status.js";
 import { docUrlForRelative } from "./commands/url.js";
 
@@ -30,13 +42,22 @@ const USAGE = `Usage: timthink <command>
 Commands:
   serve                 Start the hub on 127.0.0.1
   url <doc-path>        Print the hub URL for a doc (absolute or docsRoot-relative)
-  docs-dir [--cwd dir]  Print the docs folder for the git repo containing dir (default: current directory)
+  docs-dir [--cwd dir] [--project id]
+                        Print the docs folder for a project, or for the git repo containing dir
+  project <command>     List, show, create and update projects (see \`timthink project --help\`)
   docs-root             Print the docs root
-  check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links
+  check <doc-path>      Check a plan renders: frontmatter, question/mermaid/demo blocks and relative links,
+                        or compile and render a project.page.tsx
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
-  archive <doc>         Archive a plan; also --list and --dry-run-auto (see \`timthink archive --help\`)
-  unarchive <doc>       Keep a plan active, even when the auto rule would archive it
+  round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)
+  session label "<text>"
+                        Name the Claude session this runs in, on its project's page
+  publish <project> [--ttl 7d]
+                        Publish a project to an unlisted Vercel URL that expires (needs VERCEL_TOKEN)
+  unpublish <url>       Take a published project down again
+  archive <doc>         Archive a plan; also --list (see \`timthink archive --help\`)
+  unarchive <doc>       Keep a plan active, even when its project is shipped or dropped
   doctor                Check every installed component and print fixes
   install [--apply] [--docs-root dir] [--code-root dir]
                         Set up the config, CLI shim, launchd agent, skill and Claude Code hooks (dry run unless --apply)
@@ -85,6 +106,32 @@ const consoleIo: ReviewIo = {
   stdinIsTty: process.stdin.isTTY === true,
 };
 
+async function printProjectDir(config: TimthinkConfig, projectId: string) {
+  const registry = new ProjectRegistry(config.docsRoot);
+  await registry.scan();
+  if (!registry.project(projectId)) {
+    console.error(
+      `There is no project ${projectId}. Run \`timthink project list\`, or create it with \`timthink project create\`.`,
+    );
+    return 1;
+  }
+  console.log(path.join(config.docsRoot, projectId));
+  return 0;
+}
+
+async function fetchHubProject(config: TimthinkConfig, projectId: string): Promise<ProjectDetail | null> {
+  const response = await fetch(`http://${BIND_HOST}:${config.port}/api/project?id=${encodeURIComponent(projectId)}`);
+  if (!response.ok) {
+    return null;
+  }
+  const detail: ProjectDetail = await response.json();
+  return detail;
+}
+
+function ownSessionId(config: TimthinkConfig) {
+  return claudeSessionOfAncestor({ sessionsDir: config.claudeSessionsDir, pid: process.pid, runPs: createPsRunner() });
+}
+
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
     args: argv,
@@ -95,17 +142,37 @@ async function main(argv: string[]): Promise<number> {
       message: { type: "string", short: "m" },
       cwd: { type: "string" },
       list: { type: "boolean", default: false },
-      "dry-run-auto": { type: "boolean", default: false },
       clear: { type: "boolean", default: false },
       repo: { type: "string" },
       "docs-root": { type: "string" },
       "code-root": { type: "string" },
+      project: { type: "string" },
+      title: { type: "string" },
+      summary: { type: "string" },
+      repos: { type: "string" },
+      ttl: { type: "string" },
     },
   });
   const [command, ...rest] = positionals;
   if (command === "review" && (values.help || rest.length === 0)) {
     console.log(REVIEW_USAGE);
     return values.help ? 0 : 1;
+  }
+  if (command === "round" && (values.help || rest.length === 0)) {
+    console.log(ROUND_USAGE);
+    return values.help ? 0 : 1;
+  }
+  if (command === "project" && (values.help || rest.length === 0)) {
+    console.log(PROJECT_USAGE);
+    return values.help ? 0 : 1;
+  }
+  if (command === "session" && (values.help || rest.length === 0)) {
+    console.log(SESSION_USAGE);
+    return values.help ? 0 : 1;
+  }
+  if ((command === "publish" || command === "unpublish") && values.help) {
+    console.log(PUBLISH_USAGE);
+    return 0;
   }
   if (command === "archive" && values.help) {
     console.log(ARCHIVE_USAGE);
@@ -133,6 +200,9 @@ async function main(argv: string[]): Promise<number> {
       console.log(config.docsRoot);
       return 0;
     case "docs-dir": {
+      if (values.project) {
+        return printProjectDir(config, values.project);
+      }
       const found = await findDocsDir(config, values.cwd ?? process.cwd());
       console.log(found.dir);
       if (!found.exists) console.error(`(${found.dir} doesn't exist yet; create it when you write the first plan)`);
@@ -152,6 +222,39 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       return runStatus(config, rest, { out: (text) => console.log(text), err: (text) => console.error(text) });
+    case "project":
+      return runProject({
+        config,
+        args: rest,
+        flags: { title: values.title, summary: values.summary, repos: values.repos, repo: values.repo },
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        ownSessionId: () => ownSessionId(config),
+      });
+    case "session":
+      return runSession({
+        config,
+        args: rest,
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        ownSessionId: () => ownSessionId(config),
+      });
+    case "publish":
+      return runPublish({
+        config,
+        target: rest[0],
+        ttl: values.ttl,
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        vercelToken: process.env.VERCEL_TOKEN,
+        fetchDetail: (projectId) => fetchHubProject(config, projectId),
+      });
+    case "unpublish":
+      return runUnpublish({
+        config,
+        target: rest[0],
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        vercelToken: process.env.VERCEL_TOKEN,
+      });
+    case "round":
+      return runRound({ config, args: rest, io: consoleIo, cwd: values.cwd ?? process.cwd() });
     case "review":
       return runReview(config, rest, values.message === undefined ? {} : { message: values.message }, consoleIo);
     case "archive":
@@ -160,7 +263,7 @@ async function main(argv: string[]): Promise<number> {
         config,
         command,
         rest,
-        { list: values.list, dryRunAuto: values["dry-run-auto"], clear: values.clear, repo: values.repo },
+        { list: values.list, clear: values.clear, repo: values.repo },
         { out: (text) => console.log(text), err: (text) => console.error(text) },
       );
     case "doctor":

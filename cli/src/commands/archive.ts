@@ -10,17 +10,14 @@ import { DocOutsideRootError } from "./url.js";
 
 export const ARCHIVE_USAGE = `Usage:
   timthink archive <doc>                      Archive a plan: hide it from the sidebar and inbox
-  timthink unarchive <doc>                    Keep a plan active, even when the auto rule would archive it
+  timthink unarchive <doc>                    Keep a plan active, even when its project is shipped or dropped
   timthink archive --clear <doc>              Forget a manual archive or keep-active choice
   timthink archive --list [--repo name]       List archived plans and why
-  timthink archive --dry-run-auto [--repo name]
-                                              Show what the auto rule archives and why, per repo
 
 <doc> may be absolute, ~-relative, or relative to docsRoot.`;
 
 export interface ArchiveOptions {
   list?: boolean;
-  dryRunAuto?: boolean;
   clear?: boolean;
   repo?: string;
 }
@@ -48,12 +45,6 @@ function docLine(doc: IndexedDoc): string {
   return `  ${doc.relPath}\t${doc.archive.reason ?? ""}`;
 }
 
-function describeRule(config: OfflineArchiveConfig): string {
-  const { auto, staleAfterDays, finishedAfterDays } = config.archive;
-  if (!auto) return "Auto-archive is off (archive.auto is false).";
-  return `Auto rule: not edited for more than ${staleAfterDays} days, or done/abandoned and not edited for more than ${finishedAfterDays} days; never while in review, in progress, or waiting on you.`;
-}
-
 async function indexedDocs(config: OfflineArchiveConfig, repo: string | undefined): Promise<IndexedDoc[]> {
   const { docs, archive } = await openArchive({ ...config, readOnly: true });
   return docs
@@ -75,25 +66,6 @@ async function list(config: OfflineArchiveConfig, options: ArchiveOptions, io: A
   return 0;
 }
 
-async function dryRunAuto(config: OfflineArchiveConfig, options: ArchiveOptions, io: ArchiveIo): Promise<number> {
-  const docs = await indexedDocs(config, options.repo);
-  io.out(describeRule(config));
-  const summary: string[] = [];
-  for (const [repo, repoDocs] of byRepo(docs)) {
-    const auto = repoDocs.filter((doc) => doc.archive.state === "auto");
-    const manual = repoDocs.filter((doc) => doc.archive.state === "manual").length;
-    const active = repoDocs.length - auto.length - manual;
-    summary.push(
-      `${repo}\t${repoDocs.length} plan${repoDocs.length === 1 ? "" : "s"}\t${auto.length} auto\t${manual} manual\t${active} active`,
-    );
-    if (auto.length === 0) continue;
-    io.out(`\n${repo}: ${auto.length} of ${repoDocs.length} would be auto-archived`);
-    for (const doc of auto) io.out(docLine(doc));
-  }
-  io.out(`\nPer repo:\n${summary.map((line) => `  ${line}`).join("\n")}`);
-  return 0;
-}
-
 async function apply(
   config: OfflineArchiveConfig,
   input: string,
@@ -109,7 +81,7 @@ async function apply(
   }
   await archive.apply(docPath, action);
   const state = archive.stateFor(doc);
-  const suffix = state.state === "auto" ? ` (still auto-archived: ${state.reason ?? ""})` : "";
+  const suffix = state.state === "auto" ? ` (still archived: ${state.reason ?? ""})` : "";
   io.out(`${ACTION_MESSAGES[action](docPath)}${suffix}`);
   return 0;
 }
@@ -123,7 +95,6 @@ export async function runArchive(
 ): Promise<number> {
   try {
     if (command === "archive" && options.list) return await list(config, options, io);
-    if (command === "archive" && options.dryRunAuto) return await dryRunAuto(config, options, io);
     const [docArg] = args;
     if (!docArg) {
       io.err(ARCHIVE_USAGE);

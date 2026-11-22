@@ -3,13 +3,13 @@ import { CircleCheck, CircleDot, MessageSquare, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useDoc, useDocSessions, useDocsIndex } from "../api/queries";
 import { BuildOptions, buildMessage, planForBuild, useBuildOptions } from "../build/BuildOptions";
-import { handOffBuild, NOT_NOW } from "../build/buildHandOff";
+import { handOffBuild, handOffBuildCommand, NOT_NOW } from "../build/buildHandOff";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
-import { findRepo } from "../lib/indexNav";
+import { codeRepoFor } from "../lib/indexNav";
 import { useToast } from "../lib/toast";
 import { defaultHandOffTarget, HandOffTarget } from "./HandOffTarget";
-import { handOffToClaude } from "./handOff";
+import { copyText, handOffToClaude, reviewCommand } from "./handOff";
 import { handOffMessage } from "./handOffMessage";
 import { useRequiredReview } from "./ReviewContext";
 import { pendingCounts } from "./reviewModel";
@@ -65,8 +65,8 @@ export function SubmitReviewDialog() {
   const target = chosenTarget ?? defaultHandOffTarget(sessions);
   const { data: doc } = useDoc(docPath);
   const { data: index } = useDocsIndex();
-  const repo = findRepo(index, docPath.split("/")[0] ?? "");
-  const build = useBuildOptions(planForBuild(docPath, doc, repo), sessions, { allowNotNow: true });
+  const codeRepo = doc ? codeRepoFor(index, doc.summary) : undefined;
+  const build = useBuildOptions(planForBuild(docPath, doc, codeRepo), sessions, { allowNotNow: true });
   const titleId = useId();
   const close = () => {
     setSubmitOpen(false);
@@ -83,8 +83,17 @@ export function SubmitReviewDialog() {
   const building = verdict === "approve" && build.target !== NOT_NOW;
   const sendsFeedback = counts.total > 0 || body.trim() !== "";
 
+  const handOffCommandText = (): string | null => {
+    if (verdict !== "approve") return reviewCommand(docPath);
+    if (build.target !== NOT_NOW) return handOffBuildCommand(build.target, build.request, sessions);
+    return sendsFeedback ? reviewCommand(docPath) : null;
+  };
+
   const submit = async () => {
     if (building && !build.branchValid) return;
+    const command = handOffCommandText();
+    // Browsers only allow clipboard writes during the click, so copy before awaiting the submit.
+    const copying = command ? copyText(command) : undefined;
     setSubmitting(true);
     const result = await actions.submit(verdict, body);
     setSubmitting(false);
@@ -99,15 +108,15 @@ export function SubmitReviewDialog() {
       toast(`Review submitted, but the status wasn't changed: ${result.statusUpdate.message}`, "bad");
     }
     if (verdict !== "approve") {
-      toast(handOffMessage(await handOffToClaude(docPath, session)));
+      toast(handOffMessage(await handOffToClaude(docPath, session, copying)));
       return;
     }
     if (buildTarget !== NOT_NOW) {
-      toast(buildMessage(await handOffBuild(buildTarget, buildRequest, sessions)));
+      toast(buildMessage(await handOffBuild(buildTarget, buildRequest, sessions, copying)));
       return;
     }
     const fallback = sessions.find((candidate) => candidate.id === defaultHandOffTarget(sessions)) ?? null;
-    if (sendsFeedback) toast(handOffMessage(await handOffToClaude(docPath, fallback)));
+    if (sendsFeedback) toast(handOffMessage(await handOffToClaude(docPath, fallback, copying)));
     else toast("Approved");
   };
 
@@ -118,7 +127,7 @@ export function SubmitReviewDialog() {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="dialog-panel relative flex w-[min(560px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
+        className="dialog-panel relative flex w-[min(640px,100%)] flex-col gap-5 rounded-card border border-line bg-surface-raised p-6 shadow-modal"
       >
         <header className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -158,7 +167,7 @@ export function SubmitReviewDialog() {
           placeholder="Overall comment (optional)"
           className="field text-ui"
         />
-        <fieldset className="m-0 grid grid-cols-1 gap-2 border-0 p-0 sm:grid-cols-3">
+        <fieldset className="m-0 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 sm:grid-cols-3">
           <legend className="sr-only">Verdict</legend>
           {VERDICTS.map((option) => (
             <label key={option.value} className={`verdict-card verdict-${option.value}`}>

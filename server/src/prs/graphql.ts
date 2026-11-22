@@ -26,6 +26,7 @@ export interface RawPr {
   closedAt: string | null;
   updatedAt: string;
   headRefName: string;
+  headRefOid?: string;
   baseRefName: string;
   isInMergeQueue?: boolean;
   author: { login: string } | null;
@@ -60,7 +61,7 @@ const FAILED_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "
 const FAILED_STATES = new Set(["FAILURE", "ERROR"]);
 
 const PR_FIELDS = `fragment P on PullRequest {
-  number title url state isDraft merged mergedAt closedAt updatedAt headRefName baseRefName isInMergeQueue
+  number title url state isDraft merged mergedAt closedAt updatedAt headRefName headRefOid baseRefName isInMergeQueue
   author { login }
   labels(first: 20) { nodes { name } }
   reviewDecision
@@ -189,6 +190,7 @@ export function toPrInfo(
     review: raw.reviewDecision ? REVIEW_DECISIONS[raw.reviewDecision] : null,
     unresolvedThreads: (raw.reviewThreads?.nodes ?? []).filter((thread) => !thread.isResolved).length,
     headRef: raw.headRefName,
+    headSha: raw.headRefOid ?? null,
     baseRef: raw.baseRefName,
     closedAt: raw.closedAt,
     mergedAt: raw.mergedAt ?? (state === "merged" ? raw.closedAt : null),

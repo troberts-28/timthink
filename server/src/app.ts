@@ -10,25 +10,38 @@ import { buildSlashCommand, isValidBranchName, isValidPhase, suggestBranch } fro
 import { type BuildLauncher, launchArgv } from "./build/launcher.js";
 import type { CodeMatch, CodeResolution, CodeService, SessionCheckoutHint } from "./code/codeService.js";
 import type { OpenInEditor } from "./code/editor.js";
-import { isCheckoutOfRepo } from "./code/repoCheckouts.js";
+import { hostCheckout, isCheckoutOfRepo } from "./code/repoCheckouts.js";
 import type { WorktreeIndex } from "./code/worktrees.js";
 import type { TimthinkConfig } from "./config.js";
 import { listPhases } from "./docs/phases.js";
 import { searchDocs } from "./docs/search.js";
 import type { DocsStore } from "./docs/store.js";
-import type { DocDetail, DocsIndex } from "./docs/types.js";
+import type { DocDetail, DocsIndex, GithubRepo } from "./docs/types.js";
 import type { EventHub, HubEvent } from "./events.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import type { HistoryService } from "./history/historyService.js";
 import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
+import type { DocMoveService } from "./migration/docMoveService.js";
+import type { MovedDocs } from "./migration/movedDocs.js";
 import { mimeTypeFor } from "./mime.js";
+import type { ChecklistStore } from "./pages/checklistStore.js";
+import type { AuthoredPages } from "./pages/pageBundle.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
+import type { ProjectService } from "./projects/projectService.js";
+import type { ProjectRegistry } from "./projects/registry.js";
+import { areaRoutes, type ProjectRouteDeps, projectDetailOf, projectRoutes } from "./projects/routes.js";
 import type { PrService } from "./prs/prService.js";
+import type { Publisher } from "./publish/publisher.js";
+import { publishRoutes } from "./publish/routes.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
 import { reviewRoutes } from "./reviews/routes.js";
+import type { RoundStore } from "./rounds/roundStore.js";
+import { roundResumePrompt } from "./rounds/roundView.js";
+import { roundRoutes } from "./rounds/routes.js";
+import { ROUND_ID_PATTERN } from "./rounds/schema.js";
 import { PathOutsideRootError, resolveInsideRoot } from "./safePath.js";
 import { loopbackHostGuard, mutationGuard, sameOriginReadGuard } from "./security.js";
 import { seenRoutes } from "./seen/routes.js";
@@ -59,6 +72,15 @@ export interface AppDeps {
   inbox: InboxService;
   archive: ArchiveService;
   prs: PrService;
+  projects: ProjectRegistry;
+  rounds: RoundStore;
+  docMoves: DocMoveService;
+  movedDocs: MovedDocs;
+  projectService: ProjectService;
+  pages: AuthoredPages;
+  publisher: Publisher;
+  checklists: ChecklistStore;
+  githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
   launchBuild: BuildLauncher;
   resolveCompletion: (docPath: string, done: boolean) => Promise<boolean>;
@@ -117,6 +139,7 @@ const resumeBody = z.object({
   reviewDoc: z.string().min(1).max(1024).optional(),
   build: buildBody.optional(),
   command: z.enum(RESUME_COMMANDS).optional(),
+  round: z.string().regex(ROUND_ID_PATTERN).optional(),
 });
 const revealBody = z.object({ path: z.string().min(1).max(1024) });
 const repoVisibilityBody = z.object({ repo: z.string().min(1).max(256), hidden: z.boolean() });
@@ -138,15 +161,6 @@ const SEARCH_LIMIT = 30;
 const searchQuery = z.object({ q: z.string().min(1).max(200) });
 const openWorktreeBody = z.object({ path: z.string().min(1).max(1024), app: z.enum(["zed", "warp"]) });
 const completionBody = z.object({ path: z.string().min(1).max(1024), done: z.boolean() });
-const prDismissBody = z.object({
-  path: z.string().min(1).max(1024),
-  numbers: z.array(z.number().int().positive()).min(1).max(50),
-});
-const prUnlinkBody = z.object({
-  path: z.string().min(1).max(1024),
-  number: z.number().int().positive(),
-  unlinked: z.boolean(),
-});
 
 const attachmentsQuery = z.object({ repo: z.string().min(1), project: z.string().min(1).optional() });
 
@@ -191,6 +205,7 @@ async function toSessionView(session: SessionRecord, docPath: string | null = nu
     firstSeen: session.firstSeen,
     lastActivity: session.lastActivity,
     live: session.live,
+    status: session.status,
     warpFocusUrl: isWarpFocusUrl(session.warpFocusUrl) ? session.warpFocusUrl : null,
     canResume: isSessionId(session.id) && (await isExistingDirectory(session.cwd)),
     mayBeOpenUntracked: mayBeOpenUntracked(session),
@@ -198,6 +213,14 @@ async function toSessionView(session: SessionRecord, docPath: string | null = nu
     plannedDoc: docPath === null ? null : session.plannedDocPaths.includes(docPath),
     builtDoc: docPath === null ? null : session.builtDocPaths.includes(docPath),
   };
+}
+
+const EARLIER_SESSIONS_LIMIT = 10;
+
+function projectSessions(sessions: readonly SessionRecord[]) {
+  const live = sessions.filter((session) => session.live);
+  const earlier = sessions.filter((session) => !session.live).slice(0, EARLIER_SESSIONS_LIMIT);
+  return [...live, ...earlier];
 }
 
 async function sessionsResponse(
@@ -242,6 +265,22 @@ async function serveDocsFile(c: Context, docsRoot: string, requested: string): P
 
 export function createApp(deps: AppDeps) {
   const { config, store, hub, code, sessions } = deps;
+  const projectRouteDeps: ProjectRouteDeps = {
+    registry: deps.projects,
+    service: deps.projectService,
+    store,
+    reviews: deps.reviews.store,
+    rounds: deps.rounds,
+    prs: deps.prs,
+    githubFor: deps.githubFor,
+    getIndex: deps.getIndex,
+    pages: deps.pages,
+    checklists: deps.checklists,
+    sessionsOf: async (belongs) => {
+      await sessions.refreshLiveness();
+      return Promise.all(projectSessions(sessions.all().filter(belongs)).map((session) => toSessionView(session)));
+    },
+  };
 
   const checkoutContext = (repo: string, docPath: string | undefined) => {
     if (!docPath) return { docBranch: null, session: null };
@@ -263,7 +302,7 @@ export function createApp(deps: AppDeps) {
 
   const resumeSession = async (
     session: SessionRecord,
-    { reviewDoc, build, command }: z.infer<typeof resumeBody>,
+    { reviewDoc, build, command, round }: z.infer<typeof resumeBody>,
   ): Promise<SessionActionResponse> => {
     if (!isSessionId(session.id)) return { status: "unavailable", message: "This session id can't be resumed" };
     if (!session.cwd || !(await isExistingDirectory(session.cwd))) {
@@ -279,9 +318,11 @@ export function createApp(deps: AppDeps) {
       ? buildSlashCommand(build)
       : command
         ? `/${command}`
-        : reviewDoc === undefined
-          ? null
-          : `/timthink review ${reviewDoc}`;
+        : round
+          ? roundResumePrompt({ id: round })
+          : reviewDoc === undefined
+            ? null
+            : `/timthink review ${reviewDoc}`;
     await writeResumeTabConfig(config.warpTabConfigDir, session.id, session.cwd, prompt);
     await deps.openUrl(RESUME_TAB_CONFIG_URL);
     return { status: "resumed", cwd: session.cwd };
@@ -310,6 +351,8 @@ export function createApp(deps: AppDeps) {
     .get("/api/doc", zValidator("query", docPathQuery), async (c) => {
       const { path: docPath } = c.req.valid("query");
       const summary = store.getDoc(docPath);
+      const movedTo = summary ? null : deps.movedDocs.movedTo(docPath);
+      if (movedTo) return c.json({ error: "Moved", movedTo }, 404);
       if (!summary) return c.json({ error: "Not found" }, 404);
       const absolute = await resolveInsideRoot(config.docsRoot, docPath).catch(() => null);
       const raw = absolute ? await readFile(absolute, "utf8").catch(() => null) : null;
@@ -405,6 +448,19 @@ export function createApp(deps: AppDeps) {
       return c.json<SessionActionResponse>(body, status);
     })
     .route("/api/review", reviewRoutes(deps.reviews))
+    .route(
+      "/api/round",
+      roundRoutes({
+        rounds: deps.rounds,
+        docMoves: deps.docMoves,
+        hostCheckout: (repo) => hostCheckout(config, repo),
+        sessionFor: async (round) => {
+          await sessions.refreshLiveness();
+          const session = sessions.all().find((candidate) => candidate.cwd !== null && candidate.cwd === round.cwd);
+          return session ? toSessionView(session) : null;
+        },
+      }),
+    )
     .route("/api/history", historyRoutes(store, deps.history, deps.seen))
     .route(
       "/api/seen",
@@ -416,13 +472,24 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .route("/api/project", projectRoutes(projectRouteDeps))
+    .route("/api/area", areaRoutes(projectRouteDeps))
+    .route(
+      "/api/publish",
+      publishRoutes({
+        publisher: deps.publisher,
+        registry: deps.projects,
+        checklists: deps.checklists,
+        detailOf: (record) => projectDetailOf(projectRouteDeps, record),
+      }),
+    )
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {
       const request = c.req.valid("json");
       const doc = store.getDoc(request.doc);
       if (!doc) return c.json<BuildLaunchResponse>({ status: "unavailable", message: "Unknown plan" }, 404);
-      const template = config.repos[doc.repo]?.buildLaunch;
+      const template = config.repos[doc.codeRepo]?.buildLaunch;
       if (!template) {
-        return c.json<BuildLaunchResponse>({ status: "unavailable", message: `No build launcher for ${doc.repo}` });
+        return c.json<BuildLaunchResponse>({ status: "unavailable", message: `No build launcher for ${doc.codeRepo}` });
       }
       const branch = request.branch ?? doc.branch ?? suggestBranch(doc.path);
       try {
@@ -443,13 +510,13 @@ export function createApp(deps: AppDeps) {
     .get("/api/doc-worktree", zValidator("query", docPathQuery), async (c) => {
       const doc = store.getDoc(c.req.valid("query").path);
       if (!doc) return c.json({ error: "Not found" }, 404);
-      const worktree = doc.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      const worktree = doc.branch ? await deps.worktrees.forBranch(doc.codeRepo, doc.branch) : null;
       return c.json({ worktree });
     })
     .post("/api/open-worktree", zValidator("json", openWorktreeBody), async (c) => {
       const { path: docPath, app } = c.req.valid("json");
       const doc = store.getDoc(docPath);
-      const worktree = doc?.branch ? await deps.worktrees.forBranch(doc.repo, doc.branch) : null;
+      const worktree = doc?.branch ? await deps.worktrees.forBranch(doc.codeRepo, doc.branch) : null;
       if (!worktree) return c.json({ status: "not-found" as const }, 404);
       try {
         if (app === "zed") await deps.openInEditor(worktree.path);
@@ -459,34 +526,11 @@ export function createApp(deps: AppDeps) {
         return c.json({ status: "error" as const, message: errorMessage(error, "Couldn't open it") });
       }
     })
-    .get("/api/doc-prs", zValidator("query", docPathQuery), (c) => {
-      const { path: docPath } = c.req.valid("query");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      return c.json(deps.prs.docPrs(docPath));
-    })
-    .post("/api/doc-prs/refresh", zValidator("json", docPathQuery), async (c) => {
-      const { path: docPath } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.refresh({ docPaths: [docPath] });
-      return c.json(deps.prs.docPrs(docPath));
-    })
-    .post("/api/doc-prs/unlink", zValidator("json", prUnlinkBody), async (c) => {
-      const { path: docPath, number, unlinked } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.setUnlinked(docPath, number, unlinked);
-      return c.json(deps.prs.docPrs(docPath));
-    })
     .post("/api/doc-prs/complete", zValidator("json", completionBody), async (c) => {
       const { path: docPath, done } = c.req.valid("json");
       if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
       const resolved = await deps.resolveCompletion(docPath, done);
       return c.json({ status: resolved ? ("ok" as const) : ("nothing-to-resolve" as const) });
-    })
-    .post("/api/doc-prs/dismiss", zValidator("json", prDismissBody), async (c) => {
-      const { path: docPath, numbers } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.dismissClosed(docPath, numbers);
-      return c.json({ status: "ok" as const });
     })
     .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
       const { owner, repo, numbers } = c.req.valid("query");

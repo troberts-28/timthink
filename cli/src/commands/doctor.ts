@@ -167,7 +167,10 @@ async function hooksCheck(paths: InstallPaths): Promise<DoctorCheck> {
   try {
     const state = timthinkHookState(settings, launcherPath(paths), hookScriptPath(paths));
     if (state === "installed")
-      return pass("claude hooks", `${paths.claudeSettingsPath} (SessionStart, SessionEnd, PostToolUse)`);
+      return pass(
+        "claude hooks",
+        `${paths.claudeSettingsPath} (SessionStart, SessionEnd, PostToolUse, UserPromptSubmit, Notification, Stop)`,
+      );
     const detail = state === "outdated" ? "installed for another checkout or an older version" : "not installed";
     return fail("claude hooks", detail, INSTALL_HINT);
   } catch (error) {

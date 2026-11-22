@@ -58,6 +58,10 @@ function doc(overrides: Partial<DocSummary> = {}): DocSummary {
     path: "api/plan.md",
     repo: "api",
     project: null,
+    projectId: null,
+    codeRepo: "api",
+    repoOverride: null,
+    kind: "plan",
     relPath: "plan.md",
     title: "Plan",
     date: "2026-11-03",
@@ -82,6 +86,9 @@ function session(overrides: Partial<SessionRecord>): SessionRecord {
     lastActivity: null,
     live: false,
     livenessKnown: false,
+    status: null,
+    label: null,
+    boundProjects: [],
     warpFocusUrl: null,
     transcriptPath: null,
     docPaths: [],
@@ -96,6 +103,7 @@ function session(overrides: Partial<SessionRecord>): SessionRecord {
 
 async function service(docs: DocSummary[], runner: GraphqlRunner, sessions: SessionRecord[] = []) {
   const changes: string[][] = [];
+  const detached = new Map<string, number[]>();
   const prs = new PrService({
     settings: { ...DEFAULT_PR_SETTINGS, mergeQueueLabels: ["merge_queue"] },
     stateDir: await makeTempDir("timthink-prs-"),
@@ -103,13 +111,15 @@ async function service(docs: DocSummary[], runner: GraphqlRunner, sessions: Sess
     sessions: { all: () => sessions },
     githubFor: (repo) => (repo === "api" ? GITHUB : null),
     isArchived: () => false,
+    detachedFor: (plan) => detached.get(plan.path) ?? [],
     runner,
     onChange: (paths) => changes.push(paths),
     hasViewers: () => true,
     now: () => NOW,
   });
   await prs.init();
-  return { prs, changes };
+  const detach = (docPath: string, number: number) => detached.set(docPath, [...(detached.get(docPath) ?? []), number]);
+  return { prs, changes, detach };
 }
 
 describe("PrService", () => {
@@ -187,15 +197,14 @@ describe("PrService", () => {
         ],
       }),
     ];
-    const { prs } = await service([doc({ prs: ["40"] })], github.runner, sessions);
+    const { prs, detach } = await service([doc({ prs: ["40"] })], github.runner, sessions);
     await prs.refresh();
     expect(prs.docPrs("api/plan.md").linked.map(({ number, sources }) => ({ number, sources }))).toEqual([
       { number: 40, sources: ["frontmatter", "session"] },
       { number: 41, sources: ["session"] },
     ]);
-    await prs.setUnlinked("api/plan.md", 41, true);
+    detach("api/plan.md", 41);
     expect(prs.docPrs("api/plan.md").linked.map((pr) => pr.number)).toEqual([40]);
-    expect(prs.docPrs("api/plan.md").unlinked).toEqual([41]);
   });
 
   it("links a session's PRs only to the plan it worked on just before submitting them", async () => {
@@ -246,17 +255,17 @@ describe("PrService", () => {
   it("offers completion once every linked PR merged, and only once per set of PRs", async () => {
     const github = fakeGithub([rawPr({ number: 60, state: "MERGED", merged: true }), rawPr({ number: 61 })]);
     const plan = doc({ prs: ["60", "61"] });
-    const { prs } = await service([plan], github.runner);
+    const { prs, detach } = await service([plan], github.runner);
     await prs.refresh();
     expect(prs.completionMarker(plan)).toBeNull();
-    await prs.setUnlinked(plan.path, 61, true);
+    detach(plan.path, 61);
     expect(prs.completionMarker(plan)).toBe("60");
     await prs.markCompleted(plan.path, "60");
     expect(prs.completionMarker(plan)).toBeNull();
     expect(prs.completion(plan.path)).toEqual({ marker: "60", at: new Date(NOW).toISOString() });
   });
 
-  it("raises inbox signals for failing CI, review feedback and closed PRs, and dismisses closed ones", async () => {
+  it("flags a plan whose PR has failing CI", async () => {
     const failing = { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [] } } } }] };
     const github = fakeGithub([
       rawPr({ number: 70, commits: failing }),
@@ -266,14 +275,27 @@ describe("PrService", () => {
     const plan = doc({ prs: ["70", "71", "72"] });
     const { prs } = await service([plan], github.runner);
     await prs.refresh();
-    expect(prs.signalsFor(plan).map((signal) => [signal.reason, signal.numbers])).toEqual([
-      ["ci-failing", [70]],
-      ["review-comments", [71]],
-      ["pr-closed-unmerged", [72]],
-    ]);
     expect(prs.attentionFor(plan)).toBe("ci-failing");
-    await prs.dismissClosed(plan.path, [72]);
-    expect(prs.signalsFor(plan).map((signal) => signal.reason)).not.toContain("pr-closed-unmerged");
+  });
+
+  it("counts a PR closed unmerged as landed once another merged, and keeps the decision when the plan moves", async () => {
+    const github = fakeGithub([
+      rawPr({ number: 63, state: "MERGED", merged: true }),
+      rawPr({ number: 64, state: "CLOSED" }),
+      rawPr({ number: 65, state: "CLOSED" }),
+    ]);
+    const landed = doc({ path: "acme-api/landed.md", prs: ["63", "64"] });
+    const abandoned = doc({ path: "acme-api/abandoned.md", prs: ["65"] });
+    const { prs } = await service([landed, abandoned], github.runner);
+    await prs.refresh();
+    expect([prs.completionMarker(landed), prs.completionMarker(abandoned)]).toEqual(["63,64", null]);
+
+    await prs.markCompleted(landed.path, "63,64", { announce: false });
+    await prs.moveDocs(new Map([[landed.path, "payments/checkout-v2/landed.md"]]));
+    expect([prs.completion(landed.path), prs.completion("payments/checkout-v2/landed.md")?.marker]).toEqual([
+      null,
+      "63,64",
+    ]);
   });
 
   it("asks about plans whose PRs merged with tasks still open, until resolved", async () => {
@@ -281,11 +303,9 @@ describe("PrService", () => {
     const plan = doc({ prs: ["90"] });
     const { prs } = await service([plan], github.runner);
     await prs.markAwaiting(plan.path, "90", 3);
-    expect(prs.signalsFor(plan).map(({ reason, numbers, detail }) => ({ reason, numbers, detail }))).toEqual([
-      { reason: "merged-tasks-open", numbers: [90], detail: "Its PR merged, but 3 tasks are still open" },
-    ]);
+    expect(prs.awaitingCompletion(plan.path)).toMatchObject({ marker: "90", openTasks: 3 });
     await prs.markCompleted(plan.path, "90", { announce: false });
-    expect(prs.signalsFor(plan)).toEqual([]);
+    expect(prs.awaitingCompletion(plan.path)).toBeNull();
     expect(prs.completion(plan.path)).toMatchObject({ marker: "90", quiet: true });
   });
 

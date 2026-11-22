@@ -6,15 +6,21 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 
 ## Features
 
+- **Projects.** Group docs by project rather than by repo. A project spans repos and has a home page: what needs you (open questions and replies), its PRs and stacks across repos, its docs grouped by kind, and recent activity. Projects sit in areas, and shipped or dropped projects archive their docs.
+- **Project pages.** A project can carry a `project.page.tsx` that Claude writes and keeps current: what it is, how to test it, diagrams and decisions, built from a small primitive library (`timthink/page`) and rendered above the generated sections. Saving it reloads the page, compile and render errors show inline, and `timthink check` catches them first. Hover any block to comment on it; comments go to Claude through the same review flow as plans. Pages can import components from the area folder, so shared setup is written once, and `useJson` and `QrLink` let them read local dev services and hand links to a phone. A `Checklist` records pass, fail and a note per step against the PR's head commit, and marks results stale when the PR moves on.
+- **Publishing.** **Publish** on a project page (or `timthink publish <project> --ttl 7d`) puts the project on an unlisted Vercel URL to paste into a PR or send a teammate: the authored page, PRs, docs list, activity and every doc in full, with checklists read-only and dev-service widgets showing their offline state. The deployment answers 410 once it expires, and the hub deletes expired deployments; the project page lists live links with Copy link and Unpublish.
+- **Areas.** An area page lists its projects, every live PR stack across them grouped by project, and its reference docs by kind. An optional `area.page.tsx` renders at the top with the same primitives, comments and checklists as a project page, reading the area through `useArea()`.
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
-- **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. The header shows the whole stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. When every PR has merged, the plan is marked done.
-- **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox collects plans that need you across every repo.
+- **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. Its project page shows every PR and stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. Once each PR has merged or closed (and at least one merged), a plan with every task ticked is marked done, and one with tasks still open waits under **Looks finished** on its project page.
+- **Decision rounds.** `/timthink comments` triages a PR's review comments with your address-comments skill, then puts them in the hub as a round: each comment with its thread, diff hunk, code at the PR head, Claude's read and fix, the options and a reply editor. Decide each (`j`/`k`, `1` to `4`, `r`, `⌘↵`), submit, and the waiting session wakes up to fix, push and reply. The round then shows what happened to each comment.
+- **Moving docs into projects.** `/timthink migrate` has Claude propose an area and project for every doc still in a repo folder, as a round grouped by project. Accept a whole project at once or override single docs, then submit: the hub creates the manifests, moves each doc with its reviews, history, archive and seen state and the assets only it links to, rewrites relative links everywhere, and redirects old URLs. **Undo** puts every file back.
+- **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox holds only what a Claude session is blocked on: rounds awaiting you, and open questions on plans in `review`.
 - **Search.** ⌘K jumps to any plan or repo by title, and from three characters also searches plan text, with `repo:` and `status:` filters.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
 - **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
-- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**.
+- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**. A project page lists its sessions with what each is doing (**Working**, **Waiting for you**, **Finished**) and the label the skill gave it (`timthink session label`); a session belongs to a project when it wrote into the project's folder, sits on one of its PR branches, or ran `timthink project use <id>`.
 - **Build.** Approving a plan (or pressing `b`) copies a command that starts a fresh Claude on `/timthink build <doc>` in the planner's directory and brings the planning tab forward, so you split a pane and paste. Or send the build to an existing session. The build skill works phase by phase, ticks tasks and records the branch and PRs back into the plan.
 
 Inspired by [Plannotator](https://github.com/backnotprop/plannotator) and [Kacper-Lubisz/pages](https://github.com/Kacper-Lubisz/pages).
@@ -57,14 +63,37 @@ If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS 
 
 ```
 <docsRoot>/                   # e.g. ~/agent-docs
-  <repo>/                     # matches the repo's folder name under codeRoot
-    2026-10-01-some-plan.md
-    <project>/                # optional grouping
-      plan.md
+  <area>/                     # a folder with area.yaml is an area
+    area.yaml
+    area.page.tsx             # optional page rendered at the top of the area page
+    2026-10-20-research.md    # reference docs for the whole area
+    <project>/                # a subfolder with project.yaml is a project
+      project.yaml
+      project.page.tsx        # optional page rendered at the top of the project's page
+      2026-11-10-plan.md
       data/sample.json        # non-markdown files are attachments
+  <project>/                  # a top-level folder with project.yaml is a standalone project
+    project.yaml
+  <repo>/                     # any other folder is a repo's docs; it matches the repo under codeRoot
+    2026-10-01-some-plan.md
+    <folder>/                 # optional grouping
+      plan.md
 ```
 
-Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` (a number or a list) and `linear` are used when present. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
+Frontmatter is optional; `title`, `date`, `status`, `kind`, `project`, `repo`, `branch`, `pr` (a number or a list) and `linear` are used when present. `kind` is `plan` (the default), `design`, `research`, `decision`, `handoff` or `notes`, and is guessed from the filename when it's missing. In a project, a doc's code paths and PR numbers resolve against the project's first repo unless the doc sets `repo:`.
+
+A project's manifest:
+
+```yaml
+title: Annual payments
+summary: Let customers pay for a year up front.
+status: active                # active, paused, shipped or dropped
+repos: [monorepo, atlas]      # the first is where bare PR numbers and code paths resolve
+prs: [atlas#812]              # PRs to include besides those found through docs and sessions
+detached: [monorepo#19001]    # PRs to leave out even when a doc or session links them
+```
+
+An `area.yaml` takes `title`, `summary` and `repos` (the default for its projects). A field that doesn't parse is reported on the project page and by `timthink check`, and the rest of the manifest still applies. A project's PRs are the ones in its docs' `pr:` frontmatter, the ones its sessions opened, the rest of their Graphite stacks, and `prs:`, minus `detached:`. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
 
 ### Markdown that isn't a plan
 
@@ -78,7 +107,10 @@ Every `*.md` file is a plan unless it's an agent instruction file (`AGENTS.md`, 
 | `<docsRoot>/<repo>/.timthink/reviews/`, `history/`     | read/write | Review threads, and snapshots for "changes since you last looked"                                 |
 | `<docsRoot>/<repo>/.timthink/archive.json`             | read/write | Plans you archived or kept active by hand, keyed by repo-relative path                            |
 | `<docsRoot>/**/*.md`                                   | write      | Only the `status:` line when you submit a verdict, and the text when you accept a suggestion      |
-| `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, `preferences.json` (hidden repos), a transcript backfill cache |
+| `<docsRoot>/**/project.yaml`, `area.yaml`              | write      | Only when you change a project's status or PRs in the hub, or with `timthink project`             |
+| `<docsRoot>/<top>/.timthink/checklists/`               | read/write | Checklist results from project pages                                                              |
+| `<docsRoot>/**`                                        | move/write | Only when you submit a doc-moves round, or undo one                                               |
+| `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, `preferences.json` (hidden repos), `rounds/` (decision rounds), `moves.json` and `migrations/` (doc moves and their undo journals), a transcript backfill cache |
 | `~/.claude/projects/*/*.jsonl`                         | read       | Claude Code transcripts, scanned for plan writes and session titles                               |
 | `~/.warp/tab_configs/timthink-resume.toml`             | write      | Written when you click **Resume in Warp**                                                         |
 
@@ -89,14 +121,18 @@ The hooks append one JSON line per event and print nothing:
 | `SessionStart`                           | session id, cwd, git branch, transcript path, `$WARP_FOCUS_URL`, `$TERM_PROGRAM`, time   |
 | `SessionEnd`                             | session id, end reason, time                                                             |
 | `PostToolUse` (`Write\|Edit\|MultiEdit`) | session id and file path, only for files inside `docsRoot`                               |
+| `UserPromptSubmit`, `Notification`, `Stop` | session id, cwd, time (the session's status: working, waiting for you, finished)       |
 
-Nothing leaves your machine.
+`timthink session label` and `timthink project use` append `Label` and `Bind` lines to `sessions.jsonl` for the session they run in, found through their parent processes.
+
+Nothing leaves your machine, except what you publish: `timthink publish` and the **Publish** button upload the project's page, PR titles and states, and every doc in the project to the `timthink-pages` project in the Vercel account behind `VERCEL_TOKEN`, and record each publish in `publishes.json` in the state dir. The hub reads the token from its own environment; under launchd, run `launchctl setenv VERCEL_TOKEN <token>` and restart the hub, or publish from a terminal with the CLI. The first publish turns off Vercel Authentication on that project so the links open without a login.
 
 ## Security
 
 - The server binds to `127.0.0.1` and rejects requests whose `Host` isn't a loopback name.
 - Mutating requests need a same-origin `Origin` header and a per-process token embedded in the served page, so other websites can't post to it.
 - Doc paths must resolve inside `docsRoot`; attachments that escape it through symlinks are refused and are served with a sandboxing CSP. `demo` iframes get `allow-scripts` without same-origin access.
+- A `project.page.tsx` or `area.page.tsx` is compiled with esbuild and runs in the hub's own page, not a sandbox, so it can share live data and the theme. Only put pages you or your own Claude sessions wrote in `docsRoot`.
 - Zed is launched with `execFile` (no shell), and only for files inside the configured code roots.
 
 ## Configuration
@@ -124,9 +160,6 @@ Nothing leaves your machine.
 | `prs.mergeQueueLabels`   | none                      | Labels that mean "in the merge queue", e.g. `["merge_queue"]`, besides GitHub's own queue   |
 | `groups`                 | none                      | Sidebar and inbox groups, in order (see below). Without it, repos aren't grouped            |
 | `sidebarQuotes`          | none                      | Lines shown at random in the sidebar footer (click for another). Hidden when empty          |
-| `archive.auto`           | `true`                    | Archive plans automatically by the rule below                                               |
-| `archive.staleAfterDays` | `21`                      | Auto-archive plans whose file hasn't changed for longer than this                          |
-| `archive.finishedAfterDays` | `3`                    | Auto-archive `done` or `abandoned` plans that haven't changed for longer than this         |
 | `readOnly`               | `false`                   | Never write under `docsRoot` (no snapshots, reviews or archive changes); `TIMTHINK_READONLY=1` also sets it |
 
 ```json
@@ -134,14 +167,13 @@ Nothing leaves your machine.
   "groups": [
     { "name": "Work", "owners": ["acme-corp"], "repos": ["side-project"] },
     { "name": "Personal", "default": true }
-  ],
-  "archive": { "auto": true, "staleAfterDays": 21, "finishedAfterDays": 3 }
+  ]
 }
 ```
 
 A repo joins the first group that lists it in `repos`, otherwise the first group whose `owners` includes the GitHub owner of its checkout's `origin`, otherwise the `default` group (or "Other"). Repos are sorted by most recent activity within each group.
 
-A plan is archived when you archive it, or automatically when its file hasn't changed for `staleAfterDays` (or `finishedAfterDays` once it's `done` or `abandoned`). Plans in `review` or `in-progress`, and plans with a submitted review Claude hasn't addressed, an unread Claude reply in an open thread, or unsent drafts, are never auto-archived. Editing a file brings it back unless you archived it by hand; **Restore** keeps a plan active for good. Archived plans leave the sidebar lists, inbox and recent plans, except when Claude replies or addresses your review.
+A plan is archived when you archive it, or when its project is `shipped` or `dropped`. **Restore** keeps a plan active even in a shipped project. Archived plans leave the sidebar lists, inbox and recent plans.
 
 ## CLI
 
@@ -149,12 +181,16 @@ A plan is archived when you archive it, or automatically when its file hasn't ch
 | ----------------------------------------------- | --------------------------------------------------------------------------------- |
 | `timthink serve`                                | Run the hub in the foreground                                                     |
 | `timthink url <doc>`                            | Print the hub URL for a plan                                                      |
-| `timthink docs-dir [--cwd dir]`                 | Print the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
-| `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links          |
+| `timthink docs-dir [--cwd dir] [--project id]`  | Print a project's folder, or the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
+| `timthink project list \| show \| create \| status \| link-pr \| unlink-pr \| use \| legacy-docs` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent, `use` binds the current Claude session, `legacy-docs` lists docs outside any project as JSON |
+| `timthink session label "<text>"`               | Name the current Claude session on its project's page                             |
+| `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links; for a `.page.tsx`, compile it, render it once and check block ids |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
-| `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
-| `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active whatever the auto rule says (`--clear` forgets either) |
-| `timthink archive --list \| --dry-run-auto [--repo name]` | List archived plans, or preview what the auto rule archives and why     |
+| `timthink review list \| show \| comment \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews, or comment on a passage in your draft review (`timthink review --help`) |
+| `timthink round create \| wait \| show \| report \| abandon \| list` | Create a decision round, wait in the background until you submit it (exit 3 if abandoned), and record outcomes (`timthink round --help`) |
+| `timthink publish <project> [--ttl 7d]` / `unpublish <url>` | Publish a project to an unlisted Vercel URL that expires (1h to 90d), or take it down; needs `VERCEL_TOKEN` and the hub running |
+| `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active even in a shipped project (`--clear` forgets either) |
+| `timthink archive --list [--repo name]`         | List archived plans and why                                                       |
 | `timthink doctor`                               | Check every installed component                                                   |
 | `timthink install \| uninstall [--apply]`       | Set up or remove the components above                                             |
 

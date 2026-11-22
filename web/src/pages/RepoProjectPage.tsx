@@ -11,7 +11,7 @@ import { pluralise } from "../lib/format";
 import { findProject, findRepo } from "../lib/indexNav";
 import { repoHref } from "../lib/routes";
 
-export function ProjectPage() {
+export function RepoProjectPage() {
   const { repo: repoName, project: projectName } = useParams();
   const { data: index, isLoading } = useDocsIndex();
   const repo = findRepo(index, repoName);

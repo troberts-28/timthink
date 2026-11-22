@@ -20,6 +20,9 @@ const HOOK_EVENTS = [
   { event: "SessionStart", argument: "session-start", matcher: null },
   { event: "SessionEnd", argument: "session-end", matcher: null },
   { event: "PostToolUse", argument: "post-tool-use", matcher: "Write|Edit|MultiEdit" },
+  { event: "UserPromptSubmit", argument: "user-prompt-submit", matcher: null },
+  { event: "Notification", argument: "notification", matcher: null },
+  { event: "Stop", argument: "stop", matcher: null },
 ] as const;
 
 function isObject(value: unknown): value is JsonObject {

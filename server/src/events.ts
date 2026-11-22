@@ -7,7 +7,8 @@ export type HubEvent =
   | { type: "history-changed"; path: string; version: number }
   | { type: "seen-changed"; path: string; version: number }
   | { type: "archive-changed"; paths: string[]; version: number }
-  | { type: "prs-changed"; paths: string[]; version: number };
+  | { type: "prs-changed"; paths: string[]; version: number }
+  | { type: "rounds-changed"; ids: string[]; version: number };
 
 type Listener = (event: HubEvent) => void;
 

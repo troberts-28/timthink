@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { locateDoc } from "../docs/summarize.js";
+import { isPageFile } from "../pages/pageFile.js";
 
 export const REVIEWS_DIR = ".timthink/reviews";
 const REVIEW_FILE_SUFFIX = ".json";
@@ -25,8 +26,12 @@ export function docPathForReviewFile(relPath: string): string | null {
   if (!repo || !fileName || rest.join("/") !== REVIEWS_DIR || !fileName.endsWith(REVIEW_FILE_SUFFIX)) return null;
   try {
     const repoRelative = decodeURIComponent(fileName.slice(0, -REVIEW_FILE_SUFFIX.length));
-    return repoRelative.toLowerCase().endsWith(".md") ? `${repo}/${repoRelative}` : null;
+    return isReviewablePath(repoRelative) ? `${repo}/${repoRelative}` : null;
   } catch {
     return null;
   }
+}
+
+export function isReviewablePath(docPath: string) {
+  return docPath.toLowerCase().endsWith(".md") || isPageFile(docPath);
 }

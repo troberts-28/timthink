@@ -15,6 +15,7 @@ export interface PrInfo {
   review: ReviewDecision | null;
   unresolvedThreads: number;
   headRef: string;
+  headSha: string | null;
   baseRef: string;
   closedAt: string | null;
   mergedAt: string | null;
@@ -60,20 +61,6 @@ export function prKey(owner: string, repo: string, number: number): string {
 
 export function isTerminal(info: PrInfo): boolean {
   return info.state === "merged" || info.state === "closed";
-}
-
-export type PrSignalReason =
-  | "ci-failing"
-  | "changes-requested"
-  | "review-comments"
-  | "pr-closed-unmerged"
-  | "merged-tasks-open";
-
-export interface PrSignal {
-  reason: PrSignalReason;
-  numbers: number[];
-  detail: string;
-  at: string;
 }
 
 export interface PlanCompletion {

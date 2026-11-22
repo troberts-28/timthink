@@ -1,6 +1,6 @@
 import path from "node:path";
 import { type FrontmatterData, frontmatterList, frontmatterString, parseFrontmatter } from "../frontmatter.js";
-import type { DocSummary, TaskProgress } from "./types.js";
+import { DOC_KINDS, type DocKind, type DocSummary, type TaskProgress } from "./types.js";
 
 const DATE_PREFIX = /^(\d{4}-\d{2}-\d{2})(?:[-_ ]|$)/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
@@ -90,6 +90,25 @@ function prNumber(value: string): string | null {
   return PR_NUMBER.exec(value.trim())?.[1] ?? PR_URL.exec(value.trim())?.[1] ?? null;
 }
 
+const KIND_BY_FILENAME: ReadonlyArray<[RegExp, DocKind]> = [
+  [/\b(research|investigation|spike|eval|audit|analysis)\b/, "research"],
+  [/\b(design|architecture|spec|brief)\b/, "design"],
+  [/\b(handoff|handover)\b/, "handoff"],
+  [/\b(decision|adr)\b/, "decision"],
+  [/\b(notes|log|changelog|checklist|demos?)\b/, "notes"],
+];
+
+function isDocKind(value: string): value is DocKind {
+  return (DOC_KINDS as readonly string[]).includes(value);
+}
+
+export function inferKind(declared: string | null, fileName: string): DocKind {
+  const normalised = declared?.toLowerCase() ?? null;
+  if (normalised && isDocKind(normalised)) return normalised;
+  const words = fileName.toLowerCase().replace(/\.md$/, "").replace(/[-_]+/g, " ");
+  return KIND_BY_FILENAME.find(([pattern]) => pattern.test(words))?.[1] ?? "plan";
+}
+
 export interface SummarizeInput {
   path: string;
   raw: string;
@@ -102,10 +121,15 @@ export function summarizeDoc({ path: docPath, raw, mtime }: SummarizeInput): Doc
   const { data, body, error } = parseFrontmatter(raw);
   const fileName = path.posix.basename(docPath);
   const declaredProject = frontmatterString(data, "project");
+  const repoOverride = frontmatterString(data, "repo");
   return {
     path: docPath,
     repo: location.repo,
     project: declaredProject && declaredProject !== location.repo ? declaredProject : location.folderProject,
+    projectId: null,
+    codeRepo: repoOverride ?? location.repo,
+    repoOverride,
+    kind: inferKind(frontmatterString(data, "kind"), fileName),
     relPath: location.relPath,
     title: frontmatterString(data, "title") ?? firstHeading(body) ?? titleFromFilename(fileName),
     date: resolveDate(data, fileName, mtime),

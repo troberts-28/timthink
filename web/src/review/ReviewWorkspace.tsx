@@ -87,7 +87,7 @@ export function ReviewWorkspace({ renderPaper, headerActions, renderOverlay }: R
   );
   const ranges = useAnchoredRanges(body, raw, anchors, domVersion);
   const openCount = (review?.threads ?? []).filter((thread) => thread.status === "open").length;
-  const marginVisible = wide && openCount > 0;
+  const marginVisible = wide;
 
   const activateFromCard = useCallback(
     (thread: Thread) => {

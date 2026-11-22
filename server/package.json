@@ -22,6 +22,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.18",
     "@hono/zod-validator": "^0.9.1",
+    "esbuild": "^0.28.2",
     "hono": "^4.13.16",
     "ignore": "^7.0.14",
     "yaml": "^2.9.1",

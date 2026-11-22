@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { StatusChip } from "../components/StatusChip";
 import { longDate, relativeTime } from "../lib/format";
 import { prUrl, prUrlForGithubPull } from "../markdown/linkPatterns";
-import { PrStack } from "../prs/PrStack";
 import { WorktreeChip } from "./WorktreeChip";
 
 const PR_HOST_TITLES: Record<PrLinkHost, string> = { graphite: "Open in Graphite", github: "Open on GitHub" };
@@ -63,8 +62,7 @@ export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
       {pr.label}
     </MetaChip>
   ));
-  const showStack = github !== null;
-  const meta = (
+  return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 text-meta text-ink-64">
       <StatusChip status={doc.status} />
       <time dateTime={doc.date} className="font-medium text-ink-64">
@@ -76,7 +74,7 @@ export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
         </MetaChip>
       ) : null}
       <WorktreeChip docPath={doc.path} branch={doc.branch} />
-      {prs.length > 0 && !showStack ? prChips : null}
+      {prChips}
       {doc.linear ? (
         <MetaChip icon={<Ticket className="size-3" aria-hidden />} title="Linear issue">
           {doc.linear}
@@ -90,13 +88,5 @@ export function PlanMeta({ doc, github, prLinks }: PlanMetaProps) {
       ) : null}
       <span className="ml-auto text-ink-32">Edited {relativeTime(doc.mtime)}</span>
     </div>
-  );
-  if (!showStack) return meta;
-  const fallback = prs.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{prChips}</div> : null;
-  return (
-    <>
-      {meta}
-      <PrStack docPath={doc.path} prLinks={prLinks} fallback={fallback} />
-    </>
   );
 }

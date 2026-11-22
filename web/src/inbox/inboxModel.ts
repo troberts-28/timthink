@@ -1,70 +1,15 @@
-import type { InboxItem, InboxSection } from "@timthink/server";
+import type { InboxItem } from "@timthink/server";
 
 export interface SectionSpec {
-  id: InboxSection;
+  kind: InboxItem["kind"];
   title: string;
   hint: string;
 }
 
 export const INBOX_SECTIONS: readonly SectionSpec[] = [
-  { id: "review", title: "Needs your review", hint: "Plans asking for your input" },
-  { id: "replies", title: "Claude replied", hint: "New replies in your threads" },
-  { id: "questions", title: "Open questions", hint: "Decisions waiting on an answer" },
-  { id: "prs", title: "Pull requests", hint: "PRs from your plans that need you, and plans they finished" },
-  { id: "waiting", title: "Waiting on Claude", hint: "Reviews you've sent" },
-  { id: "changed", title: "Changed since you last looked", hint: "Edited in the last 14 days" },
+  { kind: "round", title: "Rounds awaiting you", hint: "A Claude session is waiting on your decisions" },
+  { kind: "question", title: "Open questions", hint: "Plans in review waiting on an answer" },
 ];
-
-export interface ReasonChip {
-  label: string;
-  className: string;
-}
-
-export function reasonChip(item: InboxItem): ReasonChip {
-  switch (item.reason) {
-    case "review-requested":
-      return { label: "Review requested", className: "chip-accent" };
-    case "review-addressed":
-      return { label: "Your review was addressed", className: "chip-ok-soft" };
-    case "claude-replied":
-      return { label: item.count === 1 ? "1 reply" : `${item.count} replies`, className: "chip-info" };
-    case "open-question":
-      return { label: "Unanswered", className: "chip-accent" };
-    case "waiting-on-claude":
-      return { label: "Review sent", className: "chip-info" };
-    case "new":
-      return { label: "New plan", className: "chip-ok-soft" };
-    case "ci-failing":
-      return { label: item.count === 1 ? "CI failing" : `CI failing on ${item.count} PRs`, className: "chip-bad" };
-    case "changes-requested":
-      return { label: "Changes requested", className: "chip-bad" };
-    case "review-comments":
-      return {
-        label: item.count === 1 ? "Unresolved comments" : `Unresolved comments on ${item.count} PRs`,
-        className: "chip-accent",
-      };
-    case "pr-closed-unmerged":
-      return { label: "Closed without merging", className: "chip-neutral" };
-    case "merged-tasks-open":
-      return { label: "PRs merged, tasks open", className: "chip-accent" };
-    case "plan-completed":
-      return { label: "All PRs merged", className: "chip-ok-soft" };
-    case "edited": {
-      const by = item.attribution?.kind;
-      return {
-        label:
-          by === "claude"
-            ? "Edited by Claude"
-            : by === "human"
-              ? "Edited by you"
-              : by === "timthink"
-                ? "Edited by timthink"
-                : "Edited",
-        className: "chip-neutral",
-      };
-    }
-  }
-}
 
 export interface RepoGroup {
   repo: string;
@@ -73,7 +18,7 @@ export interface RepoGroup {
 
 export function groupByRepo(items: readonly InboxItem[]): RepoGroup[] {
   const groups = new Map<string, InboxItem[]>();
-  for (const item of items) groups.set(item.doc.repo, [...(groups.get(item.doc.repo) ?? []), item]);
+  for (const item of items) groups.set(item.repo, [...(groups.get(item.repo) ?? []), item]);
   return [...groups.entries()]
     .map(([repo, entries]) => ({ repo, items: entries }))
     .sort((a, b) => (b.items[0]?.at ?? "").localeCompare(a.items[0]?.at ?? "") || a.repo.localeCompare(b.repo));

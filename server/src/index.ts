@@ -29,8 +29,6 @@ export { type CodeRef, parseCodeRef } from "./code/codeRef.js";
 export { createZedOpener, editorTarget, type OpenInEditor } from "./code/editor.js";
 export { parseGithubRemote } from "./code/git.js";
 export {
-  type ArchiveSettings,
-  DEFAULT_ARCHIVE_SETTINGS,
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_PORT,
   defaultConfigPath,
@@ -43,11 +41,15 @@ export {
 export type { DocContent, DocQuestion } from "./docs/content.js";
 export type { SearchHit } from "./docs/search.js";
 export { canonicalStatus } from "./docs/status.js";
+export { DocsStore } from "./docs/store.js";
 export type {
   ArchiveState,
+  AreaEntry,
   AttachmentSummary,
+  CodeRepoInfo,
   DocArchive,
   DocDetail,
+  DocKind,
   DocSummary,
   DocsIndex,
   GithubRepo,
@@ -55,7 +57,9 @@ export type {
   PhaseSummary,
   PrAttention,
   PrLinkHost,
+  ProjectEntry,
   ProjectIndex,
+  ProjectStatus,
   RepoIndex,
   TaskProgress,
 } from "./docs/types.js";
@@ -69,11 +73,42 @@ export type {
   InboxDoc,
   InboxItem,
   InboxQuestion,
-  InboxReason,
+  InboxQuestionItem,
   InboxResponse,
-  InboxSection,
-  InboxSessionHint,
+  InboxRoundItem,
 } from "./inbox/types.js";
+export {
+  type ChecklistOwner,
+  type ChecklistResults,
+  ChecklistStore,
+  projectChecklistOwner,
+  type StepResult,
+} from "./pages/checklistStore.js";
+export { type AuthoredPageView, bundlePageForCheck, type PageBuildError } from "./pages/pageBundle.js";
+export { AREA_PAGE_FILE, blockIdOf, isPageFile } from "./pages/pageFile.js";
+export {
+  formatPrRef,
+  isProjectStatus,
+  PROJECT_STATUSES,
+  type PrRef,
+  parsePrRef,
+} from "./projects/manifest.js";
+export { type NewProject, ProjectError, ProjectService } from "./projects/projectService.js";
+export type {
+  AreaDetail,
+  AreaProjectPrs,
+  LooksFinishedDoc,
+  ProjectActivity,
+  ProjectActivityKind,
+  ProjectDetail,
+  ProjectPr,
+  ProjectPrSource,
+  ProjectPrs,
+  ProjectQuestion,
+  ProjectStack,
+  ProjectThread,
+} from "./projects/projectView.js";
+export { type AreaRecord, type ProjectRecord, ProjectRegistry } from "./projects/registry.js";
 export { findGh } from "./prs/ghClient.js";
 export type {
   CiState,
@@ -87,6 +122,16 @@ export type {
   ReviewDecision,
   StackItem,
 } from "./prs/types.js";
+export type { ExportDoc, ProjectExport } from "./publish/exportData.js";
+export { ExportError } from "./publish/projectExport.js";
+export {
+  MAX_PUBLISH_TTL_MS,
+  MIN_PUBLISH_TTL_MS,
+  PublishError,
+  Publisher,
+  type PublishRecord,
+} from "./publish/publisher.js";
+export { VercelClient, VercelError } from "./publish/vercel.js";
 export { ReadOnlyError } from "./readOnly.js";
 export { type AnchorMatch, createAnchor, locateAnchor } from "./reviews/anchor.js";
 export { writeFileAtomic } from "./reviews/atomicWrite.js";
@@ -130,9 +175,44 @@ export type {
   Verdict,
 } from "./reviews/schema.js";
 export { lineNumberAt } from "./reviews/sections.js";
+export { docMoveTarget } from "./rounds/docMoveTarget.js";
+export {
+  abandonRound,
+  decideRoundItem,
+  RoundError,
+  reportRoundOutcomes,
+  setRoundWaiter,
+  submitRound,
+} from "./rounds/operations.js";
+export { RoundStore } from "./rounds/roundStore.js";
+export type { RoundSummary, RoundView } from "./rounds/roundView.js";
+export { roundResumePrompt, summarizeRound } from "./rounds/roundView.js";
+export type { RoundFileContext } from "./rounds/routes.js";
+export {
+  type DocMoveItem,
+  type DocMoveOption,
+  type DocMovesRound,
+  OUTCOME_KINDS,
+  type PrCommentItem,
+  type PrCommentsRound,
+  type ProposedProject,
+  type Round,
+  type RoundChoice,
+  type RoundDecision,
+  type RoundInput,
+  type RoundItem,
+  type RoundOption,
+  type RoundOutcome,
+  type RoundOutcomeKind,
+  type RoundPr,
+  type RoundState,
+  roundOutcomesSchema,
+} from "./rounds/schema.js";
 export { TOKEN_HEADER } from "./security.js";
 export type { SeenResponse } from "./seen/routes.js";
 export type { SeenEntry, SeenMark } from "./seen/seenStore.js";
 export { BIND_HOST, createRuntime, type RunningServer, type StartOptions, startServer } from "./server.js";
-export type { SessionsResponse, SessionView } from "./sessions/types.js";
-export { TOKEN_META_NAME } from "./webAssets.js";
+export { appendSessionEvent, MAX_SESSION_LABEL_LENGTH } from "./sessions/hookLog.js";
+export { claudeSessionOfAncestor, createPsRunner } from "./sessions/liveProcesses.js";
+export type { SessionStatus, SessionsResponse, SessionView } from "./sessions/types.js";
+export { defaultWebDist, TOKEN_META_NAME } from "./webAssets.js";

@@ -1,8 +1,7 @@
 import type { TimthinkConfig } from "../config.js";
 import { DocsStore } from "../docs/store.js";
-import { ReviewStore } from "../reviews/reviewStore.js";
-import { readSeenFile, type SeenFile } from "../seen/seenStore.js";
-import { ArchiveService, type ReadMarks } from "./archiveService.js";
+import { ProjectRegistry } from "../projects/registry.js";
+import { ArchiveService } from "./archiveService.js";
 import { ArchiveStore } from "./archiveStore.js";
 
 export interface OfflineArchive {
@@ -10,24 +9,17 @@ export interface OfflineArchive {
   archive: ArchiveService;
 }
 
-function marksFrom(seen: SeenFile | null): ReadMarks {
-  return {
-    docSeenAt: (docPath) => seen?.docs[docPath]?.at ?? null,
-    threadReadAt: (docPath, threadId) => seen?.threads[`${docPath}#${threadId}`] ?? null,
-  };
-}
-
-export type OfflineArchiveConfig = Pick<TimthinkConfig, "docsRoot" | "stateDir" | "archive" | "readOnly">;
+export type OfflineArchiveConfig = Pick<TimthinkConfig, "docsRoot" | "readOnly">;
 
 export async function openArchive(config: OfflineArchiveConfig): Promise<OfflineArchive> {
-  const docs = new DocsStore(config.docsRoot);
-  const [, seen] = await Promise.all([docs.scanAll(), readSeenFile(config.stateDir)]);
+  const projects = new ProjectRegistry(config.docsRoot);
+  await projects.scan();
+  const docs = new DocsStore(config.docsRoot, projects);
+  await docs.scanAll();
   const archive = new ArchiveService({
     docs,
-    reviews: new ReviewStore(config.docsRoot, { readOnly: config.readOnly }),
     archives: new ArchiveStore(config.docsRoot, { readOnly: config.readOnly }),
-    marks: marksFrom(seen),
-    settings: config.archive,
+    projectStatusOf: (doc) => (doc.projectId ? (projects.project(doc.projectId)?.manifest.status ?? null) : null),
   });
   await archive.init();
   return { docs, archive };

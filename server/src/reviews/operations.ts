@@ -99,7 +99,13 @@ export interface NewThreadInput {
   suggestion: string | null;
 }
 
-export function addThread(file: ReviewFile, input: NewThreadInput, actor: Actor, now: string): ReviewFile {
+export function addThread(
+  file: ReviewFile,
+  input: NewThreadInput,
+  actor: Actor,
+  now: string,
+  reviewer: Actor = actor,
+): ReviewFile {
   if (input.kind === "suggestion" && input.suggestion === null) {
     throw new ReviewOperationError("invalid", "A suggestion needs replacement text");
   }
@@ -108,7 +114,7 @@ export function addThread(file: ReviewFile, input: NewThreadInput, actor: Actor,
   }
   const body = input.body.trim();
   if (input.kind === "comment") requireText(body, "A comment");
-  const { file: withReview, review } = withDraftReview(file, actor, now);
+  const { file: withReview, review } = withDraftReview(file, reviewer, now);
   const messages: Message[] = body
     ? [{ id: newId(withReview, "m"), author: actor.author, name: actor.name, at: now, body, reviewId: review.id }]
     : [];

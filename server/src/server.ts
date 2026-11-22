@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { type ServerType, serve } from "@hono/node-server";
 import type { Hono } from "hono";
 import { createApp } from "./app.js";
@@ -11,18 +12,27 @@ import { prLinkHostFor, type TimthinkConfig } from "./config.js";
 import { DocsStore } from "./docs/store.js";
 import type { DocsIndex, GithubRepo } from "./docs/types.js";
 import { type DocsWatcher, watchDocsRoot } from "./docs/watcher.js";
-import { EventHub, type HubEvent } from "./events.js";
+import { EventHub } from "./events.js";
 import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
+import { DocMoveService } from "./migration/docMoveService.js";
+import { MovedDocs } from "./migration/movedDocs.js";
+import { ChecklistStore } from "./pages/checklistStore.js";
+import { AuthoredPages } from "./pages/pageBundle.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
+import { ProjectService } from "./projects/projectService.js";
+import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
 import { type CompletionDeps, completePlansWithMergedPrs, markPlanDone } from "./prs/completion.js";
 import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
 import { PrService } from "./prs/prService.js";
+import { Publisher } from "./publish/publisher.js";
+import { VercelClient } from "./publish/vercel.js";
 import { ReadOnlyError } from "./readOnly.js";
 import { createFinderRevealer, type RevealInFinder } from "./reveal.js";
 import { docHash, docPathForReviewFile } from "./reviews/paths.js";
 import { type HubDocWrite, ReviewService } from "./reviews/reviewService.js";
+import { RoundStore, roundIdOf } from "./rounds/roundStore.js";
 import { allowedOrigins, createSessionToken } from "./security.js";
 import { SeenStore } from "./seen/seenStore.js";
 import { DOC_SESSIONS_LOG, SESSIONS_LOG } from "./sessions/hookLog.js";
@@ -30,6 +40,8 @@ import { createPsRunner, type LiveClaudeProcess, scanLiveClaudeProcesses } from 
 import { type SessionChange, SessionStore } from "./sessions/sessionStore.js";
 import { createMacOpener, type OpenUrl } from "./sessions/warp.js";
 import { defaultWebDist, mountWebApp } from "./webAssets.js";
+
+const PUBLISH_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export const BIND_HOST = "127.0.0.1";
 
@@ -81,11 +93,15 @@ export interface Runtime {
   inbox: InboxService;
   archive: ArchiveService;
   prs: PrService;
+  projects: ProjectRegistry;
+  rounds: RoundStore;
   hub: EventHub;
   token: string;
+  publisher: Publisher;
   startHistory(): Promise<void>;
   startWatching(): DocsWatcher;
   startSessionTracking(): DocsWatcher;
+  startRoundTracking(): Promise<DocsWatcher>;
   startPrTracking(): () => void;
 }
 
@@ -134,7 +150,8 @@ function startSessionTracking(sessions: SessionStore, log: (message: string) => 
 export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const { config } = options;
   const log = options.log ?? (() => {});
-  const store = new DocsStore(config.docsRoot);
+  const projects = new ProjectRegistry(config.docsRoot);
+  const store = new DocsStore(config.docsRoot, projects);
   const hub = new EventHub();
   const code = new CodeService(config);
   const github = new GithubByRepo(code);
@@ -142,6 +159,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const seen = new SeenStore({ stateDir: config.stateDir, log });
   const preferences = new PreferencesStore(config.stateDir);
   await preferences.load();
+  const movedDocs = new MovedDocs(config.stateDir);
+  await movedDocs.load();
   const sessions = new SessionStore({
     docsRoot: config.docsRoot,
     stateDir: config.stateDir,
@@ -152,6 +171,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       prs.invalidateSessions();
       hub.publish({ type: "sessions-changed", ...change, version: hub.nextVersion() });
     },
+    resolveMovedDoc: (docPath) => movedDocs.resolve(docPath),
   });
   const history = new HistoryService({
     docsRoot: config.docsRoot,
@@ -178,13 +198,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   });
   const archive = new ArchiveService({
     docs: store,
-    reviews: reviews.store,
     archives: new ArchiveStore(config.docsRoot, { readOnly: config.readOnly }),
-    marks: {
-      docSeenAt: (docPath) => seen.get(docPath)?.at ?? null,
-      threadReadAt: (docPath, threadId) => seen.threadReadAt(docPath, threadId),
-    },
-    settings: config.archive,
+    projectStatusOf: (doc) => (doc.projectId ? (projects.project(doc.projectId)?.manifest.status ?? null) : null),
     log,
   });
   let lastPrAttention = "";
@@ -195,6 +210,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     sessions,
     githubFor: (repo) => github.get(repo),
     isArchived: (summary) => archive.isArchived(summary),
+    detachedFor: (doc) => {
+      const detached = doc.projectId ? (projects.project(doc.projectId)?.manifest.detached ?? []) : [];
+      return detached.filter((ref) => ref.repo === doc.codeRepo).map((ref) => ref.number);
+    },
     runner: options.graphqlRunner ?? createGhRunner(() => findGh(config.prs.ghPath)),
     onChange: (paths) => {
       hub.publish({ type: "prs-changed", paths, version: hub.nextVersion() });
@@ -230,17 +249,15 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     await prs.markCompleted(docPath, awaiting.marker, { announce: false });
     return true;
   };
+  const rounds = new RoundStore(config.stateDir);
   const inbox = new InboxService({
     store,
     reviews: reviews.store,
-    seen,
-    history,
-    sessions,
+    rounds,
     isArchived: (summary) => archive.isArchived(summary),
-    prSignals: (summary) => prs.signalsFor(summary),
-    completion: (docPath) => prs.completion(docPath),
   });
 
+  await projects.scan();
   await Promise.all([store.scanAll(), sessions.init()]);
   const seenInit = await seen.init(
     store.allDocs().flatMap((doc) => {
@@ -250,9 +267,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   );
   if (seenInit.created) log(`initialised seen.json with ${store.allDocs().length} doc(s)`);
   await Promise.all([archive.init(), prs.init()]);
+  await prs.moveDocs(movedDocs.all());
   let cachedIndex: DocsIndex | null = null;
   let cachedAt = 0;
-  const repoNames = (): string[] => [...new Set(store.allDocs().map((doc) => doc.repo))];
+  const repoNames = (): string[] => store.codeRepoNames();
   await github.refresh(repoNames());
 
   const getIndex = (): DocsIndex => {
@@ -268,6 +286,11 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
             buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
           };
         },
+        codeRepoInfo: (repo) => ({
+          github: github.get(repo),
+          prLinks: prLinkHostFor(config, repo),
+          buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
+        }),
         archiveOf: (summary) => archive.stateFor(summary),
         prAttentionOf: (summary) => prs.attentionFor(summary),
         groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),
@@ -288,19 +311,6 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     hub.publish({ type: "archive-changed", paths, version: hub.nextVersion() });
   };
 
-  const refreshArchiveFor = (docPath: string): void => {
-    archive
-      .refreshDoc(docPath)
-      .then((changed) => {
-        if (changed) publishArchiveChange([docPath]);
-      })
-      .catch((error: unknown) => log(`refreshing archive state failed: ${String(error)}`));
-  };
-
-  hub.subscribe((event: HubEvent) => {
-    if (event.type === "review-changed" || event.type === "seen-changed") refreshArchiveFor(event.path);
-  });
-
   const reloadArchives = async (relPaths: readonly string[]): Promise<void> => {
     const repos = [...new Set(relPaths.map(repoForArchiveFile).filter((repo) => repo !== null))];
     const changed = await Promise.all(repos.map((repo) => archive.reloadRepo(repo)));
@@ -315,8 +325,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const handleChanges = async (relPaths: string[]): Promise<void> => {
     publishReviewChanges(relPaths);
     await reloadArchives(relPaths);
+    const projectsChanged = affectsProjects(relPaths) && (await projects.scan());
+    if (projectsChanged) store.redecorate();
     const result = await store.applyChanges(relPaths);
-    if (!result.changed) return;
+    if (!result.changed && !projectsChanged) return;
     await Promise.all([github.refresh(repoNames()), archive.ensureRepos(store.repoNames())]);
     cachedIndex = null;
     history.schedule(result.changedDocs);
@@ -330,8 +342,38 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     log(`re-indexed ${relPaths.length} path(s)`);
   };
 
+  const docMoves = new DocMoveService({
+    docsRoot: config.docsRoot,
+    stateDir: config.stateDir,
+    registry: projects,
+    seen,
+    movedDocs,
+    readOnly: config.readOnly,
+    onMoved: async (moves) => {
+      await prs.moveDocs(moves);
+      await projects.scan();
+      store.redecorate();
+      await store.scanAll();
+      await Promise.all([github.refresh(repoNames()), archive.ensureRepos(store.repoNames())]);
+      await Promise.all(store.repoNames().map((repo) => archive.reloadRepo(repo)));
+      await sessions.reloadHookLogs();
+      cachedIndex = null;
+      hub.publish({ type: "index-changed", version: hub.nextVersion() });
+    },
+  });
+
+  const vercelToken = process.env.VERCEL_TOKEN;
+  const publisher = new Publisher({
+    docsRoot: config.docsRoot,
+    stateDir: config.stateDir,
+    webDist: options.webDist ?? defaultWebDist(),
+    vercel: vercelToken ? new VercelClient({ token: vercelToken, fetch }) : null,
+    now: () => new Date(),
+  });
+
   const app: Hono = createApp({
     config,
+    publisher,
     store,
     hub,
     code,
@@ -343,6 +385,14 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     prs,
+    projects,
+    rounds,
+    docMoves,
+    movedDocs,
+    projectService: new ProjectService({ docsRoot: config.docsRoot, registry: projects, readOnly: config.readOnly }),
+    pages: new AuthoredPages(config.docsRoot),
+    checklists: new ChecklistStore(config.docsRoot, config.readOnly),
+    githubFor: (repo) => github.get(repo),
     worktrees: new WorktreeIndex(config),
     resolveCompletion,
     launchBuild: options.launchBuild ?? createBuildLauncher(),
@@ -369,8 +419,11 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     prs,
+    projects,
+    rounds,
     hub,
     token,
+    publisher,
     startPrTracking: () => prs.start(),
     startHistory: async () => {
       const stats = await history.snapshotAll();
@@ -379,6 +432,17 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       }
     },
     startSessionTracking: () => startSessionTracking(sessions, log),
+    startRoundTracking: async () => {
+      await mkdir(rounds.dir, { recursive: true });
+      return watchDocsRoot(
+        rounds.dir,
+        (relPaths) => {
+          const ids = [...new Set(relPaths.map(roundIdOf).filter((id) => id !== null))];
+          if (ids.length > 0) hub.publish({ type: "rounds-changed", ids, version: hub.nextVersion() });
+        },
+        { onError: (error) => log(`rounds watcher error: ${error.message}`) },
+      );
+    },
     startWatching: () =>
       watchDocsRoot(
         config.docsRoot,
@@ -394,7 +458,17 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   const runtime = await createRuntime(options);
   const watcher = options.watch === false ? null : runtime.startWatching();
   const sessionTracking = options.watch === false ? null : runtime.startSessionTracking();
+  const roundTracking = options.watch === false ? null : await runtime.startRoundTracking();
   const stopPrTracking = options.watch === false ? null : runtime.startPrTracking();
+  const removeExpiredPublishes = () =>
+    void runtime.publisher
+      .removeExpired()
+      .catch((error: unknown) => options.log?.(`removing expired publishes failed: ${String(error)}`));
+  const publishCleanup =
+    options.watch === false ? null : setInterval(removeExpiredPublishes, PUBLISH_CLEANUP_INTERVAL_MS);
+  if (publishCleanup) {
+    removeExpiredPublishes();
+  }
   if (options.watch !== false) {
     runtime.startHistory().catch((error: unknown) => options.log?.(`snapshotting docs failed: ${String(error)}`));
   }
@@ -411,7 +485,11 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
       new Promise<void>((resolve) => {
         watcher?.close();
         sessionTracking?.close();
+        roundTracking?.close();
         stopPrTracking?.();
+        if (publishCleanup) {
+          clearInterval(publishCleanup);
+        }
         runtime.history.close();
         server.close(() => resolve());
         if ("closeAllConnections" in server) server.closeAllConnections();

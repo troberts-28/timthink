@@ -3,8 +3,10 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
-import { fetchDocPrs, lookupPrs } from "./prs";
+import { fetchArea, fetchAreaPage, fetchChecklist, fetchProject, fetchProjectPage, fetchPublishes } from "./projects";
+import { lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
+import { fetchRound, fetchRoundFile } from "./rounds";
 
 export const queryKeys = {
   index: ["index"] as const,
@@ -20,11 +22,90 @@ export const queryKeys = {
   history: (path: string) => ["history", path] as const,
   snapshot: (path: string, id: string) => ["snapshot", path, id] as const,
   inbox: ["inbox"] as const,
-  docPrsRoot: ["doc-prs"] as const,
-  docPrs: (path: string) => ["doc-prs", path] as const,
   prLookupRoot: ["pr-lookup"] as const,
   prLookup: (owner: string, repo: string, numbers: string) => ["pr-lookup", owner, repo, numbers] as const,
+  projectRoot: ["project"] as const,
+  project: (id: string) => ["project", id] as const,
+  projectPage: (id: string) => ["project", id, "page"] as const,
+  checklist: (id: string, checklist: string) => ["project", id, "checklist", checklist] as const,
+  publishes: (projectId: string) => ["publishes", projectId] as const,
+  areaRoot: ["area"] as const,
+  area: (id: string) => ["area", id] as const,
+  areaPage: (id: string) => ["area", id, "page"] as const,
+  roundRoot: ["round"] as const,
+  round: (id: string) => ["round", id] as const,
+  roundFile: (id: string, item: string) => ["round-file", id, item] as const,
 };
+
+export function useRound(id: string) {
+  return useQuery({
+    queryKey: queryKeys.round(id),
+    queryFn: () => fetchRound(id),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
+export function useRoundFile(id: string, item: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.roundFile(id, item),
+    queryFn: () => fetchRoundFile(id, item),
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled,
+  });
+}
+
+export function useProject(id: string) {
+  return useQuery({
+    queryKey: queryKeys.project(id),
+    queryFn: () => fetchProject(id),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useArea(id: string) {
+  return useQuery({
+    queryKey: queryKeys.area(id),
+    queryFn: () => fetchArea(id),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function usePublishes(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.publishes(projectId),
+    queryFn: () => fetchPublishes(projectId),
+    staleTime: 60_000,
+  });
+}
+
+export function useAreaPage(id: string) {
+  return useQuery({
+    queryKey: queryKeys.areaPage(id),
+    queryFn: () => fetchAreaPage(id),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
+export function useProjectPage(id: string) {
+  return useQuery({
+    queryKey: queryKeys.projectPage(id),
+    queryFn: () => fetchProjectPage(id),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
+export function useChecklist(id: string, checklist: string) {
+  return useQuery({
+    queryKey: queryKeys.checklist(id, checklist),
+    queryFn: () => fetchChecklist(id, checklist),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
 
 export function useDocHistory(path: string) {
   return useQuery({
@@ -98,15 +179,6 @@ export function useDocSessions(docPath: string) {
   });
 }
 
-export function useDocPrs(docPath: string) {
-  return useQuery({
-    queryKey: queryKeys.docPrs(docPath),
-    queryFn: () => fetchDocPrs(docPath),
-    staleTime: 60_000,
-    refetchInterval: (query) => (query.state.data?.refreshing ? 3_000 : false),
-  });
-}
-
 export function usePrLookup(owner: string, repo: string, numbers: readonly number[]) {
   const key = [...numbers].sort((a, b) => a - b).join(",");
   return useQuery({
@@ -128,8 +200,11 @@ function parseEvent(data: string): HubEvent | null {
 export function useLiveUpdates(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const source = new EventSource("/api/events");
-    const invalidateInbox = () => void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
+    const invalidateInbox = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.areaRoot });
+    };
     const onIndexChanged = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.index });
       void queryClient.invalidateQueries({ queryKey: queryKeys.attachmentsRoot });
@@ -162,6 +237,10 @@ export function useLiveUpdates(): void {
       const event = parseEvent(message.data);
       if (event?.type !== "sessions-changed") return;
       invalidateInbox();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projectRoot,
+        predicate: (query) => query.queryKey.length === queryKeys.project("").length,
+      });
       if (event.docPaths.length === 0) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.docSessionsRoot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.historyRoot });
@@ -178,18 +257,50 @@ export function useLiveUpdates(): void {
       if (event?.type !== "prs-changed") return;
       void queryClient.invalidateQueries({ queryKey: queryKeys.prLookupRoot });
       invalidateInbox();
-      for (const docPath of event.paths) void queryClient.invalidateQueries({ queryKey: queryKeys.docPrs(docPath) });
     };
-    source.addEventListener("prs-changed", onPrsChanged);
-    source.addEventListener("index-changed", onIndexChanged);
-    source.addEventListener("archive-changed", onIndexChanged);
-    source.addEventListener("doc-changed", onDocChanged);
-    source.addEventListener("doc-removed", onDocChanged);
-    source.addEventListener("sessions-changed", onSessionsChanged);
-    source.addEventListener("review-changed", onReviewChanged);
-    source.addEventListener("history-changed", onHistoryChanged);
-    source.addEventListener("seen-changed", onHistoryChanged);
-    source.addEventListener("ready", onIndexChanged);
-    return () => source.close();
+    const onRoundsChanged = (message: MessageEvent<string>) => {
+      const event = parseEvent(message.data);
+      if (event?.type !== "rounds-changed") return;
+      invalidateInbox();
+      for (const id of event.ids) void queryClient.invalidateQueries({ queryKey: queryKeys.round(id) });
+    };
+    const openEventStream = () => {
+      const stream = new EventSource("/api/events");
+      stream.addEventListener("rounds-changed", onRoundsChanged);
+      stream.addEventListener("prs-changed", onPrsChanged);
+      stream.addEventListener("index-changed", onIndexChanged);
+      stream.addEventListener("archive-changed", onIndexChanged);
+      stream.addEventListener("doc-changed", onDocChanged);
+      stream.addEventListener("doc-removed", onDocChanged);
+      stream.addEventListener("sessions-changed", onSessionsChanged);
+      stream.addEventListener("review-changed", onReviewChanged);
+      stream.addEventListener("history-changed", onHistoryChanged);
+      stream.addEventListener("seen-changed", onHistoryChanged);
+      stream.addEventListener("ready", onIndexChanged);
+      return stream;
+    };
+
+    // Chrome allows six HTTP/1.1 connections per host, and each open stream holds one,
+    // so background tabs let theirs go and catch up on whatever they missed when shown.
+    let stream: EventSource | null = null;
+    let missedEvents = false;
+    const followVisibility = () => {
+      if (document.visibilityState === "visible" && stream === null) {
+        stream = openEventStream();
+        if (missedEvents) void queryClient.invalidateQueries();
+        return;
+      }
+      if (document.visibilityState !== "visible" && stream !== null) {
+        stream.close();
+        stream = null;
+        missedEvents = true;
+      }
+    };
+    followVisibility();
+    document.addEventListener("visibilitychange", followVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", followVisibility);
+      stream?.close();
+    };
   }, [queryClient]);
 }

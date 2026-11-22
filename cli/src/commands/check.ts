@@ -1,6 +1,16 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { type CheckProblem, checkDoc, expandHome, type MermaidFailure, type TimthinkConfig } from "@timthink/server";
+import {
+  type CheckProblem,
+  checkDoc,
+  expandHome,
+  isPageFile,
+  type MermaidFailure,
+  type PageBuildError,
+  ProjectRegistry,
+  type TimthinkConfig,
+} from "@timthink/server";
+import { checkPage } from "./checkPage.js";
 
 type MermaidParser = (code: string) => Promise<MermaidFailure | null>;
 
@@ -43,6 +53,22 @@ function formatProblem(file: string, problem: CheckProblem): string {
   return `${file}:${problem.line}: ${problem.severity}: ${problem.message}`;
 }
 
+async function projectManifestProblems(docsRoot: string, relative: string) {
+  const registry = new ProjectRegistry(docsRoot);
+  await registry.scan();
+  const docPath = relative.split(path.sep).join("/");
+  const project = registry.projectForPath(docPath);
+  const area = registry.areaForPath(docPath);
+  return [
+    ...(area?.problems ?? []).map(
+      (problem) => `${path.join(docsRoot, area?.id ?? "", "area.yaml")}: error: ${problem}`,
+    ),
+    ...(project?.problems ?? []).map(
+      (problem) => `${path.join(docsRoot, project?.id ?? "", "project.yaml")}: error: ${problem}`,
+    ),
+  ];
+}
+
 export interface CheckIo {
   out: (text: string) => void;
   err: (text: string) => void;
@@ -55,6 +81,9 @@ export async function runCheck(
   loadParser: () => Promise<MermaidParser | null> = loadMermaidParser,
 ): Promise<number> {
   const docFile = path.resolve(expandHome(input));
+  if (isPageFile(docFile)) {
+    return runPageCheck(config.docsRoot, docFile, io);
+  }
   const raw = await readFile(docFile, "utf8").catch(() => null);
   if (raw === null) {
     io.err(`Can't read ${docFile}`);
@@ -70,15 +99,39 @@ export async function runCheck(
   const display = path.relative(process.cwd(), docFile) || docFile;
   for (const problem of problems) io.out(formatProblem(display, problem));
   for (const note of notes) io.out(`note: ${note}`);
-  if (path.relative(config.docsRoot, docFile).startsWith("..")) {
+  const relative = path.relative(config.docsRoot, docFile);
+  if (relative.startsWith("..")) {
     io.out(`note: ${docFile} is outside docsRoot (${config.docsRoot}), so the hub won't show it`);
   }
-  const errors = problems.filter((problem) => problem.severity === "error").length;
-  const warnings = problems.length - errors;
-  io.out(
-    errors + warnings === 0
-      ? "No problems found."
-      : `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}.`,
-  );
+  const manifestProblems = relative.startsWith("..") ? [] : await projectManifestProblems(config.docsRoot, relative);
+  for (const problem of manifestProblems) io.out(problem);
+  const errors = problems.filter((problem) => problem.severity === "error").length + manifestProblems.length;
+  const warnings = problems.length + manifestProblems.length - errors;
+  io.out(summaryLine(errors, warnings));
   return errors > 0 ? 1 : 0;
+}
+
+async function runPageCheck(docsRoot: string, pageFile: string, io: CheckIo) {
+  if (!(await exists(pageFile))) {
+    io.err(`Can't read ${pageFile}`);
+    return 1;
+  }
+  const problems = await checkPage({ docsRoot, pageFile });
+  const display = path.relative(process.cwd(), pageFile) || pageFile;
+  for (const problem of problems) {
+    io.out(`${pageProblemLocation(problem, display)}: error: ${problem.message}`);
+  }
+  io.out(summaryLine(problems.length, 0));
+  return problems.length > 0 ? 1 : 0;
+}
+
+function pageProblemLocation(problem: PageBuildError, fallback: string) {
+  const file = problem.file ? path.relative(process.cwd(), problem.file) || problem.file : fallback;
+  return problem.line === null ? file : `${file}:${problem.line}:${(problem.column ?? 0) + 1}`;
+}
+
+function summaryLine(errors: number, warnings: number) {
+  return errors + warnings === 0
+    ? "No problems found."
+    : `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}.`;
 }

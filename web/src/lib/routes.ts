@@ -14,6 +14,18 @@ export function projectHref(repo: string, project: string): string {
   return `/r/${encodeURIComponent(repo)}/${encodeURIComponent(project)}`;
 }
 
+export function projectEntryHref(projectId: string) {
+  return `/p/${encodePath(projectId)}`;
+}
+
+export function roundHref(id: string) {
+  return `/round/${encodeURIComponent(id)}`;
+}
+
+export function areaHref(area: string) {
+  return `/a/${encodeURIComponent(area)}`;
+}
+
 export function rawFileHref(filePath: string): string {
   return `/api/raw/${encodePath(filePath)}`;
 }

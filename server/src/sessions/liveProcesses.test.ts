@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../test/fixtures.js";
-import { type RunPs, scanLiveClaudeProcesses, warpFocusUrlFromEnv } from "./liveProcesses.js";
+import { claudeSessionOfAncestor, type RunPs, scanLiveClaudeProcesses, warpFocusUrlFromEnv } from "./liveProcesses.js";
 
 const SESSION_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SESSION_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -52,5 +52,15 @@ describe("scanLiveClaudeProcesses", () => {
     expect(await scanLiveClaudeProcesses("/nonexistent/sessions", fakePs("", ""))).toBeNull();
     const dir = await sessionsDir({ "101.json": { pid: 101, sessionId: SESSION_A } });
     expect(await scanLiveClaudeProcesses(dir, fakePs("", ""))).toEqual([]);
+  });
+});
+
+describe("claudeSessionOfAncestor", () => {
+  it("walks parent pids to the Claude process that owns a session file", async () => {
+    const dir = await sessionsDir({ "40.json": { pid: 40, sessionId: SESSION_A } });
+    const parents: Record<string, string> = { "10": "20\n", "20": " 40\n", "40": "1\n" };
+    const runPs: RunPs = async (args) => parents[args.at(-1) ?? ""] ?? "";
+    expect(await claudeSessionOfAncestor({ sessionsDir: dir, pid: 10, runPs })).toBe(SESSION_A);
+    expect(await claudeSessionOfAncestor({ sessionsDir: dir, pid: 50, runPs })).toBeNull();
   });
 });
