@@ -24,7 +24,9 @@ describe("history, seen and inbox API", () => {
       headers: { "content-type": "application/json", origin: BASE, [TOKEN_HEADER]: runtime.token },
     });
   const reasons = async () =>
-    (await get<InboxResponse>("/api/inbox")).items.map((item) => `${item.reason} ${item.doc.path}`);
+    (await get<InboxResponse>("/api/inbox")).items
+      .filter((item) => item.doc.path === DOC)
+      .map((item) => `${item.reason} ${item.doc.path}`);
 
   beforeAll(async () => {
     docsRoot = await copyFixtureDocs();

@@ -2,12 +2,16 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { mimeTypeFor } from "../mime.js";
+import { isManifestPath } from "../projects/manifest.js";
+import type { ProjectRecord, ProjectRegistry } from "../projects/registry.js";
 import { toPosix } from "../safePath.js";
 import { analyzeContent, type DocContent } from "./content.js";
 import { isIgnoreFile, PlanFilter } from "./planFilter.js";
 import { locateDoc, summarizeDoc } from "./summarize.js";
 import type {
+  AreaEntry,
   AttachmentSummary,
+  CodeRepoInfo,
   DocArchive,
   DocSummary,
   DocsIndex,
@@ -15,6 +19,7 @@ import type {
   IndexedDoc,
   PrAttention,
   PrLinkHost,
+  ProjectEntry,
   ProjectIndex,
   RepoIndex,
 } from "./types.js";
@@ -29,6 +34,7 @@ export interface RepoInfo {
 
 export interface IndexOptions {
   repoInfo: (repo: string) => RepoInfo;
+  codeRepoInfo?: (repo: string) => CodeRepoInfo;
   archiveOf: (doc: DocSummary) => DocArchive;
   prAttentionOf?: (doc: DocSummary) => PrAttention | null;
   groupOrder: (assigned: Array<string | null>) => string[] | null;
@@ -65,6 +71,13 @@ function newestFirst(a: DocSummary, b: DocSummary): number {
   return b.date.localeCompare(a.date) || b.mtime - a.mtime;
 }
 
+const SETTLED_STATUSES = new Set(["shipped", "dropped"]);
+
+function byStatusThenActivity(a: ProjectEntry, b: ProjectEntry): number {
+  const settled = Number(SETTLED_STATUSES.has(a.status)) - Number(SETTLED_STATUSES.has(b.status));
+  return settled || b.lastActivity - a.lastActivity || a.id.localeCompare(b.id);
+}
+
 function latestActivity(project: ProjectIndex): string {
   return project.docs[0]?.date ?? "";
 }
@@ -75,7 +88,47 @@ export class DocsStore {
   private readonly attachments = new Map<string, AttachmentEntry>();
   private planFilter = PlanFilter.none();
 
-  constructor(readonly docsRoot: string) {}
+  constructor(
+    readonly docsRoot: string,
+    private readonly projects: ProjectRegistry | null = null,
+  ) {}
+
+  redecorate() {
+    for (const [docPath, summary] of this.docs) this.docs.set(docPath, this.decorate(summary));
+  }
+
+  codeRepoNames() {
+    const names = new Set<string>(this.projects?.codeRepos() ?? []);
+    for (const doc of this.docs.values()) names.add(doc.codeRepo);
+    for (const repo of this.legacyRepoNames()) names.add(repo);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+
+  legacyRepoNames() {
+    return this.repoNames().filter((name) => !this.projects?.isManagedRoot(name));
+  }
+
+  private decorate(summary: DocSummary) {
+    const project = this.projects?.projectForPath(summary.path) ?? null;
+    if (project) {
+      return {
+        ...summary,
+        project: null,
+        projectId: project.id,
+        codeRepo: summary.repoOverride ?? project.manifest.repos[0] ?? summary.repo,
+      };
+    }
+    const area = this.projects?.areaForPath(summary.path) ?? null;
+    if (area) {
+      return {
+        ...summary,
+        project: null,
+        projectId: null,
+        codeRepo: summary.repoOverride ?? area.manifest.repos[0] ?? summary.repo,
+      };
+    }
+    return { ...summary, projectId: null, codeRepo: summary.repoOverride ?? summary.repo };
+  }
 
   async scanAll(): Promise<void> {
     this.docs.clear();
@@ -157,7 +210,40 @@ export class DocsStore {
   }
 
   buildIndex(options: IndexOptions): DocsIndex {
-    const repos = this.repoNames()
+    const projectEntries = new Map(
+      (this.projects?.projects() ?? []).map((record) => [record.id, this.projectEntry(record, options)]),
+    );
+    const areas: AreaEntry[] = (this.projects?.areas() ?? [])
+      .map((record) => {
+        const projects = record.projectIds.flatMap((id) => projectEntries.get(id) ?? []).sort(byStatusThenActivity);
+        const docs = [...this.docs.values()]
+          .filter((doc) => doc.repo === record.id && doc.projectId === null)
+          .sort(newestFirst)
+          .map((doc) => indexDoc(doc, options));
+        return {
+          id: record.id,
+          title: record.manifest.title ?? record.id,
+          summary: record.manifest.summary,
+          repos: record.manifest.repos,
+          problems: record.problems,
+          projects,
+          docs,
+          lastActivity: Math.max(
+            0,
+            ...projects.map((project) => project.lastActivity),
+            ...docs.map((doc) => doc.mtime),
+          ),
+        };
+      })
+      .sort((a, b) => b.lastActivity - a.lastActivity || a.id.localeCompare(b.id));
+    const standalone = [...projectEntries.values()].filter((entry) => entry.area === null).sort(byStatusThenActivity);
+    const codeRepos: Record<string, CodeRepoInfo> = {};
+    for (const name of this.codeRepoNames()) {
+      if (options.codeRepoInfo) {
+        codeRepos[name] = options.codeRepoInfo(name);
+      }
+    }
+    const repos = this.legacyRepoNames()
       .map((name) =>
         this.buildRepoIndex(name, options.repoInfo(name), options.archiveOf, options.prAttentionOf ?? (() => null)),
       )
@@ -166,7 +252,41 @@ export class DocsStore {
       generatedAt: new Date().toISOString(),
       groups: options.groupOrder(repos.map((repo) => repo.group)),
       sidebarQuotes: [...(options.sidebarQuotes ?? [])],
+      areas,
+      projects: standalone,
+      codeRepos,
       repos,
+    };
+  }
+
+  projectDocs(projectId: string) {
+    return [...this.docs.values()].filter((doc) => doc.projectId === projectId).sort(newestFirst);
+  }
+
+  attachmentsUnder(dir: string) {
+    const prefix = `${dir}/`;
+    return [...this.attachments.values()]
+      .filter((entry) => entry.path.startsWith(prefix))
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map(toAttachmentSummary);
+  }
+
+  private projectEntry(record: ProjectRecord, options: IndexOptions): ProjectEntry {
+    const docs = this.projectDocs(record.id).map((doc) => indexDoc(doc, options));
+    const prefix = `${record.id}/`;
+    const files = [...this.attachments.values()].filter((entry) => entry.path.startsWith(prefix));
+    return {
+      id: record.id,
+      area: record.area,
+      slug: record.slug,
+      title: record.manifest.title ?? record.slug,
+      summary: record.manifest.summary,
+      status: record.manifest.status,
+      repos: record.manifest.repos,
+      problems: record.problems,
+      docs,
+      attachmentCount: files.length,
+      lastActivity: Math.max(0, ...docs.map((doc) => doc.mtime), ...files.map((file) => file.mtime)),
     };
   }
 
@@ -264,13 +384,13 @@ export class DocsStore {
 
   private async upsertFile(relPath: string, size: number, mtime: number, result?: ChangeResult): Promise<void> {
     const location = locateDoc(relPath);
-    if (!location) return;
+    if (!location || isManifestPath(relPath)) return;
     if (isMarkdown(relPath) && this.planFilter.isPlan(relPath)) {
       const raw = await readFile(path.join(this.docsRoot, relPath), "utf8").catch(() => null);
       if (raw === null) return;
       const summary = summarizeDoc({ path: relPath, raw, mtime });
       if (!summary) return;
-      this.docs.set(relPath, summary);
+      this.docs.set(relPath, this.decorate(summary));
       this.contents.set(relPath, analyzeContent(raw));
       result?.changedDocs.push(relPath);
       return;
@@ -305,6 +425,10 @@ export class DocsStore {
   private async readDirSafe(absolute: string): Promise<Dirent[]> {
     return readdir(absolute, { withFileTypes: true }).catch(() => []);
   }
+}
+
+function indexDoc(doc: DocSummary, options: IndexOptions): IndexedDoc {
+  return { ...doc, archive: options.archiveOf(doc), prAttention: options.prAttentionOf?.(doc) ?? null };
 }
 
 function toAttachmentSummary(entry: AttachmentEntry): AttachmentSummary {

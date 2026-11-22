@@ -45,9 +45,12 @@ export type { SearchHit } from "./docs/search.js";
 export { canonicalStatus } from "./docs/status.js";
 export type {
   ArchiveState,
+  AreaEntry,
   AttachmentSummary,
+  CodeRepoInfo,
   DocArchive,
   DocDetail,
+  DocKind,
   DocSummary,
   DocsIndex,
   GithubRepo,
@@ -55,7 +58,9 @@ export type {
   PhaseSummary,
   PrAttention,
   PrLinkHost,
+  ProjectEntry,
   ProjectIndex,
+  ProjectStatus,
   RepoIndex,
   TaskProgress,
 } from "./docs/types.js";
@@ -74,6 +79,26 @@ export type {
   InboxSection,
   InboxSessionHint,
 } from "./inbox/types.js";
+export {
+  formatPrRef,
+  isProjectStatus,
+  PROJECT_STATUSES,
+  type PrRef,
+  parsePrRef,
+} from "./projects/manifest.js";
+export { type NewProject, ProjectError, ProjectService } from "./projects/projectService.js";
+export type {
+  ProjectActivity,
+  ProjectActivityKind,
+  ProjectDetail,
+  ProjectPr,
+  ProjectPrSource,
+  ProjectPrs,
+  ProjectQuestion,
+  ProjectStack,
+  ProjectThread,
+} from "./projects/projectView.js";
+export { type AreaRecord, type ProjectRecord, ProjectRegistry } from "./projects/registry.js";
 export { findGh } from "./prs/ghClient.js";
 export type {
   CiState,

@@ -8,6 +8,10 @@ function doc(path: string, title: string, overrides: Partial<IndexedDoc> = {}): 
     path,
     repo,
     project: rest.length > 1 ? (rest[0] ?? null) : null,
+    projectId: null,
+    codeRepo: repo,
+    repoOverride: null,
+    kind: "plan",
     relPath: rest.join("/"),
     title,
     date: "2026-11-01",
@@ -52,6 +56,9 @@ const INDEX: DocsIndex = {
   generatedAt: "",
   groups: null,
   sidebarQuotes: [],
+  areas: [],
+  projects: [],
+  codeRepos: {},
   repos: [
     repo(
       "acme",

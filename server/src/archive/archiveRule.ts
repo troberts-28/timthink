@@ -15,7 +15,10 @@ export interface ArchiveRuleInput {
   needsUser: boolean;
   settings: ArchiveSettings;
   now: number;
+  projectStatus?: string | null;
 }
+
+const SETTLED_PROJECT_STATUSES: ReadonlySet<string> = new Set(["shipped", "dropped"]);
 
 export const ACTIVE: DocArchive = { state: "active" };
 
@@ -59,5 +62,10 @@ export function archiveState(input: ArchiveRuleInput): DocArchive {
     };
   }
   if (input.manual?.kind === "keep-active") return ACTIVE;
+  if (input.projectStatus) {
+    return SETTLED_PROJECT_STATUSES.has(input.projectStatus)
+      ? { state: "auto", reason: `Project ${input.projectStatus}` }
+      : ACTIVE;
+  }
   return autoArchive(input) ?? ACTIVE;
 }

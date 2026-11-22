@@ -147,7 +147,7 @@ export class PrService {
   }
 
   linkedNumbers(doc: DocSummary): Map<number, PrSource[]> {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     const linked = new Map<number, PrSource[]>();
     const add = (number: number, source: PrSource) => {
       const sources = linked.get(number) ?? [];
@@ -164,7 +164,7 @@ export class PrService {
 
   docPrs(docPath: string): DocPrsResponse {
     const doc = this.options.docs.getDoc(docPath);
-    const github = doc ? this.options.githubFor(doc.repo) : null;
+    const github = doc ? this.options.githubFor(doc.codeRepo) : null;
     const base = {
       github: github ? { owner: github.owner, repo: github.repo } : null,
       trunk: github ? (this.state.trunks[repoKey(github)] ?? null) : null,
@@ -197,7 +197,7 @@ export class PrService {
   }
 
   attentionFor(doc: DocSummary): PrAttention | null {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     if (!github || !this.options.settings.enabled) return null;
     const open = [...this.linkedNumbers(doc).keys()].flatMap((number) => {
       const info = this.cached(github, number)?.info;
@@ -222,12 +222,29 @@ export class PrService {
     return { status: this.lastError?.kind === "unavailable" ? "unavailable" : "ok", prs };
   }
 
+  infoFor(github: GithubRepo, number: number): PrInfo | null {
+    return this.cached(github, number)?.info ?? null;
+  }
+
+  stackOf(github: GithubRepo, numbers: readonly number[]): number[] {
+    const known = numbers.filter((number) => this.cached(github, number));
+    return known.length > 0 ? this.connectedStack(github, known) : [...numbers];
+  }
+
+  get enabled(): boolean {
+    return this.options.settings.enabled;
+  }
+
+  get unavailableMessage(): string | null {
+    return this.lastError?.kind === "unavailable" ? this.lastError.message : null;
+  }
+
   completion(docPath: string): PlanCompletion | null {
     return this.state.completed[docPath] ?? null;
   }
 
   completionMarker(doc: DocSummary): string | null {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     const numbers = [...this.linkedNumbers(doc).keys()].sort((a, b) => a - b);
     if (!github || numbers.length === 0) return null;
     const allMerged = numbers.every((number) => this.cached(github, number)?.info.state === "merged");
@@ -261,7 +278,7 @@ export class PrService {
   }
 
   signalsFor(doc: DocSummary): PrSignal[] {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     if (!github || !this.options.settings.enabled) return [];
     const dismissed = new Set(this.state.dismissed[doc.path] ?? []);
     const infos = [...this.linkedNumbers(doc).keys()].flatMap((number) => this.cached(github, number)?.info ?? []);
@@ -370,7 +387,7 @@ export class PrService {
       return entry;
     };
     for (const doc of docs) {
-      const github = this.options.githubFor(doc.repo);
+      const github = this.options.githubFor(doc.codeRepo);
       if (!github) continue;
       const linked = this.linkedNumbers(doc);
       if (linked.size === 0 && !(doc.path in this.state.stacks)) continue;
@@ -508,7 +525,7 @@ export class PrService {
   }
 
   private recomputeStack(doc: DocSummary): void {
-    const github = this.options.githubFor(doc.repo);
+    const github = this.options.githubFor(doc.codeRepo);
     if (!github) return;
     const linked = [...this.linkedNumbers(doc).keys()];
     if (linked.length === 0) {

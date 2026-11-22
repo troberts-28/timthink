@@ -16,6 +16,8 @@ import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
+import { ProjectService } from "./projects/projectService.js";
+import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
 import { type CompletionDeps, completePlansWithMergedPrs, markPlanDone } from "./prs/completion.js";
 import { createGhRunner, findGh, type GraphqlRunner } from "./prs/ghClient.js";
 import { PrService } from "./prs/prService.js";
@@ -81,6 +83,7 @@ export interface Runtime {
   inbox: InboxService;
   archive: ArchiveService;
   prs: PrService;
+  projects: ProjectRegistry;
   hub: EventHub;
   token: string;
   startHistory(): Promise<void>;
@@ -134,7 +137,8 @@ function startSessionTracking(sessions: SessionStore, log: (message: string) => 
 export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const { config } = options;
   const log = options.log ?? (() => {});
-  const store = new DocsStore(config.docsRoot);
+  const projects = new ProjectRegistry(config.docsRoot);
+  const store = new DocsStore(config.docsRoot, projects);
   const hub = new EventHub();
   const code = new CodeService(config);
   const github = new GithubByRepo(code);
@@ -185,6 +189,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
       threadReadAt: (docPath, threadId) => seen.threadReadAt(docPath, threadId),
     },
     settings: config.archive,
+    projectStatusOf: (doc) => (doc.projectId ? (projects.project(doc.projectId)?.manifest.status ?? null) : null),
     log,
   });
   let lastPrAttention = "";
@@ -241,6 +246,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     completion: (docPath) => prs.completion(docPath),
   });
 
+  await projects.scan();
   await Promise.all([store.scanAll(), sessions.init()]);
   const seenInit = await seen.init(
     store.allDocs().flatMap((doc) => {
@@ -252,7 +258,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   await Promise.all([archive.init(), prs.init()]);
   let cachedIndex: DocsIndex | null = null;
   let cachedAt = 0;
-  const repoNames = (): string[] => [...new Set(store.allDocs().map((doc) => doc.repo))];
+  const repoNames = (): string[] => store.codeRepoNames();
   await github.refresh(repoNames());
 
   const getIndex = (): DocsIndex => {
@@ -268,6 +274,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
             buildLauncher: Boolean(config.repos[repo]?.buildLaunch),
           };
         },
+        codeRepoInfo: (repo) => ({ github: github.get(repo), prLinks: prLinkHostFor(config, repo) }),
         archiveOf: (summary) => archive.stateFor(summary),
         prAttentionOf: (summary) => prs.attentionFor(summary),
         groupOrder: (assigned) => (config.groups ? groupNames(config.groups, assigned) : null),
@@ -315,8 +322,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const handleChanges = async (relPaths: string[]): Promise<void> => {
     publishReviewChanges(relPaths);
     await reloadArchives(relPaths);
+    const projectsChanged = affectsProjects(relPaths) && (await projects.scan());
+    if (projectsChanged) store.redecorate();
     const result = await store.applyChanges(relPaths);
-    if (!result.changed) return;
+    if (!result.changed && !projectsChanged) return;
     await Promise.all([github.refresh(repoNames()), archive.ensureRepos(store.repoNames())]);
     cachedIndex = null;
     history.schedule(result.changedDocs);
@@ -343,6 +352,9 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     prs,
+    projects,
+    projectService: new ProjectService({ docsRoot: config.docsRoot, registry: projects, readOnly: config.readOnly }),
+    githubFor: (repo) => github.get(repo),
     worktrees: new WorktreeIndex(config),
     resolveCompletion,
     launchBuild: options.launchBuild ?? createBuildLauncher(),
@@ -369,6 +381,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     inbox,
     archive,
     prs,
+    projects,
     hub,
     token,
     startPrTracking: () => prs.start(),

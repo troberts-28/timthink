@@ -16,7 +16,7 @@ import type { TimthinkConfig } from "./config.js";
 import { listPhases } from "./docs/phases.js";
 import { searchDocs } from "./docs/search.js";
 import type { DocsStore } from "./docs/store.js";
-import type { DocDetail, DocsIndex } from "./docs/types.js";
+import type { DocDetail, DocsIndex, GithubRepo } from "./docs/types.js";
 import type { EventHub, HubEvent } from "./events.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import type { HistoryService } from "./history/historyService.js";
@@ -24,6 +24,9 @@ import { historyRoutes } from "./history/routes.js";
 import type { InboxService } from "./inbox/inboxService.js";
 import { mimeTypeFor } from "./mime.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
+import type { ProjectService } from "./projects/projectService.js";
+import type { ProjectRegistry } from "./projects/registry.js";
+import { projectRoutes } from "./projects/routes.js";
 import type { PrService } from "./prs/prService.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
@@ -59,6 +62,9 @@ export interface AppDeps {
   inbox: InboxService;
   archive: ArchiveService;
   prs: PrService;
+  projects: ProjectRegistry;
+  projectService: ProjectService;
+  githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
   launchBuild: BuildLauncher;
   resolveCompletion: (docPath: string, done: boolean) => Promise<boolean>;
@@ -416,6 +422,18 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
+    .route(
+      "/api/project",
+      projectRoutes({
+        registry: deps.projects,
+        service: deps.projectService,
+        store,
+        reviews: deps.reviews.store,
+        prs: deps.prs,
+        githubFor: deps.githubFor,
+        getIndex: deps.getIndex,
+      }),
+    )
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {
       const request = c.req.valid("json");
       const doc = store.getDoc(request.doc);

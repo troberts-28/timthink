@@ -23,6 +23,7 @@ export interface ArchiveServiceDeps {
   archives: ArchiveStore;
   marks: ReadMarks;
   settings: ArchiveSettings;
+  projectStatusOf?: (doc: DocSummary) => string | null;
   now?: () => number;
   log?: (message: string) => void;
 }
@@ -61,6 +62,7 @@ export class ArchiveService {
       needsUser: this.needingUser.has(doc.path),
       settings: this.deps.settings,
       now: this.now(),
+      projectStatus: this.deps.projectStatusOf?.(doc) ?? null,
     });
   }
 
