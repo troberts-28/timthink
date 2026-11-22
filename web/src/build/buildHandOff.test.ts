@@ -19,6 +19,7 @@ function session(overrides: Partial<SessionView>): SessionView {
     firstSeen: null,
     lastActivity: null,
     live: false,
+    status: null,
     warpFocusUrl: null,
     canResume: true,
     mayBeOpenUntracked: false,

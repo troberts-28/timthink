@@ -202,6 +202,7 @@ async function toSessionView(session: SessionRecord, docPath: string | null = nu
     firstSeen: session.firstSeen,
     lastActivity: session.lastActivity,
     live: session.live,
+    status: session.status,
     warpFocusUrl: isWarpFocusUrl(session.warpFocusUrl) ? session.warpFocusUrl : null,
     canResume: isSessionId(session.id) && (await isExistingDirectory(session.cwd)),
     mayBeOpenUntracked: mayBeOpenUntracked(session),
@@ -209,6 +210,14 @@ async function toSessionView(session: SessionRecord, docPath: string | null = nu
     plannedDoc: docPath === null ? null : session.plannedDocPaths.includes(docPath),
     builtDoc: docPath === null ? null : session.builtDocPaths.includes(docPath),
   };
+}
+
+const EARLIER_SESSIONS_LIMIT = 10;
+
+function projectSessions(sessions: readonly SessionRecord[]) {
+  const live = sessions.filter((session) => session.live);
+  const earlier = sessions.filter((session) => !session.live).slice(0, EARLIER_SESSIONS_LIMIT);
+  return [...live, ...earlier];
 }
 
 async function sessionsResponse(
@@ -457,6 +466,10 @@ export function createApp(deps: AppDeps) {
         getIndex: deps.getIndex,
         pages: deps.pages,
         checklists: deps.checklists,
+        sessionsOf: async (belongs) => {
+          await sessions.refreshLiveness();
+          return Promise.all(projectSessions(sessions.all().filter(belongs)).map((session) => toSessionView(session)));
+        },
       }),
     )
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {

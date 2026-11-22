@@ -8,10 +8,11 @@ import type {
   ProjectQuestion,
   ProjectThread,
   RoundSummary,
+  SessionView,
 } from "@timthink/server";
 import { blockIdOf, isPageFile } from "@timthink/server/shared";
-import { CircleCheck, CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, CircleCheck, CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
+import { useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { NotFoundError } from "../api/client";
 import { settlePlanCompletion } from "../api/projects";
@@ -27,6 +28,7 @@ import { pluralise, relativeTime } from "../lib/format";
 import { areaHref, docHref, roundHref } from "../lib/routes";
 import { useToast } from "../lib/toast";
 import { AuthoredPage } from "../page/AuthoredPage";
+import { SessionRow } from "../plan/SessionsPanel";
 import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
@@ -160,6 +162,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
           </ul>
         </section>
       ) : null}
+      <ProjectSessions sessions={detail.sessions} />
       {detail.activity.length > 0 ? (
         <section className="mb-10">
           <SectionHeading>Activity</SectionHeading>
@@ -179,6 +182,56 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
         </section>
       ) : null}
     </PageContainer>
+  );
+}
+
+function ProjectSessions({ sessions }: { sessions: SessionView[] }) {
+  const [showEarlier, setShowEarlier] = useState(false);
+  const earlierId = useId();
+  if (sessions.length === 0) {
+    return null;
+  }
+  const live = sessions.filter((session) => session.live);
+  const earlier = sessions.filter((session) => !session.live);
+  return (
+    <section className="mb-10">
+      <SectionHeading aside={pluralise(live.length, "live session")}>Sessions</SectionHeading>
+      {live.length > 0 ? (
+        <ul className="m-0 mb-3 list-none divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface p-0">
+          {live.map((session) => (
+            <SessionRow key={session.id} session={session} />
+          ))}
+        </ul>
+      ) : null}
+      {earlier.length > 0 ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowEarlier((current) => !current)}
+            aria-expanded={showEarlier}
+            aria-controls={earlierId}
+            className="mb-3 flex items-center gap-1.5 rounded-[6px] text-[12px] font-semibold uppercase leading-4 tracking-[0.06em] text-ink-32 hover:text-ink-64"
+          >
+            <ChevronRight
+              className={`size-3.5 transition-transform duration-150 ${showEarlier ? "rotate-90" : ""}`}
+              strokeWidth={2}
+              aria-hidden
+            />
+            Earlier
+          </button>
+          {showEarlier ? (
+            <ul
+              id={earlierId}
+              className="m-0 list-none divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface p-0"
+            >
+              {earlier.map((session) => (
+                <SessionRow key={session.id} session={session} />
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 

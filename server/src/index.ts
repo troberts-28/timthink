@@ -194,5 +194,7 @@ export { TOKEN_HEADER } from "./security.js";
 export type { SeenResponse } from "./seen/routes.js";
 export type { SeenEntry, SeenMark } from "./seen/seenStore.js";
 export { BIND_HOST, createRuntime, type RunningServer, type StartOptions, startServer } from "./server.js";
-export type { SessionsResponse, SessionView } from "./sessions/types.js";
+export { appendSessionEvent, MAX_SESSION_LABEL_LENGTH } from "./sessions/hookLog.js";
+export { claudeSessionOfAncestor, createPsRunner } from "./sessions/liveProcesses.js";
+export type { SessionStatus, SessionsResponse, SessionView } from "./sessions/types.js";
 export { TOKEN_META_NAME } from "./webAssets.js";

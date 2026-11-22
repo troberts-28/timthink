@@ -5,14 +5,24 @@ import { loadConfig } from "@timthink/server";
 import { describe, expect, it } from "vitest";
 import { runCheck } from "./check.js";
 import { runProject } from "./project.js";
+import { runSession } from "./session.js";
+
+const SESSION_ID = "7b0b102e-5bdb-4073-a3d3-b16a23b5a701";
 
 async function setup() {
   const docsRoot = await mkdtemp(path.join(tmpdir(), "timthink-project-"));
-  const config = { ...loadConfig({ TIMTHINK_CONFIG: "/nonexistent.json" }), docsRoot, readOnly: false };
+  const stateDir = await mkdtemp(path.join(tmpdir(), "timthink-state-"));
+  const config = { ...loadConfig({ TIMTHINK_CONFIG: "/nonexistent.json" }), docsRoot, stateDir, readOnly: false };
   const output: string[] = [];
   const io = { out: (text: string) => output.push(text), err: (text: string) => output.push(`ERR ${text}`) };
-  const run = (args: string[], flags = {}) => runProject({ config, args, flags, io });
-  return { docsRoot, output, run };
+  let sessionId: string | null = SESSION_ID;
+  const ownSessionId = async () => sessionId;
+  const run = (args: string[], flags = {}) => runProject({ config, args, flags, io, ownSessionId });
+  const label = (args: string[]) => runSession({ config, args, io, ownSessionId });
+  const leaveSession = () => {
+    sessionId = null;
+  };
+  return { docsRoot, stateDir, output, run, label, leaveSession };
 }
 
 describe("timthink project", () => {
@@ -44,6 +54,25 @@ describe("timthink project", () => {
     expect(await run(["show", "missing"])).toBe(1);
     expect(await run(["status", "solo", "someday"])).toBe(1);
     expect(await run(["create", "solo"], { title: "Again" })).toBe(1);
+  });
+
+  it("binds and labels the session it runs in, and refuses outside one", async () => {
+    const { stateDir, run, label, leaveSession } = await setup();
+    await run(["create", "solo"], { title: "Solo" });
+    expect(await run(["use", "solo"])).toBe(0);
+    expect(await label(["label", "Building", "phase 2"])).toBe(0);
+    expect(await label(["label", "x".repeat(121)])).toBe(1);
+    const records = (await readFile(path.join(stateDir, "sessions.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(records).toMatchObject([
+      { event: "Bind", sessionId: SESSION_ID, project: "solo" },
+      { event: "Label", sessionId: SESSION_ID, label: "Building phase 2" },
+    ]);
+    leaveSession();
+    expect(await run(["use", "solo"])).toBe(1);
+    expect(await label(["label", "Planning"])).toBe(1);
   });
 
   it("fails timthink check on a doc whose project.yaml has problems", async () => {

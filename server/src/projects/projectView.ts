@@ -11,6 +11,8 @@ import { PROJECT_PAGE_FILE } from "../pages/pageFile.js";
 import { isTerminal, type PrInfo } from "../prs/types.js";
 import type { ReviewFile } from "../reviews/schema.js";
 import type { RoundSummary } from "../rounds/roundView.js";
+import type { SessionRecord } from "../sessions/sessionStore.js";
+import type { SessionView } from "../sessions/types.js";
 import { type PrRef, samePr } from "./manifest.js";
 import type { ProjectRecord } from "./registry.js";
 
@@ -82,6 +84,7 @@ export interface ProjectDetail {
   rounds: RoundSummary[];
   looksFinished: LooksFinishedDoc[];
   attachments: AttachmentSummary[];
+  sessions: SessionView[];
 }
 
 export interface LooksFinishedDoc {
@@ -111,6 +114,7 @@ export interface ProjectViewDeps {
   attachmentsUnder(dir: string): AttachmentSummary[];
   rounds: readonly RoundSummary[];
   awaitingCompletion(docPath: string): { marker: string; openTasks: number } | null;
+  sessionsOf(belongs: (session: SessionRecord) => boolean): Promise<SessionView[]>;
 }
 
 const ACTIVITY_LIMIT = 40;
@@ -387,7 +391,21 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
         : [];
     }),
     attachments: deps.attachmentsUnder(deps.record.id),
+    sessions: await deps.sessionsOf((session) =>
+      belongsToProject(session, { projectId: project.id, prBranches: prBranchesOf(prs) }),
+    ),
   };
+}
+
+function prBranchesOf(prs: ProjectPrs) {
+  return new Set(prs.stacks.flatMap((stack) => stack.prs.flatMap((pr) => (pr.info ? [pr.info.headRef] : []))));
+}
+
+function belongsToProject(session: SessionRecord, project: { projectId: string; prBranches: ReadonlySet<string> }) {
+  const touchedProjectDoc = session.docPaths.some((docPath) => docPath.startsWith(`${project.projectId}/`));
+  const onProjectPrBranch = session.branch !== null && project.prBranches.has(session.branch);
+  const boundByCommand = session.boundProjects.includes(project.projectId);
+  return touchedProjectDoc || onProjectPrBranch || boundByCommand;
 }
 
 function projectRounds(deps: ProjectViewDeps, prs: ProjectPrs) {

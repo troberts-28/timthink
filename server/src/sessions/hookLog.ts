@@ -1,6 +1,7 @@
-import { open } from "node:fs/promises";
+import { appendFile, mkdir, open } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
-import type { HookDocWrite, HookSessionEvent } from "./types.js";
+import type { HookDocWrite, SessionBindEvent, SessionLabelEvent, SessionLogEvent } from "./types.js";
 
 export const SESSIONS_LOG = "sessions.jsonl";
 export const DOC_SESSIONS_LOG = "doc-sessions.jsonl";
@@ -10,7 +11,9 @@ const optionalString = z
   .nullish()
   .transform((value) => value || null);
 
-const sessionEventSchema = z.object({
+export const MAX_SESSION_LABEL_LENGTH = 120;
+
+const lifecycleEventSchema = z.object({
   event: z.enum(["SessionStart", "SessionEnd"]),
   sessionId: z.string().min(1),
   at: z.string().datetime(),
@@ -19,6 +22,29 @@ const sessionEventSchema = z.object({
   transcriptPath: optionalString,
   warpFocusUrl: optionalString,
 });
+
+const turnEventSchema = z.object({
+  event: z.enum(["UserPromptSubmit", "Notification", "Stop"]),
+  sessionId: z.string().min(1),
+  at: z.string().datetime(),
+  cwd: optionalString,
+});
+
+const labelEventSchema = z.object({
+  event: z.literal("Label"),
+  sessionId: z.string().min(1),
+  at: z.string().datetime(),
+  label: z.string().trim().min(1).max(MAX_SESSION_LABEL_LENGTH),
+});
+
+const bindEventSchema = z.object({
+  event: z.literal("Bind"),
+  sessionId: z.string().min(1),
+  at: z.string().datetime(),
+  project: z.string().min(1).max(256),
+});
+
+const sessionEventSchema = z.union([lifecycleEventSchema, turnEventSchema, labelEventSchema, bindEventSchema]);
 
 const docWriteSchema = z.object({
   sessionId: z.string().min(1),
@@ -36,7 +62,7 @@ function parseJsonLine(line: string): unknown {
   }
 }
 
-export function parseSessionEvent(line: string): HookSessionEvent | null {
+export function parseSessionEvent(line: string): SessionLogEvent | null {
   const parsed = sessionEventSchema.safeParse(parseJsonLine(line));
   return parsed.success ? parsed.data : null;
 }
@@ -44,6 +70,11 @@ export function parseSessionEvent(line: string): HookSessionEvent | null {
 export function parseDocWrite(line: string): HookDocWrite | null {
   const parsed = docWriteSchema.safeParse(parseJsonLine(line));
   return parsed.success ? parsed.data : null;
+}
+
+export async function appendSessionEvent(stateDir: string, event: SessionLabelEvent | SessionBindEvent) {
+  await mkdir(stateDir, { recursive: true });
+  await appendFile(path.join(stateDir, SESSIONS_LOG), `${JSON.stringify({ v: 1, ...event })}\n`);
 }
 
 export interface FollowResult {

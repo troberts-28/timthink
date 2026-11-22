@@ -229,6 +229,7 @@ describe("sessions API", () => {
         firstSeen: "2026-10-01T09:00:00.000Z",
         lastActivity: "2026-10-01T10:30:00.000Z",
         live: false,
+        status: null,
         warpFocusUrl: null,
         canResume: true,
         mayBeOpenUntracked: false,

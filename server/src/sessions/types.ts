@@ -10,6 +10,33 @@ export interface HookSessionEvent {
   warpFocusUrl: string | null;
 }
 
+export type TurnEventName = "UserPromptSubmit" | "Notification" | "Stop";
+
+export interface HookTurnEvent {
+  event: TurnEventName;
+  sessionId: string;
+  at: string;
+  cwd: string | null;
+}
+
+export interface SessionLabelEvent {
+  event: "Label";
+  sessionId: string;
+  at: string;
+  label: string;
+}
+
+export interface SessionBindEvent {
+  event: "Bind";
+  sessionId: string;
+  at: string;
+  project: string;
+}
+
+export type SessionLogEvent = HookSessionEvent | HookTurnEvent | SessionLabelEvent | SessionBindEvent;
+
+export type SessionStatus = "working" | "waiting" | "finished" | "ended";
+
 export interface HookDocWrite {
   sessionId: string;
   filePath: string;
@@ -60,6 +87,7 @@ export interface SessionView {
   firstSeen: string | null;
   lastActivity: string | null;
   live: boolean;
+  status: SessionStatus | null;
   warpFocusUrl: string | null;
   canResume: boolean;
   mayBeOpenUntracked: boolean;

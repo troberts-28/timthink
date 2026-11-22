@@ -1,4 +1,4 @@
-import type { SessionActionResponse, SessionView } from "@timthink/server";
+import type { SessionActionResponse, SessionStatus, SessionView } from "@timthink/server";
 import {
   Check,
   ChevronDown,
@@ -117,7 +117,26 @@ function useSessionAction(session: SessionView) {
   return { pending, run };
 }
 
-function SessionRow({ session }: { session: SessionView }) {
+const STATUS_CHIPS: Record<Exclude<SessionStatus, "ended">, { label: string; className: string }> = {
+  working: { label: "Working", className: "chip-info" },
+  waiting: { label: "Waiting for you", className: "chip-accent" },
+  finished: { label: "Finished", className: "chip-ok-soft" },
+};
+
+function LiveChip({ session }: { session: SessionView }) {
+  if (!session.live) {
+    return null;
+  }
+  const chip = session.status && session.status !== "ended" ? STATUS_CHIPS[session.status] : null;
+  return (
+    <span className={`chip ${chip?.className ?? "chip-ok-soft"} flex-none gap-1.5`}>
+      <LiveDot />
+      {chip?.label ?? "Live"}
+    </span>
+  );
+}
+
+export function SessionRow({ session }: { session: SessionView }) {
   const { pending, run } = useSessionAction(session);
   const canFocus = session.live && session.warpFocusUrl !== null;
   const lastActivity = session.lastActivity ? Date.parse(session.lastActivity) : null;
@@ -129,12 +148,7 @@ function SessionRow({ session }: { session: SessionView }) {
         </p>
         {session.plannedDoc ? <span className="chip chip-neutral flex-none">Planned</span> : null}
         {session.builtDoc ? <span className="chip chip-info flex-none">Built</span> : null}
-        {session.live ? (
-          <span className="chip chip-ok-soft flex-none gap-1.5">
-            <LiveDot />
-            Live
-          </span>
-        ) : null}
+        <LiveChip session={session} />
       </div>
       <div className="flex min-w-0 items-center gap-2 text-meta text-ink-64">
         {session.branch ? (

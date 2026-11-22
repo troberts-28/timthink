@@ -206,6 +206,10 @@ export function useLiveUpdates(): void {
       const event = parseEvent(message.data);
       if (event?.type !== "sessions-changed") return;
       invalidateInbox();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projectRoot,
+        predicate: (query) => query.queryKey.length === queryKeys.project("").length,
+      });
       if (event.docPaths.length === 0) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.docSessionsRoot });
         void queryClient.invalidateQueries({ queryKey: queryKeys.historyRoot });

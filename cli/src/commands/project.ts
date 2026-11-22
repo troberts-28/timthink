@@ -1,5 +1,6 @@
 import path from "node:path";
 import {
+  appendSessionEvent,
   type DocSummary,
   DocsStore,
   formatPrRef,
@@ -13,6 +14,7 @@ import {
   ReadOnlyError,
   type TimthinkConfig,
 } from "@timthink/server";
+import { NOT_IN_SESSION_MESSAGE } from "./session.js";
 
 export const PROJECT_USAGE = `Usage: timthink project <command>
 
@@ -24,6 +26,7 @@ Commands:
   status <id> [status]               Print or set the status: ${PROJECT_STATUSES.join(", ")}
   link-pr <id> <pr>                  Add a PR (123, repo#123 or a PR URL); 123 means the project's first repo
   unlink-pr <id> <pr>                Detach a PR, including one found through a doc or session
+  use <id>                           Bind this Claude session to the project, so it shows on the project's page
   legacy-docs                        Print every doc outside an area or project as JSON, for a doc-moves round
 
 A project id is <project> for a standalone project, or <area>/<project>.`;
@@ -45,9 +48,10 @@ export interface ProjectCommand {
   args: readonly string[];
   flags: ProjectFlags;
   io: ProjectIo;
+  ownSessionId: () => Promise<string | null>;
 }
 
-export async function runProject({ config, args, flags, io }: ProjectCommand): Promise<number> {
+export async function runProject({ config, args, flags, io, ownSessionId }: ProjectCommand): Promise<number> {
   const [subcommand, id, value] = args;
   const registry = new ProjectRegistry(config.docsRoot);
   await registry.scan();
@@ -75,6 +79,21 @@ export async function runProject({ config, args, flags, io }: ProjectCommand): P
     }
     if (subcommand === "show") {
       io.out(await showProject(config, registry, record));
+      return 0;
+    }
+    if (subcommand === "use") {
+      const sessionId = await ownSessionId();
+      if (!sessionId) {
+        io.err(NOT_IN_SESSION_MESSAGE);
+        return 1;
+      }
+      await appendSessionEvent(config.stateDir, {
+        event: "Bind",
+        sessionId,
+        at: new Date().toISOString(),
+        project: id,
+      });
+      io.out(`This session now shows on ${id}.`);
       return 0;
     }
     if (subcommand === "status") {

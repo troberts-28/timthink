@@ -10,6 +10,8 @@ import { ReadOnlyError } from "../readOnly.js";
 import type { ReviewStore } from "../reviews/reviewStore.js";
 import type { RoundStore } from "../rounds/roundStore.js";
 import { summarizeRound } from "../rounds/roundView.js";
+import type { SessionRecord } from "../sessions/sessionStore.js";
+import type { SessionView } from "../sessions/types.js";
 import { PROJECT_STATUSES } from "./manifest.js";
 import { ProjectError, type ProjectService } from "./projectService.js";
 import { buildProjectDetail } from "./projectView.js";
@@ -26,6 +28,7 @@ export interface ProjectRouteDeps {
   getIndex: () => DocsIndex;
   pages: ProjectPages;
   checklists: ChecklistStore;
+  sessionsOf(belongs: (session: SessionRecord) => boolean): Promise<SessionView[]>;
 }
 
 const PR_ACTIONS = ["link", "unlink", "reattach"] as const;
@@ -76,6 +79,7 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
         rounds: (await deps.rounds.list()).map(summarizeRound),
         awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
+        sessionsOf: deps.sessionsOf,
       });
       return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
     })

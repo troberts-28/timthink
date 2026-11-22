@@ -3,7 +3,13 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfig, ProjectRegistry, type TimthinkConfig } from "@timthink/server";
+import {
+  claudeSessionOfAncestor,
+  createPsRunner,
+  loadConfig,
+  ProjectRegistry,
+  type TimthinkConfig,
+} from "@timthink/server";
 import { ARCHIVE_USAGE, runArchive } from "./commands/archive.js";
 import { runCheck } from "./commands/check.js";
 import { findDocsDir } from "./commands/docsDir.js";
@@ -24,6 +30,7 @@ import { PROJECT_USAGE, runProject } from "./commands/project.js";
 import { REVIEW_USAGE, type ReviewIo, resolveDocArgument, runReview } from "./commands/review.js";
 import { ROUND_USAGE, runRound } from "./commands/round.js";
 import { serve } from "./commands/serve.js";
+import { runSession, SESSION_USAGE } from "./commands/session.js";
 import { runStatus, STATUS_USAGE } from "./commands/status.js";
 import { docUrlForRelative } from "./commands/url.js";
 
@@ -41,6 +48,8 @@ Commands:
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
   round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)
+  session label "<text>"
+                        Name the Claude session this runs in, on its project's page
   archive <doc>         Archive a plan; also --list (see \`timthink archive --help\`)
   unarchive <doc>       Keep a plan active, even when its project is shipped or dropped
   doctor                Check every installed component and print fixes
@@ -104,6 +113,10 @@ async function printProjectDir(config: TimthinkConfig, projectId: string) {
   return 0;
 }
 
+function ownSessionId(config: TimthinkConfig) {
+  return claudeSessionOfAncestor({ sessionsDir: config.claudeSessionsDir, pid: process.pid, runPs: createPsRunner() });
+}
+
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
     args: argv,
@@ -135,6 +148,10 @@ async function main(argv: string[]): Promise<number> {
   }
   if (command === "project" && (values.help || rest.length === 0)) {
     console.log(PROJECT_USAGE);
+    return values.help ? 0 : 1;
+  }
+  if (command === "session" && (values.help || rest.length === 0)) {
+    console.log(SESSION_USAGE);
     return values.help ? 0 : 1;
   }
   if (command === "archive" && values.help) {
@@ -191,6 +208,14 @@ async function main(argv: string[]): Promise<number> {
         args: rest,
         flags: { title: values.title, summary: values.summary, repos: values.repos, repo: values.repo },
         io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        ownSessionId: () => ownSessionId(config),
+      });
+    case "session":
+      return runSession({
+        config,
+        args: rest,
+        io: { out: (text) => console.log(text), err: (text) => console.error(text) },
+        ownSessionId: () => ownSessionId(config),
       });
     case "round":
       return runRound({ config, args: rest, io: consoleIo, cwd: values.cwd ?? process.cwd() });

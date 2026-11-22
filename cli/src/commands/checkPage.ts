@@ -113,6 +113,7 @@ function stubProject({ record, pageFile, docsRoot }: StubProjectInput): ProjectD
     rounds: [],
     looksFinished: [],
     attachments: [],
+    sessions: [],
   };
 }
 

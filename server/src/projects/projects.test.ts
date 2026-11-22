@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DocsIndex, IndexedDoc } from "../docs/types.js";
@@ -8,7 +8,7 @@ import type { PrInfo } from "../prs/types.js";
 import type { ReviewView } from "../reviews/reviewService.js";
 import { TOKEN_HEADER } from "../security.js";
 import { createRuntime, type Runtime } from "../server.js";
-import { copyFixtureDocs, testConfig } from "../test/fixtures.js";
+import { copyFixtureDocs, makeTempDir, testConfig } from "../test/fixtures.js";
 import { createGitRepo } from "../test/gitRepo.js";
 import { parseProjectManifest } from "./manifest.js";
 import { buildProjectDetail, type ProjectDetail, type ProjectThread, type ProjectViewDeps } from "./projectView.js";
@@ -48,6 +48,55 @@ describe("projects API", () => {
   function docIn(docs: readonly IndexedDoc[], fileName: string) {
     return docs.find((doc) => doc.path.endsWith(fileName));
   }
+
+  it("shows the project's sessions with status and label, bound by a doc write or by command", async () => {
+    const sessionIdOf = (letter: string) => `${letter.repeat(8)}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+    const [writer, bound, ended, elsewhere] = [sessionIdOf("a"), sessionIdOf("b"), sessionIdOf("c"), sessionIdOf("d")];
+    const stateDir = await makeTempDir();
+    const live = [writer, bound, elsewhere].map((sessionId, pid) => ({
+      pid: pid + 2,
+      sessionId,
+      updatedAt: 1,
+      warpFocusUrl: null,
+    }));
+    runtime = await createRuntime({
+      config: testConfig({ docsRoot, stateDir }),
+      webDist: null,
+      scanLiveProcesses: async () => live,
+    });
+    const at = (minute: number) => `2026-11-22T10:0${minute}:00.000Z`;
+    const events = [
+      { event: "SessionStart", sessionId: writer, at: at(0) },
+      { event: "UserPromptSubmit", sessionId: writer, at: at(1) },
+      { event: "Stop", sessionId: writer, at: at(2) },
+      { event: "Notification", sessionId: writer, at: at(3) },
+      { event: "SessionStart", sessionId: bound, at: at(0) },
+      { event: "UserPromptSubmit", sessionId: bound, at: at(1) },
+      { event: "Label", sessionId: bound, at: at(2), label: "Building phase 2" },
+      { event: "Bind", sessionId: bound, at: at(2), project: CHECKOUT_ID },
+      { event: "SessionStart", sessionId: ended, at: at(0) },
+      { event: "SessionStart", sessionId: elsewhere, at: at(0) },
+    ];
+    await appendFile(
+      path.join(stateDir, "sessions.jsonl"),
+      events.map((event) => `${JSON.stringify(event)}\n`).join(""),
+    );
+    const plan = path.join(docsRoot, CHECKOUT_ID, "2026-11-10-checkout-v2-plan.md");
+    const writes = [writer, ended].map((sessionId) => ({ sessionId, filePath: plan, at: at(0) }));
+    await appendFile(
+      path.join(stateDir, "doc-sessions.jsonl"),
+      writes.map((write) => `${JSON.stringify(write)}\n`).join(""),
+    );
+    await runtime.sessions.readHookLogs();
+
+    const { body } = await project(CHECKOUT_ID);
+    const sessions: ProjectDetail["sessions"] = body.sessions;
+    expect(sessions.map((session) => [session.id, session.status, session.title])).toEqual([
+      [writer, "waiting", `Session ${writer.slice(0, 8)}`],
+      [bound, "working", "Building phase 2"],
+      [ended, "ended", `Session ${ended.slice(0, 8)}`],
+    ]);
+  });
 
   it("indexes areas and projects apart from the legacy repos", async () => {
     const { areas, repos, codeRepos } = await index();
@@ -327,6 +376,7 @@ describe("project PRs", () => {
       attachmentsUnder: () => [],
       rounds: [],
       awaitingCompletion: () => null,
+      sessionsOf: async () => [],
     };
     const detail = await buildProjectDetail(deps);
     expect(detail?.prs.stacks.map((stack) => stack.prs.map((pr) => [pr.number, pr.sources]))).toEqual([

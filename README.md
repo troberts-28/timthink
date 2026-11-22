@@ -18,7 +18,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Search.** ⌘K jumps to any plan or repo by title, and from three characters also searches plan text, with `repo:` and `status:` filters.
 - **Archive.** Plans you haven't touched in a while, and finished ones, archive themselves so the sidebar and inbox show what's live. Archive or restore any plan by hand (`e` on a plan page); nothing on disk moves.
 - **Groups.** Group repos in the sidebar and inbox, for example work and personal, by GitHub owner or by name.
-- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**.
+- **Sessions.** Claude Code hooks record which sessions wrote which plan, so a plan can focus its live session in Warp or resume a finished one. Sessions are labelled **Planned** or **Built**. A project page lists its sessions with what each is doing (**Working**, **Waiting for you**, **Finished**) and the label the skill gave it (`timthink session label`); a session belongs to a project when it wrote into the project's folder, sits on one of its PR branches, or ran `timthink project use <id>`.
 - **Build.** Approving a plan (or pressing `b`) copies a command that starts a fresh Claude on `/timthink build <doc>` in the planner's directory and brings the planning tab forward, so you split a pane and paste. Or send the build to an existing session. The build skill works phase by phase, ticks tasks and records the branch and PRs back into the plan.
 
 Inspired by [Plannotator](https://github.com/backnotprop/plannotator) and [Kacper-Lubisz/pages](https://github.com/Kacper-Lubisz/pages).
@@ -118,6 +118,9 @@ The hooks append one JSON line per event and print nothing:
 | `SessionStart`                           | session id, cwd, git branch, transcript path, `$WARP_FOCUS_URL`, `$TERM_PROGRAM`, time   |
 | `SessionEnd`                             | session id, end reason, time                                                             |
 | `PostToolUse` (`Write\|Edit\|MultiEdit`) | session id and file path, only for files inside `docsRoot`                               |
+| `UserPromptSubmit`, `Notification`, `Stop` | session id, cwd, time (the session's status: working, waiting for you, finished)       |
+
+`timthink session label` and `timthink project use` append `Label` and `Bind` lines to `sessions.jsonl` for the session they run in, found through their parent processes.
 
 Nothing leaves your machine.
 
@@ -176,7 +179,8 @@ A plan is archived when you archive it, or when its project is `shipped` or `dro
 | `timthink serve`                                | Run the hub in the foreground                                                     |
 | `timthink url <doc>`                            | Print the hub URL for a plan                                                      |
 | `timthink docs-dir [--cwd dir] [--project id]`  | Print a project's folder, or the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
-| `timthink project list \| show \| create \| status \| link-pr \| unlink-pr \| legacy-docs` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent, `legacy-docs` lists docs outside any project as JSON |
+| `timthink project list \| show \| create \| status \| link-pr \| unlink-pr \| use \| legacy-docs` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent, `use` binds the current Claude session, `legacy-docs` lists docs outside any project as JSON |
+| `timthink session label "<text>"`               | Name the current Claude session on its project's page                             |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links; for a `.page.tsx`, compile it, render it once and check block ids |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| comment \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews, or comment on a passage in your draft review (`timthink review --help`) |

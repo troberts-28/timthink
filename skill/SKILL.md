@@ -7,6 +7,10 @@ description: Write implementation plans, design notes and specs as markdown that
 
 Plans are plain markdown files in a docs folder that the timthink hub renders, and that the user reviews like a pull request. You read and answer reviews only through the `timthink` CLI. Never edit files under `.timthink/` by hand.
 
+## Session labels
+
+Start every mode by naming the session, so the project page shows what it's doing: `timthink session label "<what>: <subject>"`, e.g. `"Planning: annual DD mandate"`, `"Building phase 2: rounds"`, `"Reviewing: checkout plan"`, `"Addressing comments on #19586"`, `"Migrating docs"`. Relabel when the work changes. When a session works on a project without writing into its folder or sitting on one of its PR branches, bind it with `timthink project use <id>`. If either command is unknown or says it isn't in a session, carry on without it.
+
 ## Writing a plan
 
 **Where.** Docs belong to projects. A project is one shippable piece of work, often spanning repos, and usually sits in an area (`<area>/<project>`, e.g. `car-insurance/annual-payments`).

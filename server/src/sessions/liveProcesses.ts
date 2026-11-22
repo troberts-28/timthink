@@ -92,3 +92,32 @@ export async function scanLiveClaudeProcesses(sessionsDir: string, runPs: RunPs)
     warpFocusUrl: warpFocusUrlFromEnv(environments.get(file.pid) ?? ""),
   }));
 }
+
+const MAX_ANCESTORS = 32;
+
+export interface AncestorSessionLookup {
+  sessionsDir: string;
+  pid: number;
+  runPs: RunPs;
+}
+
+export async function claudeSessionOfAncestor({
+  sessionsDir,
+  pid,
+  runPs,
+}: AncestorSessionLookup): Promise<string | null> {
+  let current = pid;
+  for (let depth = 0; depth < MAX_ANCESTORS && current > 1; depth += 1) {
+    const file = await readFile(path.join(sessionsDir, `${current}.json`), "utf8")
+      .then(parseSessionFile)
+      .catch(() => null);
+    if (file?.pid === current) {
+      return file.sessionId;
+    }
+    current = Number((await runPs(["-o", "ppid=", "-p", String(current)]).catch(() => "")).trim());
+    if (!Number.isInteger(current)) {
+      return null;
+    }
+  }
+  return null;
+}
