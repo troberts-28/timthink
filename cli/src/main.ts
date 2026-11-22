@@ -40,8 +40,8 @@ Commands:
   status <doc> [status] Print a plan's status, or set it (draft, review, in-progress, done, abandoned)
   review <command>      Read and answer reviews submitted from the hub (see \`timthink review --help\`)
   round <command>       Create decision rounds and wait for your answers (see \`timthink round --help\`)
-  archive <doc>         Archive a plan; also --list and --dry-run-auto (see \`timthink archive --help\`)
-  unarchive <doc>       Keep a plan active, even when the auto rule would archive it
+  archive <doc>         Archive a plan; also --list (see \`timthink archive --help\`)
+  unarchive <doc>       Keep a plan active, even when its project is shipped or dropped
   doctor                Check every installed component and print fixes
   install [--apply] [--docs-root dir] [--code-root dir]
                         Set up the config, CLI shim, launchd agent, skill and Claude Code hooks (dry run unless --apply)
@@ -113,7 +113,6 @@ async function main(argv: string[]): Promise<number> {
       message: { type: "string", short: "m" },
       cwd: { type: "string" },
       list: { type: "boolean", default: false },
-      "dry-run-auto": { type: "boolean", default: false },
       clear: { type: "boolean", default: false },
       repo: { type: "string" },
       "docs-root": { type: "string" },
@@ -202,7 +201,7 @@ async function main(argv: string[]): Promise<number> {
         config,
         command,
         rest,
-        { list: values.list, dryRunAuto: values["dry-run-auto"], clear: values.clear, repo: values.repo },
+        { list: values.list, clear: values.clear, repo: values.repo },
         { out: (text) => console.log(text), err: (text) => console.error(text) },
       );
     case "doctor":

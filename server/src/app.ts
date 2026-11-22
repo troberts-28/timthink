@@ -154,15 +154,6 @@ const SEARCH_LIMIT = 30;
 const searchQuery = z.object({ q: z.string().min(1).max(200) });
 const openWorktreeBody = z.object({ path: z.string().min(1).max(1024), app: z.enum(["zed", "warp"]) });
 const completionBody = z.object({ path: z.string().min(1).max(1024), done: z.boolean() });
-const prDismissBody = z.object({
-  path: z.string().min(1).max(1024),
-  numbers: z.array(z.number().int().positive()).min(1).max(50),
-});
-const prUnlinkBody = z.object({
-  path: z.string().min(1).max(1024),
-  number: z.number().int().positive(),
-  unlinked: z.boolean(),
-});
 
 const attachmentsQuery = z.object({ repo: z.string().min(1), project: z.string().min(1).optional() });
 
@@ -505,34 +496,11 @@ export function createApp(deps: AppDeps) {
         return c.json({ status: "error" as const, message: errorMessage(error, "Couldn't open it") });
       }
     })
-    .get("/api/doc-prs", zValidator("query", docPathQuery), (c) => {
-      const { path: docPath } = c.req.valid("query");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      return c.json(deps.prs.docPrs(docPath));
-    })
-    .post("/api/doc-prs/refresh", zValidator("json", docPathQuery), async (c) => {
-      const { path: docPath } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.refresh({ docPaths: [docPath] });
-      return c.json(deps.prs.docPrs(docPath));
-    })
-    .post("/api/doc-prs/unlink", zValidator("json", prUnlinkBody), async (c) => {
-      const { path: docPath, number, unlinked } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.setUnlinked(docPath, number, unlinked);
-      return c.json(deps.prs.docPrs(docPath));
-    })
     .post("/api/doc-prs/complete", zValidator("json", completionBody), async (c) => {
       const { path: docPath, done } = c.req.valid("json");
       if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
       const resolved = await deps.resolveCompletion(docPath, done);
       return c.json({ status: resolved ? ("ok" as const) : ("nothing-to-resolve" as const) });
-    })
-    .post("/api/doc-prs/dismiss", zValidator("json", prDismissBody), async (c) => {
-      const { path: docPath, numbers } = c.req.valid("json");
-      if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
-      await deps.prs.dismissClosed(docPath, numbers);
-      return c.json({ status: "ok" as const });
     })
     .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
       const { owner, repo, numbers } = c.req.valid("query");

@@ -10,7 +10,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
-- **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. The header shows the whole stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. When every PR has merged, the plan is marked done.
+- **PRs and stacks.** A plan's PRs come from its `pr:` frontmatter and from `gt submit` / `gh pr create` runs in its sessions. Its project page shows every PR and stack with state, CI and review; inline PR links get a status dot. A closed PR whose squash commit `(#n)` landed on the trunk counts as merged, so merge queues that close rather than merge work. Once each PR has merged or closed (and at least one merged), a plan with every task ticked is marked done, and one with tasks still open waits under **Looks finished** on its project page.
 - **Decision rounds.** `/timthink comments` triages a PR's review comments with your address-comments skill, then puts them in the hub as a round: each comment with its thread, diff hunk, code at the PR head, Claude's read and fix, the options and a reply editor. Decide each (`j`/`k`, `1` to `4`, `r`, `⌘↵`), submit, and the waiting session wakes up to fix, push and reply. The round then shows what happened to each comment.
 - **Moving docs into projects.** `/timthink migrate` has Claude propose an area and project for every doc still in a repo folder, as a round grouped by project. Accept a whole project at once or override single docs, then submit: the hub creates the manifests, moves each doc with its reviews, history, archive and seen state and the assets only it links to, rewrites relative links everywhere, and redirects old URLs. **Undo** puts every file back.
 - **Changes and inbox.** Each plan shows what changed since you last viewed it (inline word diff, removed blocks, full history). The inbox holds only what a Claude session is blocked on: rounds awaiting you, and open questions on plans in `review`.
@@ -150,9 +150,6 @@ Nothing leaves your machine.
 | `prs.mergeQueueLabels`   | none                      | Labels that mean "in the merge queue", e.g. `["merge_queue"]`, besides GitHub's own queue   |
 | `groups`                 | none                      | Sidebar and inbox groups, in order (see below). Without it, repos aren't grouped            |
 | `sidebarQuotes`          | none                      | Lines shown at random in the sidebar footer (click for another). Hidden when empty          |
-| `archive.auto`           | `true`                    | Archive plans automatically by the rule below                                               |
-| `archive.staleAfterDays` | `21`                      | Auto-archive plans whose file hasn't changed for longer than this                          |
-| `archive.finishedAfterDays` | `3`                    | Auto-archive `done` or `abandoned` plans that haven't changed for longer than this         |
 | `readOnly`               | `false`                   | Never write under `docsRoot` (no snapshots, reviews or archive changes); `TIMTHINK_READONLY=1` also sets it |
 
 ```json
@@ -160,14 +157,13 @@ Nothing leaves your machine.
   "groups": [
     { "name": "Work", "owners": ["acme-corp"], "repos": ["side-project"] },
     { "name": "Personal", "default": true }
-  ],
-  "archive": { "auto": true, "staleAfterDays": 21, "finishedAfterDays": 3 }
+  ]
 }
 ```
 
 A repo joins the first group that lists it in `repos`, otherwise the first group whose `owners` includes the GitHub owner of its checkout's `origin`, otherwise the `default` group (or "Other"). Repos are sorted by most recent activity within each group.
 
-A plan is archived when you archive it, or automatically when its file hasn't changed for `staleAfterDays` (or `finishedAfterDays` once it's `done` or `abandoned`). Plans in `review` or `in-progress`, and plans with a submitted review Claude hasn't addressed, an unread Claude reply in an open thread, or unsent drafts, are never auto-archived. Editing a file brings it back unless you archived it by hand; **Restore** keeps a plan active for good. Archived plans leave the sidebar lists, inbox and recent plans, except when Claude replies or addresses your review.
+A plan is archived when you archive it, or when its project is `shipped` or `dropped`. **Restore** keeps a plan active even in a shipped project. Archived plans leave the sidebar lists, inbox and recent plans.
 
 ## CLI
 
@@ -181,8 +177,8 @@ A plan is archived when you archive it, or automatically when its file hasn't ch
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |
 | `timthink round create \| wait \| show \| report \| abandon \| list` | Create a decision round, wait in the background until you submit it (exit 3 if abandoned), and record outcomes (`timthink round --help`) |
-| `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active whatever the auto rule says (`--clear` forgets either) |
-| `timthink archive --list \| --dry-run-auto [--repo name]` | List archived plans, or preview what the auto rule archives and why     |
+| `timthink archive <doc>` / `unarchive <doc>`    | Archive a plan, or keep it active even in a shipped project (`--clear` forgets either) |
+| `timthink archive --list [--repo name]`         | List archived plans and why                                                       |
 | `timthink doctor`                               | Check every installed component                                                   |
 | `timthink install \| uninstall [--apply]`       | Set up or remove the components above                                             |
 

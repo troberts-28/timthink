@@ -474,7 +474,6 @@ describe("archive API", () => {
     expect(index.groups).toEqual(["Work", "Other"]);
     expect(index.repos.find((repo) => repo.name === "acme-api")?.group).toBe("Work");
     expect(index.repos.find((repo) => repo.name === "garden-app")?.group).toBe("Other");
-    expect(await archiveOf("acme-api/untitled-scratch.md")).toMatchObject({ state: "auto" });
     expect(await archiveOf(DOC)).toEqual({ state: "active" });
   });
 

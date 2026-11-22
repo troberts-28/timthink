@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_ARCHIVE_SETTINGS, type TimthinkConfig } from "../config.js";
+import type { TimthinkConfig } from "../config.js";
 
 export const FIXTURE_DOCS = fileURLToPath(new URL("../../../fixtures/agent-docs", import.meta.url));
 export const FIXTURE_QUESTION_DOCS = fileURLToPath(new URL("../../../fixtures/question-blocks", import.meta.url));
@@ -41,7 +41,6 @@ export function testConfig(overrides: Partial<TimthinkConfig>): TimthinkConfig {
     groups: null,
     sidebarQuotes: [],
     prs: { enabled: false, ghPath: null, mergeQueueLabels: [] },
-    archive: DEFAULT_ARCHIVE_SETTINGS,
     readOnly: false,
     ...overrides,
   };

@@ -12,7 +12,7 @@ import { prLinkHostFor, type TimthinkConfig } from "./config.js";
 import { DocsStore } from "./docs/store.js";
 import type { DocsIndex, GithubRepo } from "./docs/types.js";
 import { type DocsWatcher, watchDocsRoot } from "./docs/watcher.js";
-import { EventHub, type HubEvent } from "./events.js";
+import { EventHub } from "./events.js";
 import { groupForRepo, groupNames } from "./groups/repoGroups.js";
 import { HistoryService } from "./history/historyService.js";
 import { InboxService } from "./inbox/inboxService.js";
@@ -191,13 +191,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   });
   const archive = new ArchiveService({
     docs: store,
-    reviews: reviews.store,
     archives: new ArchiveStore(config.docsRoot, { readOnly: config.readOnly }),
-    marks: {
-      docSeenAt: (docPath) => seen.get(docPath)?.at ?? null,
-      threadReadAt: (docPath, threadId) => seen.threadReadAt(docPath, threadId),
-    },
-    settings: config.archive,
     projectStatusOf: (doc) => (doc.projectId ? (projects.project(doc.projectId)?.manifest.status ?? null) : null),
     log,
   });
@@ -209,6 +203,10 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     sessions,
     githubFor: (repo) => github.get(repo),
     isArchived: (summary) => archive.isArchived(summary),
+    detachedFor: (doc) => {
+      const detached = doc.projectId ? (projects.project(doc.projectId)?.manifest.detached ?? []) : [];
+      return detached.filter((ref) => ref.repo === doc.codeRepo).map((ref) => ref.number);
+    },
     runner: options.graphqlRunner ?? createGhRunner(() => findGh(config.prs.ghPath)),
     onChange: (paths) => {
       hub.publish({ type: "prs-changed", paths, version: hub.nextVersion() });
@@ -305,19 +303,6 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     cachedIndex = null;
     hub.publish({ type: "archive-changed", paths, version: hub.nextVersion() });
   };
-
-  const refreshArchiveFor = (docPath: string): void => {
-    archive
-      .refreshDoc(docPath)
-      .then((changed) => {
-        if (changed) publishArchiveChange([docPath]);
-      })
-      .catch((error: unknown) => log(`refreshing archive state failed: ${String(error)}`));
-  };
-
-  hub.subscribe((event: HubEvent) => {
-    if (event.type === "review-changed" || event.type === "seen-changed") refreshArchiveFor(event.path);
-  });
 
   const reloadArchives = async (relPaths: readonly string[]): Promise<void> => {
     const repos = [...new Set(relPaths.map(repoForArchiveFile).filter((repo) => repo !== null))];

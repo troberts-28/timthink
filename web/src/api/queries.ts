@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
 import { fetchProject } from "./projects";
-import { fetchDocPrs, lookupPrs } from "./prs";
+import { lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 import { fetchRound, fetchRoundFile } from "./rounds";
 
@@ -22,8 +22,6 @@ export const queryKeys = {
   history: (path: string) => ["history", path] as const,
   snapshot: (path: string, id: string) => ["snapshot", path, id] as const,
   inbox: ["inbox"] as const,
-  docPrsRoot: ["doc-prs"] as const,
-  docPrs: (path: string) => ["doc-prs", path] as const,
   prLookupRoot: ["pr-lookup"] as const,
   prLookup: (owner: string, repo: string, numbers: string) => ["pr-lookup", owner, repo, numbers] as const,
   projectRoot: ["project"] as const,
@@ -132,15 +130,6 @@ export function useDocSessions(docPath: string) {
   });
 }
 
-export function useDocPrs(docPath: string) {
-  return useQuery({
-    queryKey: queryKeys.docPrs(docPath),
-    queryFn: () => fetchDocPrs(docPath),
-    staleTime: 60_000,
-    refetchInterval: (query) => (query.state.data?.refreshing ? 3_000 : false),
-  });
-}
-
 export function usePrLookup(owner: string, repo: string, numbers: readonly number[]) {
   const key = [...numbers].sort((a, b) => a - b).join(",");
   return useQuery({
@@ -214,7 +203,6 @@ export function useLiveUpdates(): void {
       if (event?.type !== "prs-changed") return;
       void queryClient.invalidateQueries({ queryKey: queryKeys.prLookupRoot });
       invalidateInbox();
-      for (const docPath of event.paths) void queryClient.invalidateQueries({ queryKey: queryKeys.docPrs(docPath) });
     };
     const onRoundsChanged = (message: MessageEvent<string>) => {
       const event = parseEvent(message.data);

@@ -62,20 +62,6 @@ export function isTerminal(info: PrInfo): boolean {
   return info.state === "merged" || info.state === "closed";
 }
 
-export type PrSignalReason =
-  | "ci-failing"
-  | "changes-requested"
-  | "review-comments"
-  | "pr-closed-unmerged"
-  | "merged-tasks-open";
-
-export interface PrSignal {
-  reason: PrSignalReason;
-  numbers: number[];
-  detail: string;
-  at: string;
-}
-
 export interface PlanCompletion {
   marker: string;
   at: string;

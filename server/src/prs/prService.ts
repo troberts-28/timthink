@@ -13,8 +13,6 @@ import {
   type PlanCompletion,
   type PrInfo,
   type PrLookupResponse,
-  type PrSignal,
-  type PrSignalReason,
   type PrSource,
   prKey,
   type StackItem,
@@ -46,7 +44,6 @@ interface StateFile {
   stacks: Record<string, number[]>;
   unlinked: Record<string, number[]>;
   completed: Record<string, PlanCompletion>;
-  dismissed: Record<string, number[]>;
   awaiting: Record<string, AwaitingCompletion>;
 }
 
@@ -63,7 +60,6 @@ function emptyState(): StateFile {
     stacks: {},
     unlinked: {},
     completed: {},
-    dismissed: {},
     awaiting: {},
   };
 }
@@ -75,6 +71,7 @@ export interface PrServiceOptions {
   sessions: { all(): SessionRecord[] };
   githubFor: (repo: string) => GithubRepo | null;
   isArchived: (doc: DocSummary) => boolean;
+  detachedFor: (doc: DocSummary) => readonly number[];
   runner: GraphqlRunner;
   onChange: (docPaths: string[]) => void;
   onPrsSettled?: (docPaths: string[]) => void;
@@ -158,7 +155,9 @@ export class PrService {
     if (github) {
       for (const pr of this.sessionPrs().get(doc.path) ?? []) if (sameRepo(pr, github)) add(pr.number, "session");
     }
-    for (const number of this.state.unlinked[doc.path] ?? []) linked.delete(number);
+    for (const number of [...(this.state.unlinked[doc.path] ?? []), ...this.options.detachedFor(doc)]) {
+      linked.delete(number);
+    }
     return linked;
   }
 
@@ -280,7 +279,6 @@ export class PrService {
       const moved = [
         moveDocKey(this.state.unlinked, from, to),
         moveDocKey(this.state.completed, from, to),
-        moveDocKey(this.state.dismissed, from, to),
         moveDocKey(this.state.awaiting, from, to),
       ];
       changed ||= moved.includes(true);
@@ -292,73 +290,6 @@ export class PrService {
 
   awaitingCompletion(docPath: string): AwaitingCompletion | null {
     return this.state.awaiting[docPath] ?? null;
-  }
-
-  signalsFor(doc: DocSummary): PrSignal[] {
-    const github = this.options.githubFor(doc.codeRepo);
-    if (!github || !this.options.settings.enabled) return [];
-    const dismissed = new Set(this.state.dismissed[doc.path] ?? []);
-    const infos = [...this.linkedNumbers(doc).keys()].flatMap((number) => this.cached(github, number)?.info ?? []);
-    const live = infos.filter((info) => !isTerminal(info));
-    const signal = (reason: PrSignalReason, matching: PrInfo[], detail: (info: PrInfo) => string): PrSignal[] =>
-      matching.length === 0
-        ? []
-        : [
-            {
-              reason,
-              numbers: matching.map((info) => info.number),
-              detail: matching.map(detail).join("; "),
-              at:
-                matching
-                  .map((info) => info.updatedAt)
-                  .sort()
-                  .at(-1) ?? new Date(this.now()).toISOString(),
-            },
-          ];
-    const failing = live.filter((info) => info.ci === "failing");
-    const changes = live.filter((info) => info.review === "changes_requested");
-    const comments = live.filter((info) => info.review !== "changes_requested" && info.unresolvedThreads > 0);
-    const closed = infos.filter((info) => info.state === "closed" && !dismissed.has(info.number));
-    const awaiting = this.state.awaiting[doc.path];
-    const merged: PrSignal[] = awaiting
-      ? [
-          {
-            reason: "merged-tasks-open",
-            numbers: awaiting.marker.split(",").map(Number),
-            detail: `${awaiting.marker.includes(",") ? "All its PRs" : "Its PR"} merged, but ${awaiting.openTasks === 1 ? "1 task is" : `${awaiting.openTasks} tasks are`} still open`,
-            at: awaiting.at,
-          },
-        ]
-      : [];
-    return [
-      ...signal("ci-failing", failing, (info) =>
-        info.failingChecks.length > 0
-          ? `#${info.number}: ${info.failingChecks.slice(0, 2).join(", ")}`
-          : `#${info.number}`,
-      ),
-      ...signal("changes-requested", changes, (info) => `#${info.number}`),
-      ...signal("review-comments", comments, (info) => `#${info.number}: ${info.unresolvedThreads} unresolved`),
-      ...signal("pr-closed-unmerged", closed, (info) => `#${info.number} ${info.title}`),
-      ...merged,
-    ];
-  }
-
-  async dismissClosed(docPath: string, numbers: readonly number[]): Promise<void> {
-    this.state.dismissed[docPath] = [...new Set([...(this.state.dismissed[docPath] ?? []), ...numbers])];
-    await this.save();
-    this.options.onChange([docPath]);
-  }
-
-  async setUnlinked(docPath: string, number: number, unlinked: boolean): Promise<void> {
-    const current = new Set(this.state.unlinked[docPath] ?? []);
-    if (unlinked) current.add(number);
-    else current.delete(number);
-    if (current.size > 0) this.state.unlinked[docPath] = [...current].sort((a, b) => a - b);
-    else delete this.state.unlinked[docPath];
-    const doc = this.options.docs.getDoc(docPath);
-    if (doc) this.recomputeStack(doc);
-    await this.save();
-    this.options.onChange([docPath]);
   }
 
   refresh(request: { docPaths?: string[]; extra?: Map<string, Set<number>> } = {}): Promise<void> {

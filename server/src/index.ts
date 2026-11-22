@@ -29,8 +29,6 @@ export { type CodeRef, parseCodeRef } from "./code/codeRef.js";
 export { createZedOpener, editorTarget, type OpenInEditor } from "./code/editor.js";
 export { parseGithubRemote } from "./code/git.js";
 export {
-  type ArchiveSettings,
-  DEFAULT_ARCHIVE_SETTINGS,
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_PORT,
   defaultConfigPath,
