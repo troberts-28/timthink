@@ -176,7 +176,7 @@ function SendBar() {
 }
 
 function BlockComposer({ spot, onClose }: { spot: BlockSpot; onClose: () => void }) {
-  const { raw, actions } = useRequiredReview();
+  const { docPath, raw, actions } = useRequiredReview();
   const toast = useToast();
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
@@ -187,7 +187,7 @@ function BlockComposer({ spot, onClose }: { spot: BlockSpot; onClose: () => void
     }
     const range = blockSourceRange(raw, spot.blockId);
     if (!range) {
-      toast(`“${spot.blockId}” isn't written in project.page.tsx, so it can't take comments`, "bad");
+      toast(`“${spot.blockId}” isn't written in ${docPath.split("/").pop()}, so it can't take comments`, "bad");
       onClose();
       return;
     }

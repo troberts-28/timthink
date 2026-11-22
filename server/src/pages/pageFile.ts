@@ -1,4 +1,5 @@
 export const PROJECT_PAGE_FILE = "project.page.tsx";
+export const AREA_PAGE_FILE = "area.page.tsx";
 
 const BLOCK_ID_QUOTE = /^id="([^"]+)"$/;
 

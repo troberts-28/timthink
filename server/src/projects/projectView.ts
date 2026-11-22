@@ -1,5 +1,6 @@
 import type { DocContent } from "../docs/content.js";
 import type {
+  AreaEntry,
   AttachmentSummary,
   CodeRepoInfo,
   DocsIndex,
@@ -87,6 +88,24 @@ export interface ProjectDetail {
   sessions: SessionView[];
 }
 
+export interface AreaProjectPrs {
+  projectId: string;
+  title: string;
+  prs: ProjectPrs;
+}
+
+export interface AreaDetail {
+  area: AreaEntry;
+  repoLinks: Record<string, CodeRepoInfo>;
+  projectPrs: AreaProjectPrs[];
+}
+
+export interface AreaViewDeps {
+  index: DocsIndex;
+  areaId: string;
+  prsOf(project: ProjectEntry): ProjectPrs | null;
+}
+
 export interface LooksFinishedDoc {
   docPath: string;
   title: string;
@@ -116,6 +135,11 @@ export interface ProjectViewDeps {
   awaitingCompletion(docPath: string): { marker: string; openTasks: number } | null;
   sessionsOf(belongs: (session: SessionRecord) => boolean): Promise<SessionView[]>;
 }
+
+export type PrViewDeps = Pick<
+  ProjectViewDeps,
+  "index" | "record" | "docPrs" | "githubFor" | "lookupPrs" | "infoFor" | "stackOf" | "prsEnabled" | "prsUnavailable"
+>;
 
 const ACTIVITY_LIMIT = 40;
 
@@ -152,7 +176,7 @@ function byLiveThenNewest(a: ProjectStack, b: ProjectStack) {
   return Number(isSettledStack(a)) - Number(isSettledStack(b)) || newestNumber(b) - newestNumber(a);
 }
 
-function infoForRef(deps: ProjectViewDeps, ref: PrRef) {
+function infoForRef(deps: PrViewDeps, ref: PrRef) {
   const github = deps.githubFor(ref.repo);
   return github ? deps.infoFor(github, ref.number) : null;
 }
@@ -161,7 +185,7 @@ class PrCollector {
   private readonly byKey = new Map<string, ProjectPr>();
   private readonly stacksByRepo = new Map<string, number[][]>();
 
-  constructor(private readonly deps: ProjectViewDeps) {}
+  constructor(private readonly deps: PrViewDeps) {}
 
   add(ref: PrRef, origin: { source: ProjectPrSource; docPath: string | null }) {
     const entry = this.byKey.get(prKeyOf(ref)) ?? { ...ref, info: null, sources: [], docPaths: [] };
@@ -216,7 +240,7 @@ class PrCollector {
   }
 }
 
-function collectPrs(deps: ProjectViewDeps, docs: readonly IndexedDoc[]): ProjectPrs {
+export function collectPrs(deps: PrViewDeps, docs: readonly IndexedDoc[]): ProjectPrs {
   if (!deps.prsEnabled) {
     return { status: "disabled", message: null, stacks: [], detached: [] };
   }
@@ -361,17 +385,10 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
   const activity = [...docActivity, ...reviews.activity, ...prActivity(prs.stacks)]
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, ACTIVITY_LIMIT);
-  const repoLinks: Record<string, CodeRepoInfo> = {};
-  for (const repo of new Set([...project.repos, ...project.docs.map((doc) => doc.codeRepo)])) {
-    const info = deps.index.codeRepos[repo];
-    if (info) {
-      repoLinks[repo] = info;
-    }
-  }
   return {
     project,
     area: area ? { id: area.id, title: area.title } : null,
-    repoLinks,
+    repoLinks: repoLinksFor(deps.index, [...project.repos, ...project.docs.map((doc) => doc.codeRepo)]),
     prs,
     questions: reviews.questions,
     threads: reviews.threads,
@@ -395,6 +412,33 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
       belongsToProject(session, { projectId: project.id, prBranches: prBranchesOf(prs) }),
     ),
   };
+}
+
+export function buildAreaDetail({ index, areaId, prsOf }: AreaViewDeps): AreaDetail | null {
+  const area = index.areas.find((entry) => entry.id === areaId);
+  if (!area) {
+    return null;
+  }
+  const projectPrs = area.projects.flatMap((project): AreaProjectPrs[] => {
+    const prs = project.status === "shipped" || project.status === "dropped" ? null : prsOf(project);
+    const liveStacks = prs?.stacks.filter((stack) => !isSettledStack(stack)) ?? [];
+    return prs && liveStacks.length > 0
+      ? [{ projectId: project.id, title: project.title, prs: { ...prs, stacks: liveStacks, detached: [] } }]
+      : [];
+  });
+  const repos = [...area.repos, ...projectPrs.flatMap((entry) => entry.prs.stacks.map((stack) => stack.repo))];
+  return { area, repoLinks: repoLinksFor(index, [...repos, ...area.docs.map((doc) => doc.codeRepo)]), projectPrs };
+}
+
+function repoLinksFor(index: DocsIndex, repos: readonly string[]) {
+  const repoLinks: Record<string, CodeRepoInfo> = {};
+  for (const repo of new Set(repos)) {
+    const info = index.codeRepos[repo];
+    if (info) {
+      repoLinks[repo] = info;
+    }
+  }
+  return repoLinks;
 }
 
 function prBranchesOf(prs: ProjectPrs) {

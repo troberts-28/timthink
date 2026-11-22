@@ -3,7 +3,6 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { type BuildFailure, type BuildOptions, build, type Message, type Plugin } from "esbuild";
 import { docHash } from "../reviews/paths.js";
-import { PROJECT_PAGE_FILE } from "./pageFile.js";
 
 export const PAGE_MODULE = "timthink/page";
 
@@ -21,7 +20,7 @@ export type PageBundle =
   | { kind: "built"; code: string; inputs: string[] }
   | { kind: "failed"; errors: PageBuildError[] };
 
-export type ProjectPageView =
+export type AuthoredPageView =
   | { kind: "none" }
   | { kind: "built"; code: string; hash: string; source: string; sourceHash: string }
   | { kind: "failed"; errors: PageBuildError[] };
@@ -42,9 +41,12 @@ export function bundlePageForCheck({ docsRoot, pageFile, pageApiFile, harnessFil
     `import { createElement } from "react";`,
     `import { renderToString } from "react-dom/server";`,
     `import Page from ${JSON.stringify(pageFile)};`,
-    `import { CheckHarness } from ${JSON.stringify(harnessFile)};`,
-    "export function render(project) {",
-    "  return renderToString(createElement(CheckHarness, { project }, createElement(Page)));",
+    `import { AreaCheckHarness, ProjectCheckHarness } from ${JSON.stringify(harnessFile)};`,
+    "export function renderProject(detail, pagePath) {",
+    "  return renderToString(createElement(ProjectCheckHarness, { detail, pagePath }, createElement(Page)));",
+    "}",
+    "export function renderArea(detail, pagePath) {",
+    "  return renderToString(createElement(AreaCheckHarness, { detail, pagePath }, createElement(Page)));",
     "}",
   ].join("\n");
   return runBuild({
@@ -56,36 +58,36 @@ export function bundlePageForCheck({ docsRoot, pageFile, pageApiFile, harnessFil
   });
 }
 
-export class ProjectPages {
-  private readonly built = new Map<string, { key: string; inputs: string[]; view: ProjectPageView }>();
+export class AuthoredPages {
+  private readonly built = new Map<string, { key: string; inputs: string[]; view: AuthoredPageView }>();
 
   constructor(private readonly docsRoot: string) {}
 
-  async forProject(projectId: string): Promise<ProjectPageView> {
-    const pageFile = path.join(this.docsRoot, projectId, PROJECT_PAGE_FILE);
+  async forPage(pagePath: string): Promise<AuthoredPageView> {
+    const pageFile = path.join(this.docsRoot, pagePath);
     if (!(await fileExists(pageFile))) {
-      this.built.delete(projectId);
+      this.built.delete(pagePath);
       return { kind: "none" };
     }
-    const cached = this.built.get(projectId);
+    const cached = this.built.get(pagePath);
     if (cached && cached.key === (await this.inputsKey(cached.inputs))) {
       return cached.view;
     }
     const bundle = await bundlePageForHub(this.docsRoot, pageFile);
     if (bundle.kind === "failed") {
-      this.built.delete(projectId);
+      this.built.delete(pagePath);
       return bundle;
     }
     const key = await this.inputsKey(bundle.inputs);
     const source = await readFile(pageFile, "utf8");
-    const view: ProjectPageView = {
+    const view: AuthoredPageView = {
       kind: "built",
       code: bundle.code,
       hash: key.slice(0, 16),
       source,
       sourceHash: docHash(source),
     };
-    this.built.set(projectId, { key, inputs: bundle.inputs, view });
+    this.built.set(pagePath, { key, inputs: bundle.inputs, view });
     return view;
   }
 

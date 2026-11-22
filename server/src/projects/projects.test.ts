@@ -3,7 +3,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DocsIndex, IndexedDoc } from "../docs/types.js";
 import type { ChecklistResults } from "../pages/checklistStore.js";
-import type { ProjectPageView } from "../pages/pageBundle.js";
+import type { AuthoredPageView } from "../pages/pageBundle.js";
 import type { PrInfo } from "../prs/types.js";
 import type { ReviewView } from "../reviews/reviewService.js";
 import { TOKEN_HEADER } from "../security.js";
@@ -11,7 +11,15 @@ import { createRuntime, type Runtime } from "../server.js";
 import { copyFixtureDocs, makeTempDir, testConfig } from "../test/fixtures.js";
 import { createGitRepo } from "../test/gitRepo.js";
 import { parseProjectManifest } from "./manifest.js";
-import { buildProjectDetail, type ProjectDetail, type ProjectThread, type ProjectViewDeps } from "./projectView.js";
+import {
+  type AreaDetail,
+  buildAreaDetail,
+  buildProjectDetail,
+  type ProjectDetail,
+  type ProjectPrs,
+  type ProjectThread,
+  type ProjectViewDeps,
+} from "./projectView.js";
 
 const BASE = "http://127.0.0.1:7420";
 const CHECKOUT_ID = "payments/checkout-v2";
@@ -163,7 +171,7 @@ describe("projects API", () => {
   it("serves a project's authored page, rebuilt when an imported file changes", async () => {
     const page = async () => {
       const response = await runtime.app.request(`${BASE}/api/project/page?id=${encodeURIComponent(CHECKOUT_ID)}`);
-      const body: ProjectPageView = await response.json();
+      const body: AuthoredPageView = await response.json();
       return body;
     };
     expect(await page()).toEqual({ kind: "none" });
@@ -194,7 +202,7 @@ describe("projects API", () => {
       'import { Section } from "timthink/page";\nexport default () => <Section id="setup" title="Setup">Seed</Section>;\n';
     await writeFile(path.join(docsRoot, pagePath), source);
     const page = await runtime.app.request(`${BASE}/api/project/page?id=${encodeURIComponent(CHECKOUT_ID)}`);
-    const view: ProjectPageView = await page.json();
+    const view: AuthoredPageView = await page.json();
     if (view.kind !== "built") throw new Error(`page didn't build: ${view.kind}`);
     const start = source.indexOf('id="setup"');
 
@@ -222,6 +230,34 @@ describe("projects API", () => {
     const review = await runtime.app.request(`${BASE}/api/review?path=${encodeURIComponent(pagePath)}`);
     const after: ReviewView = await review.json();
     expect(after.threads.map((thread) => thread.status)).toEqual(["outdated"]);
+  });
+
+  it("serves an area's page and keeps its checklists apart from its projects'", async () => {
+    const area = async () => runtime.app.request(`${BASE}/api/area?id=payments`);
+    const detail: AreaDetail = await (await area()).json();
+    expect(detail.area.projects.map((entry) => entry.id)).toEqual([CHECKOUT_ID, "payments/refunds"]);
+    expect((await runtime.app.request(`${BASE}/api/area?id=nope`)).status).toBe(404);
+
+    await writeFile(
+      path.join(docsRoot, "payments", "area.page.tsx"),
+      'import { Section, useArea } from "timthink/page";\nexport default () => <Section id="households" title={useArea().area.title} />;\n',
+    );
+    const page = await runtime.app.request(`${BASE}/api/area/page?id=payments`);
+    const view: AuthoredPageView = await page.json();
+    expect(view.kind === "built" && view.source).toContain('id="households"');
+
+    expect(
+      (
+        await post("/api/project/checklist", {
+          id: "payments",
+          checklist: "smoke",
+          step: "seed",
+          result: { outcome: "pass", note: "", sha: null },
+        })
+      ).status,
+    ).toBe(200);
+    const stored = await readFile(path.join(docsRoot, "payments/.timthink/checklists/_area/smoke.json"), "utf8");
+    expect(JSON.parse(stored).steps.seed).toMatchObject({ outcome: "pass" });
   });
 
   it("records checklist steps against a head SHA and clears them", async () => {
@@ -389,5 +425,90 @@ describe("project PRs", () => {
     ]);
     expect(detail?.prs.detached.map((pr) => pr.number)).toEqual([4]);
     expect(detail?.activity.map((entry) => entry.kind)).toContain("pr-merged");
+  });
+});
+
+describe("area PR rollup", () => {
+  it("lists each live project's unsettled stacks and leaves out settled ones", () => {
+    const pr = (number: number, state: PrInfo["state"]): ProjectPrs["stacks"][number]["prs"][number] => ({
+      repo: "acme-api",
+      number,
+      sources: [],
+      docPaths: [],
+      info: {
+        owner: "acme",
+        repo: "acme-api",
+        number,
+        title: `PR ${number}`,
+        url: "",
+        author: null,
+        state,
+        ci: null,
+        failingChecks: [],
+        review: null,
+        unresolvedThreads: 0,
+        headRef: `branch-${number}`,
+        headSha: null,
+        baseRef: "main",
+        closedAt: null,
+        mergedAt: null,
+        updatedAt: "2026-11-22T00:00:00.000Z",
+      },
+    });
+    const project = (id: string, status: "active" | "shipped") => ({
+      id,
+      area: "payments",
+      slug: id.split("/")[1] ?? id,
+      title: id,
+      summary: null,
+      status,
+      repos: ["acme-api"],
+      problems: [],
+      docs: [],
+      attachmentCount: 0,
+      lastActivity: 0,
+    });
+    const stacksByProject: Record<string, ProjectPrs["stacks"]> = {
+      "payments/checkout": [
+        { repo: "acme-api", prs: [pr(1, "merged"), pr(2, "open")] },
+        { repo: "acme-api", prs: [pr(3, "merged")] },
+      ],
+      "payments/quiet": [{ repo: "acme-api", prs: [pr(4, "closed")] }],
+      "payments/refunds": [{ repo: "acme-api", prs: [pr(5, "open")] }],
+    };
+    const detail = buildAreaDetail({
+      index: {
+        generatedAt: "",
+        groups: null,
+        sidebarQuotes: [],
+        repos: [],
+        projects: [],
+        codeRepos: {},
+        areas: [
+          {
+            id: "payments",
+            title: "Payments",
+            summary: null,
+            repos: ["acme-api"],
+            problems: [],
+            docs: [],
+            lastActivity: 0,
+            projects: [
+              project("payments/checkout", "active"),
+              project("payments/quiet", "active"),
+              project("payments/refunds", "shipped"),
+            ],
+          },
+        ],
+      },
+      areaId: "payments",
+      prsOf: (entry) => ({ status: "ok", message: null, stacks: stacksByProject[entry.id] ?? [], detached: [] }),
+    });
+    expect(
+      detail?.projectPrs.map((entry) => [
+        entry.projectId,
+        entry.prs.stacks.map((stack) => stack.prs.map((item) => item.number)),
+      ]),
+    ).toEqual([["payments/checkout", [[1, 2]]]]);
   });
 });

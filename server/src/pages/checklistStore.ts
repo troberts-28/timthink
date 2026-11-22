@@ -1,7 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import type { ProjectRecord } from "../projects/registry.js";
+import type { AreaRecord, ProjectRecord } from "../projects/registry.js";
 import { ReadOnlyError } from "../readOnly.js";
 import { writeFileAtomic } from "../reviews/atomicWrite.js";
 import { withFileLock } from "../reviews/fileLock.js";
@@ -21,8 +21,23 @@ const checklistFileSchema = z.object({ steps: z.record(z.string(), stepResultSch
 export type StepResult = z.infer<typeof stepResultSchema>;
 export type ChecklistResults = z.infer<typeof checklistFileSchema>;
 
+export interface ChecklistOwner {
+  top: string;
+  folder: string;
+}
+
+const AREA_CHECKLIST_FOLDER = "_area";
+
+export function projectChecklistOwner(project: ProjectRecord): ChecklistOwner {
+  return { top: project.area ?? project.id, folder: project.slug };
+}
+
+export function areaChecklistOwner(area: AreaRecord): ChecklistOwner {
+  return { top: area.id, folder: AREA_CHECKLIST_FOLDER };
+}
+
 export interface StepRecord {
-  project: ProjectRecord;
+  owner: ChecklistOwner;
   checklistId: string;
   stepId: string;
   result: StepResult | null;
@@ -34,20 +49,20 @@ export class ChecklistStore {
     private readonly readOnly: boolean,
   ) {}
 
-  async read(project: ProjectRecord, checklistId: string): Promise<ChecklistResults> {
-    const text = await readFile(this.filePath(project, checklistId), "utf8").catch(() => null);
+  async read(owner: ChecklistOwner, checklistId: string): Promise<ChecklistResults> {
+    const text = await readFile(this.filePath(owner, checklistId), "utf8").catch(() => null);
     const parsed = checklistFileSchema.safeParse(text === null ? null : parseJson(text));
     return parsed.success ? parsed.data : { steps: {} };
   }
 
-  async record({ project, checklistId, stepId, result }: StepRecord): Promise<ChecklistResults> {
+  async record({ owner, checklistId, stepId, result }: StepRecord): Promise<ChecklistResults> {
     if (this.readOnly) {
       throw new ReadOnlyError();
     }
-    const file = this.filePath(project, checklistId);
+    const file = this.filePath(owner, checklistId);
     await mkdir(path.dirname(file), { recursive: true });
     return withFileLock(`${file}.lock`, async () => {
-      const { steps } = await this.read(project, checklistId);
+      const { steps } = await this.read(owner, checklistId);
       const { [stepId]: _replaced, ...others } = steps;
       const updated = { steps: result ? { ...others, [stepId]: result } : others };
       await writeFileAtomic(file, `${JSON.stringify(updated, null, 2)}\n`);
@@ -55,9 +70,8 @@ export class ChecklistStore {
     });
   }
 
-  private filePath(project: ProjectRecord, checklistId: string) {
-    const top = project.area ?? project.id;
-    return path.join(this.docsRoot, top, ".timthink", "checklists", project.slug, `${checklistId}.json`);
+  private filePath(owner: ChecklistOwner, checklistId: string) {
+    return path.join(this.docsRoot, owner.top, ".timthink", "checklists", owner.folder, `${checklistId}.json`);
   }
 }
 

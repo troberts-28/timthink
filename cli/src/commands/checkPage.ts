@@ -1,6 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  AREA_PAGE_FILE,
+  type AreaDetail,
   bundlePageForCheck,
   type PageBuildError,
   type ProjectDetail,
@@ -37,25 +39,35 @@ export async function checkPage({ docsRoot, pageFile }: PageCheckInput) {
   if (bundle.kind === "failed") {
     return bundle.errors.map((error) => ({ ...error, file: error.file && path.resolve(docsRoot, error.file) }));
   }
-  const project = stubProject({ record: await projectRecordFor(docsRoot, pageFile), pageFile, docsRoot });
   const pageProblem = (message: string): PageBuildError => ({ file: pageFile, line: null, column: null, message });
   let html: string;
   try {
-    html = renderBundle(bundle.code, project);
+    const exports = loadBundle(bundle.code);
+    const pagePath = path.relative(docsRoot, pageFile).split(path.sep).join("/");
+    html =
+      path.basename(pageFile) === AREA_PAGE_FILE
+        ? renderWith(exports.renderArea, { detail: stubArea(path.posix.dirname(pagePath)), pagePath })
+        : renderWith(exports.renderProject, {
+            detail: stubProject({ record: await projectRecordFor(docsRoot, pageFile), pageFile, docsRoot }),
+            pagePath,
+          });
   } catch (error) {
     return [pageProblem(`The page failed to render: ${error instanceof Error ? error.message : String(error)}`)];
   }
   return duplicateBlockIds(html).map((id) => pageProblem(`Block id "${id}" is used more than once`));
 }
 
-function renderBundle(code: string, project: ProjectDetail) {
+function loadBundle(code: string) {
   const checkModule: { exports: Record<string, unknown> } = { exports: {} };
   new Function("require", "module", "exports", code)(requireCheckModule, checkModule, checkModule.exports);
-  const render = checkModule.exports.render;
-  if (!isRender(render)) {
+  return checkModule.exports;
+}
+
+function renderWith<Detail>(render: unknown, { detail, pagePath }: { detail: Detail; pagePath: string }) {
+  if (!isRender<Detail>(render)) {
     throw new Error("the check bundle has no render function");
   }
-  return render(project);
+  return render(detail, pagePath);
 }
 
 function requireCheckModule(name: string) {
@@ -66,7 +78,7 @@ function requireCheckModule(name: string) {
   return found;
 }
 
-function isRender(value: unknown): value is (project: ProjectDetail) => string {
+function isRender<Detail>(value: unknown): value is (detail: Detail, pagePath: string) => string {
   return typeof value === "function";
 }
 
@@ -114,6 +126,14 @@ function stubProject({ record, pageFile, docsRoot }: StubProjectInput): ProjectD
     looksFinished: [],
     attachments: [],
     sessions: [],
+  };
+}
+
+function stubArea(id: string): AreaDetail {
+  return {
+    area: { id, title: id, summary: null, repos: [], problems: [], projects: [], docs: [], lastActivity: 0 },
+    repoLinks: {},
+    projectPrs: [],
   };
 }
 

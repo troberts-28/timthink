@@ -3,7 +3,7 @@ import type { HubEvent } from "@timthink/server";
 import { useEffect } from "react";
 import { fetchHistory, fetchInbox, fetchSnapshot } from "./changes";
 import { fetchAttachments, fetchDoc, fetchDocSessions, fetchIndex, resolveCode } from "./client";
-import { fetchChecklist, fetchProject, fetchProjectPage } from "./projects";
+import { fetchArea, fetchAreaPage, fetchChecklist, fetchProject, fetchProjectPage } from "./projects";
 import { lookupPrs } from "./prs";
 import { fetchReview } from "./reviews";
 import { fetchRound, fetchRoundFile } from "./rounds";
@@ -28,6 +28,9 @@ export const queryKeys = {
   project: (id: string) => ["project", id] as const,
   projectPage: (id: string) => ["project", id, "page"] as const,
   checklist: (id: string, checklist: string) => ["project", id, "checklist", checklist] as const,
+  areaRoot: ["area"] as const,
+  area: (id: string) => ["area", id] as const,
+  areaPage: (id: string) => ["area", id, "page"] as const,
   roundRoot: ["round"] as const,
   round: (id: string) => ["round", id] as const,
   roundFile: (id: string, item: string) => ["round-file", id, item] as const,
@@ -56,6 +59,24 @@ export function useProject(id: string) {
     queryKey: queryKeys.project(id),
     queryFn: () => fetchProject(id),
     staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useArea(id: string) {
+  return useQuery({
+    queryKey: queryKeys.area(id),
+    queryFn: () => fetchArea(id),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useAreaPage(id: string) {
+  return useQuery({
+    queryKey: queryKeys.areaPage(id),
+    queryFn: () => fetchAreaPage(id),
+    staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
 }
@@ -173,6 +194,7 @@ export function useLiveUpdates(): void {
     const invalidateInbox = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.inbox });
       void queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.areaRoot });
     };
     const onIndexChanged = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.index });

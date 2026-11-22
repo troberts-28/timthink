@@ -26,11 +26,11 @@ import type { DocMoveService } from "./migration/docMoveService.js";
 import type { MovedDocs } from "./migration/movedDocs.js";
 import { mimeTypeFor } from "./mime.js";
 import type { ChecklistStore } from "./pages/checklistStore.js";
-import type { ProjectPages } from "./pages/pageBundle.js";
+import type { AuthoredPages } from "./pages/pageBundle.js";
 import type { PreferencesStore } from "./preferences/preferencesStore.js";
 import type { ProjectService } from "./projects/projectService.js";
 import type { ProjectRegistry } from "./projects/registry.js";
-import { projectRoutes } from "./projects/routes.js";
+import { areaRoutes, type ProjectRouteDeps, projectRoutes } from "./projects/routes.js";
 import type { PrService } from "./prs/prService.js";
 import type { RevealInFinder } from "./reveal.js";
 import { docHash } from "./reviews/paths.js";
@@ -75,7 +75,7 @@ export interface AppDeps {
   docMoves: DocMoveService;
   movedDocs: MovedDocs;
   projectService: ProjectService;
-  pages: ProjectPages;
+  pages: AuthoredPages;
   checklists: ChecklistStore;
   githubFor: (repo: string) => GithubRepo | null;
   worktrees: WorktreeIndex;
@@ -262,6 +262,22 @@ async function serveDocsFile(c: Context, docsRoot: string, requested: string): P
 
 export function createApp(deps: AppDeps) {
   const { config, store, hub, code, sessions } = deps;
+  const projectRouteDeps: ProjectRouteDeps = {
+    registry: deps.projects,
+    service: deps.projectService,
+    store,
+    reviews: deps.reviews.store,
+    rounds: deps.rounds,
+    prs: deps.prs,
+    githubFor: deps.githubFor,
+    getIndex: deps.getIndex,
+    pages: deps.pages,
+    checklists: deps.checklists,
+    sessionsOf: async (belongs) => {
+      await sessions.refreshLiveness();
+      return Promise.all(projectSessions(sessions.all().filter(belongs)).map((session) => toSessionView(session)));
+    },
+  };
 
   const checkoutContext = (repo: string, docPath: string | undefined) => {
     if (!docPath) return { docBranch: null, session: null };
@@ -453,25 +469,8 @@ export function createApp(deps: AppDeps) {
       }),
     )
     .route("/api/archive", archiveRoutes({ store, archive: deps.archive, onChange: deps.onArchiveChange }))
-    .route(
-      "/api/project",
-      projectRoutes({
-        registry: deps.projects,
-        service: deps.projectService,
-        store,
-        reviews: deps.reviews.store,
-        rounds: deps.rounds,
-        prs: deps.prs,
-        githubFor: deps.githubFor,
-        getIndex: deps.getIndex,
-        pages: deps.pages,
-        checklists: deps.checklists,
-        sessionsOf: async (belongs) => {
-          await sessions.refreshLiveness();
-          return Promise.all(projectSessions(sessions.all().filter(belongs)).map((session) => toSessionView(session)));
-        },
-      }),
-    )
+    .route("/api/project", projectRoutes(projectRouteDeps))
+    .route("/api/area", areaRoutes(projectRouteDeps))
     .post("/api/build/launch", zValidator("json", buildBody), async (c) => {
       const request = c.req.valid("json");
       const doc = store.getDoc(request.doc);

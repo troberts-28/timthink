@@ -15,4 +15,4 @@ export {
   type QuestionDetails,
   type QuestionOption,
 } from "./markdown/questionBlock.js";
-export { blockIdOf, blockIdQuote, isPageFile, PROJECT_PAGE_FILE } from "./pages/pageFile.js";
+export { AREA_PAGE_FILE, blockIdOf, blockIdQuote, isPageFile, PROJECT_PAGE_FILE } from "./pages/pageFile.js";

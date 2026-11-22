@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { MermaidDiagram } from "../markdown/MermaidDiagram";
-import { useProjectFileHref } from "./projectContext";
+import { usePageFileHref } from "./projectContext";
 
 export function Diagram({ id, caption, children }: { id?: string; caption?: string; children: ReactNode }) {
   return (
@@ -44,7 +44,7 @@ function ScreenRow({ label, screens }: { label: string | null; screens: Screen[]
 }
 
 function ScreenShot({ screen }: { screen: Screen }) {
-  const href = useProjectFileHref(screen.src);
+  const href = usePageFileHref(screen.src);
   return (
     <figure className="m-0 w-[180px] flex-none">
       <a href={href} target="_blank" rel="noreferrer" className="block">

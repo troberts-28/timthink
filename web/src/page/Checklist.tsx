@@ -1,26 +1,26 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { ProjectDetail, StepResult } from "@timthink/server";
+import type { StepResult } from "@timthink/server";
 import { Check, X } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { recordStep } from "../api/projects";
 import { queryKeys, useChecklist } from "../api/queries";
 import { relativeTime } from "../lib/format";
 import { useToast } from "../lib/toast";
-import { useProject } from "./projectContext";
+import { type PageScope, usePageScope } from "./projectContext";
 
 const SHORT_SHA = 7;
 
 export function Checklist({ id, pr, children }: { id: string; pr?: number; children: ReactNode }) {
-  const detail = useProject();
-  const { data } = useChecklist(detail.project.id, id);
+  const scope = usePageScope();
+  const { data } = useChecklist(scope.ownerId, id);
   const queryClient = useQueryClient();
   const toast = useToast();
-  const headSha = pr === undefined ? null : prHeadSha(detail, pr);
+  const headSha = pr === undefined ? null : prHeadSha(scope, pr);
   const results = data?.steps ?? {};
   const record = async (stepId: string, result: Omit<StepResult, "at"> | null) => {
     try {
-      const updated = await recordStep({ id: detail.project.id, checklist: id, step: stepId, result });
-      queryClient.setQueryData(queryKeys.checklist(detail.project.id, id), updated);
+      const updated = await recordStep({ id: scope.ownerId, checklist: id, step: stepId, result });
+      queryClient.setQueryData(queryKeys.checklist(scope.ownerId, id), updated);
     } catch (error) {
       toast(error instanceof Error ? error.message : "Couldn't save the step", "bad");
     }
@@ -162,9 +162,9 @@ function OutcomeButton({
   );
 }
 
-function prHeadSha(detail: ProjectDetail, number: number) {
-  const prs = detail.prs.stacks.flatMap((stack) => stack.prs).filter((candidate) => candidate.number === number);
-  const pr = prs.find((candidate) => candidate.repo === detail.project.repos[0]) ?? prs[0];
+function prHeadSha(scope: PageScope, number: number) {
+  const prs = scope.stacks.flatMap((stack) => stack.prs).filter((candidate) => candidate.number === number);
+  const pr = prs.find((candidate) => candidate.repo === scope.defaultRepo) ?? prs[0];
   return pr?.info?.headSha ?? null;
 }
 

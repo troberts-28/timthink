@@ -1,8 +1,9 @@
 import type {
   AppType,
+  AreaDetail,
+  AuthoredPageView,
   ChecklistResults,
   ProjectDetail,
-  ProjectPageView,
   ProjectStatus,
   StepResult,
 } from "@timthink/server";
@@ -32,12 +33,33 @@ export async function fetchProject(id: string): Promise<ProjectDetail> {
   return detail;
 }
 
-export async function fetchProjectPage(id: string): Promise<ProjectPageView> {
+export async function fetchProjectPage(id: string): Promise<AuthoredPageView> {
   const response = await client.api.project.page.$get({ query: { id } });
   if (!response.ok) {
     throw new Error(`Project page request failed (${response.status})`);
   }
-  const page: ProjectPageView = await response.json();
+  const page: AuthoredPageView = await response.json();
+  return page;
+}
+
+export async function fetchArea(id: string): Promise<AreaDetail> {
+  const response = await client.api.area.$get({ query: { id } });
+  if (response.status === 404) {
+    throw new NotFoundError(id);
+  }
+  if (!response.ok) {
+    throw new Error(`Area request failed (${response.status})`);
+  }
+  const detail: AreaDetail = await response.json();
+  return detail;
+}
+
+export async function fetchAreaPage(id: string): Promise<AuthoredPageView> {
+  const response = await client.api.area.page.$get({ query: { id } });
+  if (!response.ok) {
+    throw new Error(`Area page request failed (${response.status})`);
+  }
+  const page: AuthoredPageView = await response.json();
   return page;
 }
 

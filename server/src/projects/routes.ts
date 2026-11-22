@@ -3,8 +3,15 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import type { DocsStore } from "../docs/store.js";
 import type { DocsIndex, GithubRepo } from "../docs/types.js";
-import { CHECKLIST_ID_PATTERN, type ChecklistStore, MAX_STEP_NOTE_LENGTH } from "../pages/checklistStore.js";
-import type { ProjectPages } from "../pages/pageBundle.js";
+import {
+  areaChecklistOwner,
+  CHECKLIST_ID_PATTERN,
+  type ChecklistStore,
+  MAX_STEP_NOTE_LENGTH,
+  projectChecklistOwner,
+} from "../pages/checklistStore.js";
+import type { AuthoredPages } from "../pages/pageBundle.js";
+import { AREA_PAGE_FILE, PROJECT_PAGE_FILE } from "../pages/pageFile.js";
 import type { PrService } from "../prs/prService.js";
 import { ReadOnlyError } from "../readOnly.js";
 import type { ReviewStore } from "../reviews/reviewStore.js";
@@ -14,8 +21,8 @@ import type { SessionRecord } from "../sessions/sessionStore.js";
 import type { SessionView } from "../sessions/types.js";
 import { PROJECT_STATUSES } from "./manifest.js";
 import { ProjectError, type ProjectService } from "./projectService.js";
-import { buildProjectDetail } from "./projectView.js";
-import type { ProjectRegistry } from "./registry.js";
+import { buildAreaDetail, buildProjectDetail, collectPrs, type PrViewDeps } from "./projectView.js";
+import type { ProjectRecord, ProjectRegistry } from "./registry.js";
 
 export interface ProjectRouteDeps {
   registry: ProjectRegistry;
@@ -26,7 +33,7 @@ export interface ProjectRouteDeps {
   prs: PrService;
   githubFor: (repo: string) => GithubRepo | null;
   getIndex: () => DocsIndex;
-  pages: ProjectPages;
+  pages: AuthoredPages;
   checklists: ChecklistStore;
   sessionsOf(belongs: (session: SessionRecord) => boolean): Promise<SessionView[]>;
 }
@@ -65,17 +72,9 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         return c.json({ error: "Not found" }, 404);
       }
       const detail = await buildProjectDetail({
-        index: deps.getIndex(),
-        record,
+        ...projectViewDeps(deps, record),
         contentOf: (docPath) => deps.store.contentOf(docPath),
         readReview: (docPath) => deps.reviews.read(docPath).catch(() => null),
-        docPrs: (docPath) => deps.prs.docPrs(docPath),
-        githubFor: deps.githubFor,
-        lookupPrs: (github, numbers) => deps.prs.lookup(github, numbers),
-        infoFor: (github, number) => deps.prs.infoFor(github, number),
-        stackOf: (github, numbers) => deps.prs.stackOf(github, numbers),
-        prsEnabled: deps.prs.enabled,
-        prsUnavailable: deps.prs.unavailableMessage,
         attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
         rounds: (await deps.rounds.list()).map(summarizeRound),
         awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
@@ -88,24 +87,22 @@ export function projectRoutes(deps: ProjectRouteDeps) {
       if (!record) {
         return c.json({ error: "Not found" }, 404);
       }
-      return c.json(await deps.pages.forProject(record.id));
+      return c.json(await deps.pages.forPage(`${record.id}/${PROJECT_PAGE_FILE}`));
     })
     .get("/checklist", zValidator("query", checklistQuery), async (c) => {
       const { id, checklist } = c.req.valid("query");
-      const record = deps.registry.project(id);
-      return record ? c.json(await deps.checklists.read(record, checklist)) : c.json({ error: "Not found" }, 404);
+      const owner = checklistOwnerFor(deps.registry, id);
+      return owner ? c.json(await deps.checklists.read(owner, checklist)) : c.json({ error: "Not found" }, 404);
     })
     .post("/checklist", zValidator("json", stepBody), async (c) => {
       const { id, checklist, step, result } = c.req.valid("json");
-      const record = deps.registry.project(id);
-      if (!record) {
+      const owner = checklistOwnerFor(deps.registry, id);
+      if (!owner) {
         return c.json({ error: "Not found" }, 404);
       }
       try {
         const stamped = result ? { ...result, at: new Date().toISOString() } : null;
-        return c.json(
-          await deps.checklists.record({ project: record, checklistId: checklist, stepId: step, result: stamped }),
-        );
+        return c.json(await deps.checklists.record({ owner, checklistId: checklist, stepId: step, result: stamped }));
       } catch (error) {
         if (error instanceof ReadOnlyError) {
           return c.json({ error: error.message }, 403);
@@ -128,6 +125,51 @@ export function projectRoutes(deps: ProjectRouteDeps) {
       const { id, status } = c.req.valid("json");
       return runEdit(c, () => deps.service.setStatus(id, status));
     });
+}
+
+export function areaRoutes(deps: ProjectRouteDeps) {
+  return new Hono()
+    .get("/", zValidator("query", projectQuery), (c) => {
+      const detail = buildAreaDetail({
+        index: deps.getIndex(),
+        areaId: c.req.valid("query").id,
+        prsOf: (project) => {
+          const record = deps.registry.project(project.id);
+          return record ? collectPrs(projectViewDeps(deps, record), project.docs) : null;
+        },
+      });
+      return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
+    })
+    .get("/page", zValidator("query", projectQuery), async (c) => {
+      const area = deps.registry.area(c.req.valid("query").id);
+      if (!area) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      return c.json(await deps.pages.forPage(`${area.id}/${AREA_PAGE_FILE}`));
+    });
+}
+
+function projectViewDeps(deps: ProjectRouteDeps, record: ProjectRecord): PrViewDeps {
+  return {
+    index: deps.getIndex(),
+    record,
+    docPrs: (docPath) => deps.prs.docPrs(docPath),
+    githubFor: deps.githubFor,
+    lookupPrs: (github, numbers) => deps.prs.lookup(github, numbers),
+    infoFor: (github, number) => deps.prs.infoFor(github, number),
+    stackOf: (github, numbers) => deps.prs.stackOf(github, numbers),
+    prsEnabled: deps.prs.enabled,
+    prsUnavailable: deps.prs.unavailableMessage,
+  };
+}
+
+function checklistOwnerFor(registry: ProjectRegistry, id: string) {
+  const project = registry.project(id);
+  if (project) {
+    return projectChecklistOwner(project);
+  }
+  const area = registry.area(id);
+  return area ? areaChecklistOwner(area) : null;
 }
 
 async function runEdit(c: Context, edit: () => Promise<unknown>) {

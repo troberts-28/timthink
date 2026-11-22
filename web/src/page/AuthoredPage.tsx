@@ -1,13 +1,20 @@
-import type { PageBuildError, ProjectDetail } from "@timthink/server";
-import { PROJECT_PAGE_FILE } from "@timthink/server/shared";
+import type { AreaDetail, AuthoredPageView, PageBuildError, ProjectDetail } from "@timthink/server";
+import { AREA_PAGE_FILE, PROJECT_PAGE_FILE } from "@timthink/server/shared";
 import * as React from "react";
 import { Component, type ComponentType, type ErrorInfo, type ReactNode, useMemo } from "react";
 import * as jsxRuntime from "react/jsx-runtime";
-import { useProjectPage } from "../api/queries";
+import { useAreaPage, useProjectPage } from "../api/queries";
 import { ReviewProvider } from "../review/ReviewContext";
 import * as pageApi from "./index";
 import { CommentableBlocks, PageThreads } from "./PageComments";
-import { ProjectContext } from "./projectContext";
+import {
+  AreaContext,
+  areaPageScope,
+  type PageScope,
+  PageScopeContext,
+  ProjectContext,
+  projectPageScope,
+} from "./projectContext";
 
 const PAGE_MODULES: Record<string, unknown> = {
   react: React,
@@ -15,42 +22,61 @@ const PAGE_MODULES: Record<string, unknown> = {
   "timthink/page": pageApi,
 };
 
-export function AuthoredPage({ detail }: { detail: ProjectDetail }) {
-  const { data: page } = useProjectPage(detail.project.id);
-  if (!page || page.kind === "none") {
-    return null;
-  }
-  if (page.kind === "failed") {
-    return (
-      <PageProblem title="project.page.tsx doesn't compile">
-        {page.errors.map((error) => `${errorLocation(error)}${error.message}`).join("\n")}
-      </PageProblem>
-    );
-  }
-  const pagePath = `${detail.project.id}/${PROJECT_PAGE_FILE}`;
+export function ProjectAuthoredPage({ detail }: { detail: ProjectDetail }) {
+  const { data: view } = useProjectPage(detail.project.id);
+  const scope = projectPageScope(detail, `${detail.project.id}/${PROJECT_PAGE_FILE}`);
   return (
-    <ReviewProvider docPath={pagePath} raw={page.source} docHash={page.sourceHash}>
-      <BuiltPage code={`${page.code}\n//# sourceURL=${pagePath}`} hash={page.hash} detail={detail} />
-      <PageThreads />
-    </ReviewProvider>
+    <ProjectContext.Provider value={detail}>
+      <AuthoredPage view={view} scope={scope} />
+    </ProjectContext.Provider>
   );
 }
 
-function BuiltPage({ code, hash, detail }: { code: string; hash: string; detail: ProjectDetail }) {
+export function AreaAuthoredPage({ detail }: { detail: AreaDetail }) {
+  const { data: view } = useAreaPage(detail.area.id);
+  const scope = areaPageScope(detail, `${detail.area.id}/${AREA_PAGE_FILE}`);
+  return (
+    <AreaContext.Provider value={detail}>
+      <AuthoredPage view={view} scope={scope} />
+    </AreaContext.Provider>
+  );
+}
+
+function AuthoredPage({ view, scope }: { view: AuthoredPageView | undefined; scope: PageScope }) {
+  const fileName = scope.pagePath.split("/").pop() ?? scope.pagePath;
+  if (!view || view.kind === "none") {
+    return null;
+  }
+  if (view.kind === "failed") {
+    return (
+      <PageProblem title={`${fileName} doesn't compile`}>
+        {view.errors.map((error) => `${errorLocation(error)}${error.message}`).join("\n")}
+      </PageProblem>
+    );
+  }
+  return (
+    <PageScopeContext.Provider value={scope}>
+      <ReviewProvider docPath={scope.pagePath} raw={view.source} docHash={view.sourceHash}>
+        <BuiltPage code={`${view.code}\n//# sourceURL=${scope.pagePath}`} hash={view.hash} fileName={fileName} />
+        <PageThreads />
+      </ReviewProvider>
+    </PageScopeContext.Provider>
+  );
+}
+
+function BuiltPage({ code, hash, fileName }: { code: string; hash: string; fileName: string }) {
   const loaded = useMemo(() => loadPage(code), [code]);
   if (loaded.kind === "broken") {
-    return <PageProblem title="project.page.tsx failed to load">{loaded.message}</PageProblem>;
+    return <PageProblem title={`${fileName} failed to load`}>{loaded.message}</PageProblem>;
   }
   const { Page } = loaded;
   return (
-    <PageErrorBoundary key={hash}>
-      <ProjectContext.Provider value={detail}>
-        <CommentableBlocks>
-          <div className="plan-body mb-12">
-            <Page />
-          </div>
-        </CommentableBlocks>
-      </ProjectContext.Provider>
+    <PageErrorBoundary key={hash} fileName={fileName}>
+      <CommentableBlocks>
+        <div className="plan-body mb-12">
+          <Page />
+        </div>
+      </CommentableBlocks>
     </PageErrorBoundary>
   );
 }
@@ -87,7 +113,10 @@ interface RenderFailure {
   componentStack: string;
 }
 
-class PageErrorBoundary extends Component<{ children: ReactNode }, { failure: RenderFailure | null }> {
+class PageErrorBoundary extends Component<
+  { children: ReactNode; fileName: string },
+  { failure: RenderFailure | null }
+> {
   override state: { failure: RenderFailure | null } = { failure: null };
 
   static getDerivedStateFromError(error: unknown) {
@@ -104,7 +133,7 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { failure: Re
       return this.props.children;
     }
     return (
-      <PageProblem title="project.page.tsx failed to render">
+      <PageProblem title={`${this.props.fileName} failed to render`}>
         {[failure.message, failure.componentStack.trim()].filter(Boolean).join("\n\n")}
       </PageProblem>
     );

@@ -1,7 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type {
-  DocKind,
-  IndexedDoc,
   LooksFinishedDoc,
   ProjectActivity,
   ProjectDetail,
@@ -20,28 +18,17 @@ import { queryKeys, useProject } from "../api/queries";
 import { ArchivedDocs } from "../components/ArchivedDocs";
 import { AttachmentList } from "../components/AttachmentList";
 import { Button } from "../components/Button";
-import { DocList } from "../components/DocList";
+import { DocsByKind } from "../components/DocsByKind";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
 import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
 import { areaHref, docHref, roundHref } from "../lib/routes";
 import { useToast } from "../lib/toast";
-import { AuthoredPage } from "../page/AuthoredPage";
+import { ProjectAuthoredPage } from "../page/AuthoredPage";
 import { SessionRow } from "../plan/SessionsPanel";
 import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusPicker } from "./ProjectStatus";
-
-const KIND_ORDER: DocKind[] = ["plan", "design", "research", "decision", "handoff", "notes"];
-
-const KIND_HEADINGS: Record<DocKind, string> = {
-  plan: "Plans",
-  design: "Design",
-  research: "Research",
-  decision: "Decisions",
-  handoff: "Handoffs",
-  notes: "Notes",
-};
 
 export function ProjectPage() {
   const { "*": projectId = "" } = useParams();
@@ -93,7 +80,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
         <p className="m-0 -mt-4 mb-8 max-w-[72ch] text-[16px] leading-[1.6] text-ink-64">{project.summary}</p>
       ) : null}
       {project.problems.length > 0 ? <ManifestProblems problems={project.problems} /> : null}
-      <AuthoredPage detail={detail} />
+      <ProjectAuthoredPage detail={detail} />
       {yourQuestions.length + yourThreads.length > 0 ? (
         <section className="mb-10">
           <SectionHeading aside={pluralise(yourQuestions.length + yourThreads.length, "item")}>
@@ -138,9 +125,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
           </ul>
         </section>
       ) : null}
-      {KIND_ORDER.map((kind) => (
-        <DocsOfKind key={kind} kind={kind} docs={active.filter((doc) => doc.kind === kind)} />
-      ))}
+      <DocsByKind docs={active} />
       {active.length === 0 ? (
         <div className="mb-10 rounded-card border border-line bg-surface">
           <EmptyState>
@@ -231,18 +216,6 @@ function ProjectSessions({ sessions }: { sessions: SessionView[] }) {
           ) : null}
         </>
       ) : null}
-    </section>
-  );
-}
-
-function DocsOfKind({ kind, docs }: { kind: DocKind; docs: IndexedDoc[] }) {
-  if (docs.length === 0) {
-    return null;
-  }
-  return (
-    <section className="mb-10">
-      <SectionHeading aside={pluralise(docs.length, "doc")}>{KIND_HEADINGS[kind]}</SectionHeading>
-      <DocList docs={docs} />
     </section>
   );
 }

@@ -19,7 +19,7 @@ import { InboxService } from "./inbox/inboxService.js";
 import { DocMoveService } from "./migration/docMoveService.js";
 import { MovedDocs } from "./migration/movedDocs.js";
 import { ChecklistStore } from "./pages/checklistStore.js";
-import { ProjectPages } from "./pages/pageBundle.js";
+import { AuthoredPages } from "./pages/pageBundle.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
 import { ProjectService } from "./projects/projectService.js";
 import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
@@ -375,7 +375,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     docMoves,
     movedDocs,
     projectService: new ProjectService({ docsRoot: config.docsRoot, registry: projects, readOnly: config.readOnly }),
-    pages: new ProjectPages(config.docsRoot),
+    pages: new AuthoredPages(config.docsRoot),
     checklists: new ChecklistStore(config.docsRoot, config.readOnly),
     githubFor: (repo) => github.get(repo),
     worktrees: new WorktreeIndex(config),

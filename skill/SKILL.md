@@ -109,6 +109,8 @@ A project can carry a `project.page.tsx` in its folder. The hub renders it at th
 
 **Finishing.** Run `timthink check <project-folder>/project.page.tsx`. It compiles the page, renders it once against stub project data and checks that block ids are unique. Fix every error and re-run until it passes. The hub shows compile and render errors on the project page too.
 
+**Area pages.** An area can carry an `area.page.tsx`, rendered at the top of the area page above its projects, live PRs across projects and reference docs. It earns its place when several projects share something a reader needs before picking one: the households and gates every project tests with, how the area's stacks fit together, or decisions that bind all of them. Don't write one to list projects or PRs; the area page already does. It works like a project page with three differences: `useArea()` (the area with its projects and docs, `projectPrs` with each live project's open stacks, and `repoLinks`) replaces `useProject()`; a `Checklist`'s `pr` can be any PR in those stacks; and comments arrive as a review on `<area>/area.page.tsx`. Check it with `timthink check <area>/area.page.tsx`.
+
 ## `/timthink review [doc]`
 
 The user submitted a review in the hub. Work through all of it.

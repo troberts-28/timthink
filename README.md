@@ -8,6 +8,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 
 - **Projects.** Group docs by project rather than by repo. A project spans repos and has a home page: what needs you (open questions and replies), its PRs and stacks across repos, its docs grouped by kind, and recent activity. Projects sit in areas, and shipped or dropped projects archive their docs.
 - **Project pages.** A project can carry a `project.page.tsx` that Claude writes and keeps current: what it is, how to test it, diagrams and decisions, built from a small primitive library (`timthink/page`) and rendered above the generated sections. Saving it reloads the page, compile and render errors show inline, and `timthink check` catches them first. Hover any block to comment on it; comments go to Claude through the same review flow as plans. Pages can import components from the area folder, so shared setup is written once, and `useJson` and `QrLink` let them read local dev services and hand links to a phone. A `Checklist` records pass, fail and a note per step against the PR's head commit, and marks results stale when the PR moves on.
+- **Areas.** An area page lists its projects, every live PR stack across them grouped by project, and its reference docs by kind. An optional `area.page.tsx` renders at the top with the same primitives, comments and checklists as a project page, reading the area through `useArea()`.
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
@@ -63,6 +64,7 @@ If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS 
 <docsRoot>/                   # e.g. ~/agent-docs
   <area>/                     # a folder with area.yaml is an area
     area.yaml
+    area.page.tsx             # optional page rendered at the top of the area page
     2026-10-20-research.md    # reference docs for the whole area
     <project>/                # a subfolder with project.yaml is a project
       project.yaml
@@ -129,7 +131,7 @@ Nothing leaves your machine.
 - The server binds to `127.0.0.1` and rejects requests whose `Host` isn't a loopback name.
 - Mutating requests need a same-origin `Origin` header and a per-process token embedded in the served page, so other websites can't post to it.
 - Doc paths must resolve inside `docsRoot`; attachments that escape it through symlinks are refused and are served with a sandboxing CSP. `demo` iframes get `allow-scripts` without same-origin access.
-- A `project.page.tsx` is compiled with esbuild and runs in the hub's own page, not a sandbox, so it can share live data and the theme. Only put pages you or your own Claude sessions wrote in `docsRoot`.
+- A `project.page.tsx` or `area.page.tsx` is compiled with esbuild and runs in the hub's own page, not a sandbox, so it can share live data and the theme. Only put pages you or your own Claude sessions wrote in `docsRoot`.
 - Zed is launched with `execFile` (no shell), and only for files inside the configured code roots.
 
 ## Configuration

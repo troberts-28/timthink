@@ -24,6 +24,20 @@ export default function Page() {
 }
 `;
 
+const AREA_PAGE = `import { Checklist, Section, Step, useArea } from "timthink/page";
+
+export default function Page() {
+  const { area } = useArea();
+  return (
+    <Section id="households" title={area.title}>
+      <Checklist id="smoke">
+        <Step id="seed">Seed a household</Step>
+      </Checklist>
+    </Section>
+  );
+}
+`;
+
 const KIT = `import { CopyCommand } from "timthink/page";
 export function Seeds() {
   return <CopyCommand id="seed" command="yarn seed" />;
@@ -45,7 +59,7 @@ async function setup() {
     await writeFile(pageFile, source);
     return runCheck({ docsRoot }, pageFile, io);
   };
-  return { check, output };
+  return { check, output, docsRoot, io };
 }
 
 describe("timthink check on a project page", () => {
@@ -65,5 +79,18 @@ describe("timthink check on a project page", () => {
 
     expect(await check(PAGE.replace('id="flow"', 'id="setup"'))).toBe(1);
     expect(output[0]).toContain('Block id "setup" is used more than once');
+  });
+
+  it("checks an area page against a stub area", async () => {
+    const { docsRoot, io, output } = await setup();
+    const areaPage = path.join(docsRoot, "payments", "area.page.tsx");
+    await writeFile(areaPage, AREA_PAGE);
+    expect(await runCheck({ docsRoot }, areaPage, io)).toBe(0);
+    expect(output).toEqual(["No problems found."]);
+
+    output.length = 0;
+    await writeFile(areaPage, AREA_PAGE.replace("useArea()", "useProject()").replace("useArea }", "useProject }"));
+    expect(await runCheck({ docsRoot }, areaPage, io)).toBe(1);
+    expect(output[0]).toContain("useProject only works inside a project page");
   });
 });

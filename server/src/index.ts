@@ -78,8 +78,8 @@ export type {
   InboxRoundItem,
 } from "./inbox/types.js";
 export type { ChecklistResults, StepResult } from "./pages/checklistStore.js";
-export { bundlePageForCheck, type PageBuildError, type ProjectPageView } from "./pages/pageBundle.js";
-export { blockIdOf, isPageFile } from "./pages/pageFile.js";
+export { type AuthoredPageView, bundlePageForCheck, type PageBuildError } from "./pages/pageBundle.js";
+export { AREA_PAGE_FILE, blockIdOf, isPageFile } from "./pages/pageFile.js";
 export {
   formatPrRef,
   isProjectStatus,
@@ -89,6 +89,8 @@ export {
 } from "./projects/manifest.js";
 export { type NewProject, ProjectError, ProjectService } from "./projects/projectService.js";
 export type {
+  AreaDetail,
+  AreaProjectPrs,
   LooksFinishedDoc,
   ProjectActivity,
   ProjectActivityKind,

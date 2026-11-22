@@ -1,22 +1,25 @@
-import type { ProjectEntry } from "@timthink/server";
+import type { AreaDetail, ProjectEntry } from "@timthink/server";
 import { Layers } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { useDocsIndex } from "../api/queries";
+import { useArea, useDocsIndex } from "../api/queries";
 import { ArchivedDocs } from "../components/ArchivedDocs";
-import { DocList } from "../components/DocList";
+import { DocsByKind } from "../components/DocsByKind";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
 import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
 import { findArea } from "../lib/indexNav";
 import { projectEntryHref } from "../lib/routes";
+import { AreaAuthoredPage } from "../page/AuthoredPage";
+import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusDot } from "./ProjectStatus";
 
 export function AreaPage() {
   const { area: areaId } = useParams();
   const { data: index, isLoading } = useDocsIndex();
   const area = findArea(index, areaId);
+  const { data: detail } = useArea(areaId ?? "");
   const [showSettled, setShowSettled] = useState(false);
   if (isLoading) {
     return <PageContainer>{null}</PageContainer>;
@@ -46,6 +49,7 @@ export function AreaPage() {
       {area.summary ? (
         <p className="m-0 -mt-4 mb-8 max-w-[72ch] text-[16px] leading-[1.6] text-ink-64">{area.summary}</p>
       ) : null}
+      {detail ? <AreaAuthoredPage detail={detail} /> : null}
       <section className="mb-10">
         <SectionHeading>Projects</SectionHeading>
         {live.length > 0 ? (
@@ -78,14 +82,37 @@ export function AreaPage() {
           </div>
         ) : null}
       </section>
-      {active.length > 0 ? (
-        <section className="mb-10">
-          <SectionHeading aside={pluralise(active.length, "doc")}>Reference</SectionHeading>
-          <DocList docs={active} />
-        </section>
-      ) : null}
+      {detail ? <AreaPrs detail={detail} /> : null}
+      <DocsByKind docs={active} />
       <ArchivedDocs docs={archived} />
     </PageContainer>
+  );
+}
+
+function AreaPrs({ detail }: { detail: AreaDetail }) {
+  if (detail.projectPrs.length === 0) {
+    return null;
+  }
+  return (
+    <section className="mb-10">
+      <SectionHeading aside={pluralise(detail.projectPrs.length, "project")}>Pull requests</SectionHeading>
+      {detail.projectPrs.map((entry) => (
+        <div key={entry.projectId} className="mb-5 last:mb-0">
+          <Link
+            to={projectEntryHref(entry.projectId)}
+            className="mb-2 inline-block text-ui font-medium text-ink hover:underline"
+          >
+            {entry.title}
+          </Link>
+          <ProjectPrs
+            projectId={entry.projectId}
+            prs={entry.prs}
+            repoLinks={detail.repoLinks}
+            showRepo={new Set(entry.prs.stacks.map((stack) => stack.repo)).size > 1}
+          />
+        </div>
+      ))}
+    </section>
   );
 }
 
