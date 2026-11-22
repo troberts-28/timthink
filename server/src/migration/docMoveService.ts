@@ -48,6 +48,7 @@ export class DocMoveService {
       await writeMoves({ plan, contents, journal, docsRoot });
       const moved = new Map([...plan.docMoves].filter(([from, to]) => from !== to));
       await moveDocState({ moves: moved, journal, docsRoot });
+      await journal.pruneVacatedDirs(docsRoot);
       await journal.recordWrite(seen.filePath);
       await seen.moveDocs(moved);
       await journal.recordWrite(movedDocs.filePath);
@@ -115,7 +116,7 @@ async function planDocMoves({ round, registry, contents, docsRoot }: PlanInput):
       plan.outcomes[item.id] = { kind: "skipped", note: problem ?? "Left in place", commit: null };
       continue;
     }
-    const to = `${target}/${path.posix.basename(item.doc)}`;
+    const to = destinationFor(item.doc, target);
     claimed.add(to);
     plan.docMoves.set(item.doc, to);
     plan.outcomes[item.id] = { kind: "moved", note: to, commit: null };
@@ -161,9 +162,15 @@ async function moveProblem({ item, target, registry, contents, claimed, docsRoot
   if (!slug && registry.area(top)) {
     return `${top} is an area; pick one of its projects`;
   }
-  const to = `${target}/${path.posix.basename(item.doc)}`;
+  const to = destinationFor(item.doc, target);
   const isTaken = to !== item.doc && (claimed.has(to) || (await exists(path.join(docsRoot, to))));
   return isTaken ? `${to} is taken` : null;
+}
+
+function destinationFor(doc: string, target: string) {
+  const [, ...below] = doc.split("/");
+  const isNamedForTarget = below.length > 1 && below[0] === target.split("/").at(-1);
+  return `${target}/${(isNamedForTarget ? below.slice(1) : below).join("/")}`;
 }
 
 interface ManifestPlanInput {

@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, rename, rmdir, stat, unlink } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, rmdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { writeFileAtomic } from "../reviews/atomicWrite.js";
@@ -7,11 +7,14 @@ const journalEntrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("rename"), from: z.string(), to: z.string() }),
   z.object({ kind: z.literal("write"), path: z.string(), before: z.string().nullable() }),
   z.object({ kind: z.literal("mkdir"), path: z.string() }),
+  z.object({ kind: z.literal("rmdir"), path: z.string() }),
 ]);
 
 type JournalEntry = z.infer<typeof journalEntrySchema>;
 
 export class FileJournal {
+  private readonly vacated = new Set<string>();
+
   constructor(readonly filePath: string) {}
 
   async exists() {
@@ -22,6 +25,21 @@ export class FileJournal {
     await this.ensureDir(path.dirname(to));
     await this.append({ kind: "rename", from, to });
     await rename(from, to);
+    this.vacated.add(path.dirname(from));
+  }
+
+  async pruneVacatedDirs(root: string) {
+    const byDepth = [...this.vacated].sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+    for (const vacated of byDepth) {
+      for (let current = vacated; isBelow(root, current); current = path.dirname(current)) {
+        const entries = await readdir(current).catch(() => null);
+        if (entries === null || entries.length > 0) {
+          break;
+        }
+        await this.append({ kind: "rmdir", path: current });
+        await rmdir(current);
+      }
+    }
   }
 
   async write(filePath: string, contents: string) {
@@ -65,6 +83,10 @@ export class FileJournal {
 }
 
 async function reverse(entry: JournalEntry) {
+  if (entry.kind === "rmdir") {
+    await mkdir(entry.path, { recursive: true });
+    return;
+  }
   if (entry.kind === "mkdir") {
     await rmdir(entry.path).catch(() => {});
     return;
@@ -86,4 +108,9 @@ async function reverse(entry: JournalEntry) {
 
 async function isDirectory(directory: string) {
   return (await stat(directory).catch(() => null))?.isDirectory() ?? false;
+}
+
+function isBelow(root: string, candidate: string) {
+  const relative = path.relative(root, candidate);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }

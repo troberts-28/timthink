@@ -11,7 +11,7 @@ const BASE = "http://127.0.0.1:7420";
 const LIMITER = "acme-api/2026-10-01-rate-limiter-plan.md";
 const LIMITER_MOVED = "platform/rate-limits/2026-10-01-rate-limiter-plan.md";
 const WATERING = "garden-app/plans/2026-07-04-watering-schedule-plan.md";
-const WATERING_MOVED = "payments/checkout-v2/2026-07-04-watering-schedule-plan.md";
+const WATERING_MOVED = "payments/checkout-v2/plans/2026-07-04-watering-schedule-plan.md";
 const NOTES = "acme-api/2026-09-15-auth-refresh-notes.md";
 const SCRATCH = "acme-api/untitled-scratch.md";
 

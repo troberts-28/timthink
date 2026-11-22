@@ -28,7 +28,7 @@ export function DocMoveGroups({
     <div className="flex flex-col gap-10">
       {proposedGroups(round).map(({ target, items }) => {
         const proposal = round.projects.find((project) => project.id === target);
-        const summary = [proposal?.title, proposal?.repos.join(", ")].filter(Boolean).join(" · ");
+        const summary = [proposal?.title, proposal?.repos.join(", "), proposal?.status].filter(Boolean).join(" · ");
         return (
           <section key={target ?? "leave"} aria-label={target ?? "Leave in place"}>
             <SectionHeading aside={`${items.length} doc${items.length === 1 ? "" : "s"}`}>
