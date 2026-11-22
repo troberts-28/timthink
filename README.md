@@ -6,6 +6,7 @@ A local hub for the markdown plans your coding agents write. Point it at a folde
 
 ## Features
 
+- **Projects.** Group docs by project rather than by repo. A project spans repos and has a home page: what needs you (open questions and replies), its PRs and stacks across repos, its docs grouped by kind, and recent activity. Projects sit in areas, and shipped or dropped projects archive their docs.
 - **Reader.** GitHub-flavoured markdown, Mermaid diagrams, syntax highlighting, task progress bars, attachments, and sandboxed HTML `demo` embeds. Live-updates as files change.
 - **Links.** Code paths in backticks open in Zed at the right line (resolved against the repo's checkout with `git ls-files`). PR references link to Graphite or GitHub. Sibling plan names link to that plan.
 - **Reviews.** Select any passage to comment or suggest an edit, answer ` ```question ` blocks (each option's trade-off and a collapsible context, options and recommendation sit under the question), then submit a verdict. Claude reads and answers the review through the `timthink` CLI, and replies appear live. Threads re-anchor when the plan changes.
@@ -57,14 +58,35 @@ If your docs folder is under `~/Documents`, `~/Desktop` or `~/Downloads`, macOS 
 
 ```
 <docsRoot>/                   # e.g. ~/agent-docs
-  <repo>/                     # matches the repo's folder name under codeRoot
-    2026-10-01-some-plan.md
-    <project>/                # optional grouping
-      plan.md
+  <area>/                     # a folder with area.yaml is an area
+    area.yaml
+    2026-10-20-research.md    # reference docs for the whole area
+    <project>/                # a subfolder with project.yaml is a project
+      project.yaml
+      2026-11-10-plan.md
       data/sample.json        # non-markdown files are attachments
+  <project>/                  # a top-level folder with project.yaml is a standalone project
+    project.yaml
+  <repo>/                     # any other folder is a repo's docs; it matches the repo under codeRoot
+    2026-10-01-some-plan.md
+    <folder>/                 # optional grouping
+      plan.md
 ```
 
-Frontmatter is optional; `title`, `date`, `status`, `project`, `branch`, `pr` (a number or a list) and `linear` are used when present. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
+Frontmatter is optional; `title`, `date`, `status`, `kind`, `project`, `repo`, `branch`, `pr` (a number or a list) and `linear` are used when present. `kind` is `plan` (the default), `design`, `research`, `decision`, `handoff` or `notes`, and is guessed from the filename when it's missing. In a project, a doc's code paths and PR numbers resolve against the project's first repo unless the doc sets `repo:`.
+
+A project's manifest:
+
+```yaml
+title: Annual payments
+summary: Let customers pay for a year up front.
+status: active                # active, paused, shipped or dropped
+repos: [monorepo, atlas]      # the first is where bare PR numbers and code paths resolve
+prs: [atlas#812]              # PRs to include besides those found through docs and sessions
+detached: [monorepo#19001]    # PRs to leave out even when a doc or session links them
+```
+
+An `area.yaml` takes `title`, `summary` and `repos` (the default for its projects). A field that doesn't parse is reported on the project page and by `timthink check`, and the rest of the manifest still applies. A project's PRs are the ones in its docs' `pr:` frontmatter, the ones its sessions opened, the rest of their Graphite stacks, and `prs:`, minus `detached:`. The conventions Claude follows (where to write, frontmatter, `question` and `demo` blocks, `timthink check`, the review loop) are in [`skill/SKILL.md`](skill/SKILL.md).
 
 ### Markdown that isn't a plan
 
@@ -78,6 +100,7 @@ Every `*.md` file is a plan unless it's an agent instruction file (`AGENTS.md`, 
 | `<docsRoot>/<repo>/.timthink/reviews/`, `history/`     | read/write | Review threads, and snapshots for "changes since you last looked"                                 |
 | `<docsRoot>/<repo>/.timthink/archive.json`             | read/write | Plans you archived or kept active by hand, keyed by repo-relative path                            |
 | `<docsRoot>/**/*.md`                                   | write      | Only the `status:` line when you submit a verdict, and the text when you accept a suggestion      |
+| `<docsRoot>/**/project.yaml`, `area.yaml`              | write      | Only when you change a project's status or PRs in the hub, or with `timthink project`             |
 | `~/.local/state/timthink/`                             | read/write | `sessions.jsonl` and `doc-sessions.jsonl` (from hooks), `seen.json`, `preferences.json` (hidden repos), a transcript backfill cache |
 | `~/.claude/projects/*/*.jsonl`                         | read       | Claude Code transcripts, scanned for plan writes and session titles                               |
 | `~/.warp/tab_configs/timthink-resume.toml`             | write      | Written when you click **Resume in Warp**                                                         |
@@ -149,7 +172,8 @@ A plan is archived when you archive it, or automatically when its file hasn't ch
 | ----------------------------------------------- | --------------------------------------------------------------------------------- |
 | `timthink serve`                                | Run the hub in the foreground                                                     |
 | `timthink url <doc>`                            | Print the hub URL for a plan                                                      |
-| `timthink docs-dir [--cwd dir]`                 | Print the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
+| `timthink docs-dir [--cwd dir] [--project id]`  | Print a project's folder, or the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
+| `timthink project list \| show \| create \| status \| link-pr \| unlink-pr` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links          |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |
 | `timthink review list \| show \| reply \| resolve \| answer-ack \| addressed` | Read and answer submitted reviews (`timthink review --help`) |

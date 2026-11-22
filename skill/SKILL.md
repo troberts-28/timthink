@@ -9,7 +9,13 @@ Plans are plain markdown files in a docs folder that the timthink hub renders, a
 
 ## Writing a plan
 
-**Where.** Run `timthink docs-dir` from the repo you're working in and write into the folder it prints, optionally in a project subfolder. If it notes the folder doesn't exist yet, create it. Name files `YYYY-MM-DD-<slug>.md`.
+**Where.** Docs belong to projects. A project is one shippable piece of work, often spanning repos, and usually sits in an area (`<area>/<project>`, e.g. `car-insurance/annual-payments`).
+
+1. Run `timthink project list --repo <repo>` with the current repo's name. If the work belongs to a listed project, run `timthink project show <id>` to orient (it prints the folder, docs, PRs and open questions), then write into the folder it prints.
+2. If the work is a new project, ask the user whether to create one, then `timthink project create <area>/<project> --title "…" --repos <repo>[,<other>]`.
+3. If the `project` command is unknown, or the work is a one-off with no project, run `timthink docs-dir` from the repo and write into the folder it prints. If it notes the folder doesn't exist yet, create it.
+
+Name files `YYYY-MM-DD-<slug>.md`.
 
 **Markdown that isn't a plan.** Drafts of files destined for a repo (README, AGENTS.md), prompts, logs and raw notes don't belong in the hub's plan list. Keep them in a subfolder and add that folder to the repo docs folder's `.timthinkignore` (gitignore syntax, e.g. `/2026-11-03-agents-md/`). `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` are never treated as plans.
 
@@ -18,7 +24,7 @@ Plans are plain markdown files in a docs folder that the timthink hub renders, a
 ```yaml
 ---
 title: Short human title
-project: optional-project-name
+kind: plan
 status: draft
 branch: feat/branch-name
 pr: 1234
@@ -26,7 +32,9 @@ linear: ABC-123
 ---
 ```
 
-Leave out fields you don't know. `pr` can be a list (`pr: [1234, 1235]`) when the plan ships as several PRs. `status` is one of `draft`, `review`, `approved`, `in-progress`, `done`, `abandoned`.
+Leave out fields you don't know. `kind` is one of `plan`, `design`, `research`, `decision`, `handoff`, `notes`; leave it out for a plan. `pr` can be a list (`pr: [1234, 1235]`) when the plan ships as several PRs. `status` is one of `draft`, `review`, `approved`, `in-progress`, `done`, `abandoned`.
+
+In a project folder the folder decides the project, so leave out `project:`. Docs in a multi-repo project are about its first repo; add `repo: <name>` for a doc about another one, so its code paths and PR numbers resolve there. Outside a project, `project: <name>` still groups docs inside a repo folder.
 
 **Status rules.**
 - Change status with `timthink status <doc> <status>` rather than editing the line by hand; it maps synonyms (wip, pending, complete…) to the six values and refuses `approved`.
@@ -68,7 +76,7 @@ Leave out fields you don't know. `pr` can be a list (`pr: [1234, 1235]`) when th
 - Richer prototypes go in a sibling `.html` file embedded with ` ```demo src=prototype.html ` .
 
 **Finishing.**
-1. Run `timthink check <path-to-plan>`. It checks frontmatter, `question`/`mermaid`/`demo` blocks and relative links, printing problems with line numbers. Fix every error and every question-block warning, and re-run until it passes before you report back.
+1. Run `timthink check <path-to-plan>`. It checks frontmatter, `question`/`mermaid`/`demo` blocks, relative links and the `project.yaml`/`area.yaml` the doc sits under, printing problems with line numbers. Fix every error and every question-block warning, and re-run until it passes before you report back.
 2. When the plan wants input, run `timthink url <path-to-plan>` and end your message with the URL it prints.
 
 ## `/timthink review [doc]`
@@ -99,5 +107,5 @@ The user approved a plan and wants it built, usually in a fresh session with not
 2. **Branch.** The branch is `--branch` if given, else the plan's `branch:`. If the current branch already matches, build on it. Otherwise create it from the repo's trunk (`gt create <branch>` in Graphite repos, else `git switch -c <branch>`). If neither names a branch, pick a short `feat/<slug>`. Write it to `branch:` in the frontmatter.
 3. **Mark it started.** `timthink status <doc> in-progress`.
 4. **Build.** Work phase by phase, in order, through every phase with open tasks, or only phase N with `--phase N`. Tick each task (`- [x]`) in the plan as it lands, not in a batch at the end. Follow the repo's own conventions for tests, lint and commits. When the plan's decisions turn out to be wrong in practice, follow the code, note the deviation in the plan under the phase, and mention it in your summary.
-5. **PRs.** After `gt submit`, `gh pr create` or similar, add every PR number to the plan's `pr:` list. Don't open PRs or push unless the user's instructions for the repo say to; ask if unsure.
+5. **PRs.** After `gt submit`, `gh pr create` or similar, add every PR number to the plan's `pr:` list. When the plan is in a project, also run `timthink project link-pr <id> <repo>#<number>` for a PR in a repo other than the plan's. Don't open PRs or push unless the user's instructions for the repo say to; ask if unsure.
 6. **Finish.** Leave `status: in-progress` while any phase has open tasks. Set `status: done` only when every task is ticked and the work is merged or the user says it's done. Summarise what's built, what's left, and any deviations, and end with the URL from `timthink url <doc>`.
