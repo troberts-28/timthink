@@ -280,6 +280,26 @@ describe("PrService", () => {
     expect(prs.signalsFor(plan).map((signal) => signal.reason)).not.toContain("pr-closed-unmerged");
   });
 
+  it("counts a PR closed unmerged as landed once another merged, and keeps the decision when the plan moves", async () => {
+    const github = fakeGithub([
+      rawPr({ number: 63, state: "MERGED", merged: true }),
+      rawPr({ number: 64, state: "CLOSED" }),
+      rawPr({ number: 65, state: "CLOSED" }),
+    ]);
+    const landed = doc({ path: "acme-api/landed.md", prs: ["63", "64"] });
+    const abandoned = doc({ path: "acme-api/abandoned.md", prs: ["65"] });
+    const { prs } = await service([landed, abandoned], github.runner);
+    await prs.refresh();
+    expect([prs.completionMarker(landed), prs.completionMarker(abandoned)]).toEqual(["63,64", null]);
+
+    await prs.markCompleted(landed.path, "63,64", { announce: false });
+    await prs.moveDocs(new Map([[landed.path, "payments/checkout-v2/landed.md"]]));
+    expect([prs.completion(landed.path), prs.completion("payments/checkout-v2/landed.md")?.marker]).toEqual([
+      null,
+      "63,64",
+    ]);
+  });
+
   it("asks about plans whose PRs merged with tasks still open, until resolved", async () => {
     const github = fakeGithub([rawPr({ number: 90, state: "MERGED", merged: true })]);
     const plan = doc({ prs: ["90"] });

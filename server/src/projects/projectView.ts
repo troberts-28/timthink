@@ -79,7 +79,15 @@ export interface ProjectDetail {
   threads: ProjectThread[];
   activity: ProjectActivity[];
   rounds: RoundSummary[];
+  looksFinished: LooksFinishedDoc[];
   attachments: AttachmentSummary[];
+}
+
+export interface LooksFinishedDoc {
+  docPath: string;
+  title: string;
+  prs: number[];
+  openTasks: number;
 }
 
 export interface DocPrView {
@@ -101,6 +109,7 @@ export interface ProjectViewDeps {
   prsUnavailable: string | null;
   attachmentsUnder(dir: string): AttachmentSummary[];
   rounds: readonly RoundSummary[];
+  awaitingCompletion(docPath: string): { marker: string; openTasks: number } | null;
 }
 
 const ACTIVITY_LIMIT = 40;
@@ -362,6 +371,19 @@ export async function buildProjectDetail(deps: ProjectViewDeps): Promise<Project
     threads: reviews.threads,
     activity,
     rounds: projectRounds(deps, prs),
+    looksFinished: project.docs.flatMap((doc) => {
+      const awaiting = deps.awaitingCompletion(doc.path);
+      return awaiting
+        ? [
+            {
+              docPath: doc.path,
+              title: doc.title,
+              prs: awaiting.marker.split(",").map(Number),
+              openTasks: awaiting.openTasks,
+            },
+          ]
+        : [];
+    }),
     attachments: deps.attachmentsUnder(deps.record.id),
   };
 }

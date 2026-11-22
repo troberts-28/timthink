@@ -56,6 +56,7 @@ export function projectRoutes(deps: ProjectRouteDeps) {
         prsUnavailable: deps.prs.unavailableMessage,
         attachmentsUnder: (dir) => deps.store.attachmentsUnder(dir),
         rounds: (await deps.rounds.list()).map(summarizeRound),
+        awaitingCompletion: (docPath) => deps.prs.awaitingCompletion(docPath),
       });
       return detail ? c.json(detail) : c.json({ error: "Not found" }, 404);
     })

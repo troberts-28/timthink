@@ -262,6 +262,7 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   );
   if (seenInit.created) log(`initialised seen.json with ${store.allDocs().length} doc(s)`);
   await Promise.all([archive.init(), prs.init()]);
+  await prs.moveDocs(movedDocs.all());
   let cachedIndex: DocsIndex | null = null;
   let cachedAt = 0;
   const repoNames = (): string[] => store.codeRepoNames();
@@ -356,7 +357,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
     seen,
     movedDocs,
     readOnly: config.readOnly,
-    onMoved: async () => {
+    onMoved: async (moves) => {
+      await prs.moveDocs(moves);
       await projects.scan();
       store.redecorate();
       await store.scanAll();

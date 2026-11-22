@@ -1,24 +1,30 @@
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   DocKind,
   IndexedDoc,
+  LooksFinishedDoc,
   ProjectActivity,
   ProjectDetail,
   ProjectQuestion,
   ProjectThread,
   RoundSummary,
 } from "@timthink/server";
-import { CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
+import { CircleCheck, CircleHelp, FolderKanban, ListChecks, MessageSquare } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { NotFoundError } from "../api/client";
-import { useProject } from "../api/queries";
+import { settlePlanCompletion } from "../api/projects";
+import { queryKeys, useProject } from "../api/queries";
 import { ArchivedDocs } from "../components/ArchivedDocs";
 import { AttachmentList } from "../components/AttachmentList";
+import { Button } from "../components/Button";
 import { DocList } from "../components/DocList";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
 import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
 import { areaHref, docHref, roundHref } from "../lib/routes";
+import { useToast } from "../lib/toast";
 import { ProjectPrs } from "./ProjectPrs";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
@@ -94,6 +100,16 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
             ))}
             {yourThreads.map((thread) => (
               <ThreadRow key={thread.threadId} thread={thread} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {detail.looksFinished.length > 0 ? (
+        <section className="mb-10">
+          <SectionHeading aside={pluralise(detail.looksFinished.length, "plan")}>Looks finished</SectionHeading>
+          <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
+            {detail.looksFinished.map((plan) => (
+              <LooksFinishedRow key={plan.docPath} projectId={project.id} plan={plan} />
             ))}
           </ul>
         </section>
@@ -214,6 +230,43 @@ const ROUND_STATE_CHIPS: Record<RoundSummary["state"], { label: string; classNam
   done: { label: "Done", className: "chip-ok-soft" },
   abandoned: { label: "Abandoned", className: "chip-muted" },
 };
+
+function LooksFinishedRow({ projectId, plan }: { projectId: string; plan: LooksFinishedDoc }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const settle = async (done: boolean) => {
+    setBusy(true);
+    try {
+      await settlePlanCompletion(plan.docPath, done);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+      toast(done ? "Marked it done." : "Kept it open.");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Couldn't update the plan", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="flex items-start gap-3 border-b border-line-soft px-4 py-3 last:border-b-0">
+      <CircleCheck className="mt-0.5 size-4 flex-none text-ink-32" strokeWidth={1.75} aria-hidden />
+      <span className="min-w-0 flex-1">
+        <Link to={docHref(plan.docPath)} className="block truncate text-ui font-medium text-ink hover:underline">
+          {plan.title}
+        </Link>
+        <span className="block truncate text-meta text-ink-64">
+          {plan.prs.map((number) => `#${number}`).join(", ")} landed · {pluralise(plan.openTasks, "task")} still open
+        </span>
+      </span>
+      <Button size="sm" tone="ghost" disabled={busy} onClick={() => void settle(false)}>
+        Keep open
+      </Button>
+      <Button size="sm" tone="primary" disabled={busy} onClick={() => void settle(true)}>
+        Mark done
+      </Button>
+    </li>
+  );
+}
 
 function RoundRow({ round }: { round: RoundSummary }) {
   const chip = ROUND_STATE_CHIPS[round.state];

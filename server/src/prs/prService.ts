@@ -247,8 +247,9 @@ export class PrService {
     const github = this.options.githubFor(doc.codeRepo);
     const numbers = [...this.linkedNumbers(doc).keys()].sort((a, b) => a - b);
     if (!github || numbers.length === 0) return null;
-    const allMerged = numbers.every((number) => this.cached(github, number)?.info.state === "merged");
-    if (!allMerged) return null;
+    const states = numbers.map((number) => this.cached(github, number)?.info.state);
+    const isLanded = states.every((state) => state === "merged" || state === "closed");
+    if (!isLanded || !states.includes("merged")) return null;
     const marker = numbers.join(",");
     return this.state.completed[doc.path]?.marker === marker ? null : marker;
   }
@@ -271,6 +272,22 @@ export class PrService {
     this.state.awaiting[docPath] = { marker, openTasks, at };
     await this.save();
     this.options.onChange([docPath]);
+  }
+
+  async moveDocs(moves: ReadonlyMap<string, string>): Promise<void> {
+    let changed = false;
+    for (const [from, to] of moves) {
+      const moved = [
+        moveDocKey(this.state.unlinked, from, to),
+        moveDocKey(this.state.completed, from, to),
+        moveDocKey(this.state.dismissed, from, to),
+        moveDocKey(this.state.awaiting, from, to),
+      ];
+      changed ||= moved.includes(true);
+    }
+    if (changed) {
+      await this.save();
+    }
   }
 
   awaitingCompletion(docPath: string): AwaitingCompletion | null {
@@ -627,4 +644,14 @@ export class PrService {
     await writeFile(temporary, JSON.stringify(this.state));
     await rename(temporary, this.statePath);
   }
+}
+
+function moveDocKey<T>(byDoc: Record<string, T>, from: string, to: string) {
+  const entry = byDoc[from];
+  if (entry === undefined) {
+    return false;
+  }
+  byDoc[to] ??= entry;
+  delete byDoc[from];
+  return true;
 }

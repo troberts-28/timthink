@@ -88,6 +88,7 @@ export {
 } from "./projects/manifest.js";
 export { type NewProject, ProjectError, ProjectService } from "./projects/projectService.js";
 export type {
+  LooksFinishedDoc,
   ProjectActivity,
   ProjectActivityKind,
   ProjectDetail,

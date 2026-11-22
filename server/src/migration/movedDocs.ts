@@ -36,6 +36,10 @@ export class MovedDocs {
     return current;
   }
 
+  all() {
+    return new Map(Object.keys(this.moves).map((docPath) => [docPath, this.resolve(docPath)]));
+  }
+
   movedTo(docPath: string) {
     const resolved = this.resolve(docPath);
     return resolved === docPath ? null : resolved;

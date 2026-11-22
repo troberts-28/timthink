@@ -27,7 +27,7 @@ export interface DocMoveServiceOptions {
   seen: SeenStore;
   movedDocs: MovedDocs;
   readOnly: boolean;
-  onMoved: () => Promise<void>;
+  onMoved: (moves: ReadonlyMap<string, string>) => Promise<void>;
 }
 
 export class DocMoveService {
@@ -44,9 +44,9 @@ export class DocMoveService {
     const contents = await readMarkdown(docsRoot);
     const plan = await planDocMoves({ round, registry, contents, docsRoot });
     const journal = this.journalFor(round.id);
+    const moved = new Map([...plan.docMoves].filter(([from, to]) => from !== to));
     try {
       await writeMoves({ plan, contents, journal, docsRoot });
-      const moved = new Map([...plan.docMoves].filter(([from, to]) => from !== to));
       await moveDocState({ moves: moved, journal, docsRoot });
       await journal.pruneVacatedDirs(docsRoot);
       await journal.recordWrite(seen.filePath);
@@ -54,19 +54,22 @@ export class DocMoveService {
       await journal.recordWrite(movedDocs.filePath);
       await movedDocs.record(moved);
     } finally {
-      await this.options.onMoved();
+      await this.options.onMoved(moved);
     }
     return plan.outcomes;
   }
 
   async undo(round: Pick<DocMovesRound, "id">) {
     this.assertWritable();
+    const movedBefore = this.options.movedDocs.all();
     try {
       await this.journalFor(round.id).undo();
       await this.options.seen.reload();
       await this.options.movedDocs.load();
     } finally {
-      await this.options.onMoved();
+      const movedAfter = this.options.movedDocs.all();
+      const undone = [...movedBefore].filter(([from]) => !movedAfter.has(from));
+      await this.options.onMoved(new Map(undone.map(([from, to]) => [to, from])));
     }
   }
 

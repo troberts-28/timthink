@@ -43,3 +43,14 @@ export async function setProjectStatus(id: string, status: ProjectStatus) {
     throw new Error(`Couldn't change the project's status (${response.status})`);
   }
 }
+
+export async function settlePlanCompletion(docPath: string, done: boolean) {
+  const token = await sessionToken();
+  const response = await client.api["doc-prs"].complete.$post(
+    { json: { path: docPath, done } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  if (!response.ok) {
+    throw new Error(`Couldn't update the plan (${response.status})`);
+  }
+}
