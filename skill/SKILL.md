@@ -86,7 +86,8 @@ A project can carry a `project.page.tsx` in its folder. The hub renders it at th
 **When.** Pages are opt-in. Write one when a project has test setup, demos or diagrams worth keeping, or when the user asks; never to restate the generated sections. Once a project has a page, keep it current: update it whenever you write a plan, open a PR or change test setup in that project.
 
 **How.**
-- Default-export one component. Import only from `react`, `timthink/page` and relative files (shared components can live in the area folder and be imported with `../`).
+- Default-export one component. Import only from `react`, `timthink/page` and relative files.
+- Shared setup for an area (seed commands, gates, stack status) lives as components in `<area>/page/`, which pages import relatively (`import { Gate } from "../page/Gate"`). Look there before writing setup from scratch, and add to it rather than copying between projects. Repo-specific tooling belongs in those components, never in timthink.
 - Build from the primitives in `timthink/page`:
   - `<Section id title>`: a titled section; the page's top-level blocks.
   - `<Callout tone>`: `tone` is `note` (default), `tip`, `warning` or `caution`.
@@ -96,6 +97,7 @@ A project can carry a `project.page.tsx` in its folder. The hub renders it at th
   - `<Diagram caption>` around a raw `<svg>`, `<Mermaid code>` for anything Mermaid draws (flows, sequences, ER diagrams), and `<ScreenFlow before={[{ src, caption }]} after={[…]}>` for screenshot sequences, with `src` relative to the page's folder.
   - `<CopyCommand command>` for seed and setup commands.
   - `<Checklist id pr={27974}>` with `<Step id="…">text</Step>` children: the user marks each step pass or fail with a note, stamped with the PR's head SHA, and a result goes stale when the PR gets new commits. `pr` must be one of the project's PRs.
+  - `<QrLink href label>` for anything to open on a phone, and `useJson(url)` (`{ data, error, loading, refresh }`, refreshed every 15 seconds) for reading a local dev service.
   - `useProject()` returns the project's live detail: `project` (manifest and docs), `prs`, `questions`, `threads`, `activity` and `rounds`.
 - Plain JSX (`<p>`, `<ul>`, `<table>`, `<code>`) is styled like a plan. Tailwind classes only work when the hub already uses them, so lay things out with the primitives or an inline `style`.
 - Give every primitive an `id` that is unique on the page and stays the same across edits. Write it literally as `id="how-to-test"` in `project.page.tsx` itself: the user comments on blocks by id, and a block whose id lives in an imported component can't take comments.

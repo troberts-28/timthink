@@ -154,6 +154,9 @@ importers:
       unist-util-visit:
         specifier: ^5.2.0
         version: 5.2.0
+      uqr:
+        specifier: ^0.1.3
+        version: 0.1.3
       vfile:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2091,6 +2094,9 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  uqr@0.1.3:
+    resolution: {integrity: sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==}
 
   uuid@14.0.3:
     resolution: {integrity: sha512-Sc5u1VVln93y1Xnz4R+CunOZc7R9LUcTmhj7Rc7Eg3HVcf7rVn2FOoa812fe0W8p3jD7xeoGSYbfqCGGH2B6xw==}
@@ -4307,6 +4313,8 @@ snapshots:
       browserslist: 4.29.5
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uqr@0.1.3: {}
 
   uuid@14.0.3: {}
 

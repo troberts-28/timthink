@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCheck } from "./check.js";
 
-const PAGE = `import { Callout, Checklist, KvTable, Mermaid, Section, Step, useProject } from "timthink/page";
+const PAGE = `import { Callout, Checklist, KvTable, Mermaid, QrLink, Section, Step, useProject } from "timthink/page";
 import { Seeds } from "../kit/Seeds";
 
 export default function Page() {
@@ -15,6 +15,7 @@ export default function Page() {
       <Seeds />
       <KvTable rows={{ Gate: "annual_payments" }} />
       <Mermaid id="flow" code="flowchart LR; A-->B" />
+      <QrLink id="phone" href="http://192.168.1.20:3002/login?token=abc" />
       <Checklist id="smoke" pr={7}>
         <Step id="pay">Pay annually</Step>
       </Checklist>
