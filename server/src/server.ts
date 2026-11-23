@@ -21,6 +21,7 @@ import { MovedDocs } from "./migration/movedDocs.js";
 import { ChecklistStore } from "./pages/checklistStore.js";
 import { AuthoredPages } from "./pages/pageBundle.js";
 import { PreferencesStore } from "./preferences/preferencesStore.js";
+import { isManifestPath } from "./projects/manifest.js";
 import { ProjectService } from "./projects/projectService.js";
 import { affectsProjects, ProjectRegistry } from "./projects/registry.js";
 import { type CompletionDeps, completePlansWithMergedPrs, markPlanDone } from "./prs/completion.js";
@@ -325,7 +326,8 @@ export async function createRuntime(options: StartOptions): Promise<Runtime> {
   const handleChanges = async (relPaths: string[]): Promise<void> => {
     publishReviewChanges(relPaths);
     await reloadArchives(relPaths);
-    const projectsChanged = affectsProjects(relPaths) && (await projects.scan());
+    const manifestWritten = relPaths.some(isManifestPath);
+    const projectsChanged = affectsProjects(relPaths) && ((await projects.scan()) || manifestWritten);
     if (projectsChanged) store.redecorate();
     const result = await store.applyChanges(relPaths);
     if (!result.changed && !projectsChanged) return;

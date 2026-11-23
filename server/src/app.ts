@@ -34,7 +34,9 @@ import { areaRoutes, type ProjectRouteDeps, projectDetailOf, projectRoutes } fro
 import type { PrService } from "./prs/prService.js";
 import type { Publisher } from "./publish/publisher.js";
 import { publishRoutes } from "./publish/routes.js";
+import { ReadOnlyError } from "./readOnly.js";
 import type { RevealInFinder } from "./reveal.js";
+import { FrontmatterEditError } from "./reviews/frontmatterEdit.js";
 import { docHash } from "./reviews/paths.js";
 import type { ReviewService } from "./reviews/reviewService.js";
 import { reviewRoutes } from "./reviews/routes.js";
@@ -125,6 +127,7 @@ export type SessionActionResponse =
   | { status: "error"; message: string };
 
 const docPathQuery = z.object({ path: z.string().min(1) });
+const docTitleBody = z.object({ path: z.string().min(1), title: z.string().max(1_000) });
 
 const repoQuery = z.object({ repo: z.string().min(1) });
 
@@ -531,6 +534,24 @@ export function createApp(deps: AppDeps) {
       if (!store.getDoc(docPath)) return c.json({ error: "Not found" }, 404);
       const resolved = await deps.resolveCompletion(docPath, done);
       return c.json({ status: resolved ? ("ok" as const) : ("nothing-to-resolve" as const) });
+    })
+    .post("/api/doc/title", zValidator("json", docTitleBody), async (c) => {
+      const { path: docPath, title } = c.req.valid("json");
+      if (!store.getDoc(docPath) || !docPath.toLowerCase().endsWith(".md")) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      try {
+        await deps.reviews.setTitle(docPath, title);
+      } catch (error) {
+        if (error instanceof ReadOnlyError) {
+          return c.json({ error: error.message }, 403);
+        }
+        if (error instanceof FrontmatterEditError) {
+          return c.json({ error: error.message }, 400);
+        }
+        throw error;
+      }
+      return c.json({ status: "ok" as const });
     })
     .get("/api/prs", zValidator("query", prLookupQuery), (c) => {
       const { owner, repo, numbers } = c.req.valid("query");

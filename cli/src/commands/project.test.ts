@@ -35,9 +35,11 @@ describe("timthink project", () => {
     );
     expect(await run(["link-pr", "payments/checkout", "web#12"])).toBe(0);
     expect(await run(["status", "payments/checkout", "Paused"])).toBe(0);
+    expect(await run(["rename", "payments/checkout", "Checkout", "v2"])).toBe(0);
     output.length = 0;
     expect(await run(["show", "payments/checkout"])).toBe(0);
     const shown = output.join("\n");
+    expect(shown).toContain("Checkout v2");
     expect(shown).toContain("Status: paused · Area: payments · Repos: acme-api, web");
     expect(shown).toContain("research");
     expect(shown).toContain("PRs: web#12, acme-api#7");

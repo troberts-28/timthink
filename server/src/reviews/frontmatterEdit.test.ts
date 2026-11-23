@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FrontmatterEditError, setFrontmatterStatus } from "./frontmatterStatus.js";
+import { FrontmatterEditError, setFrontmatterStatus, setFrontmatterTitle } from "./frontmatterEdit.js";
 
 describe("setFrontmatterStatus", () => {
   it("replaces only the status value, keeping comments, order and spacing", () => {
@@ -55,5 +55,16 @@ describe("setFrontmatterStatus", () => {
 
   it("rejects invalid status values", () => {
     expect(() => setFrontmatterStatus("body", "Approved: yes")).toThrow(FrontmatterEditError);
+  });
+});
+
+describe("setFrontmatterTitle", () => {
+  it("rewrites or adds the title, quoting it only when YAML needs it", () => {
+    expect(setFrontmatterTitle("---\ntitle: Old # keep\nstatus: draft\n---\nbody", "New plan")).toBe(
+      "---\ntitle: New plan # keep\nstatus: draft\n---\nbody",
+    );
+    expect(setFrontmatterTitle("# Plan\n", "Rates: v2")).toBe('---\ntitle: "Rates: v2"\n---\n\n# Plan\n');
+    expect(() => setFrontmatterTitle("body", " ")).toThrow(FrontmatterEditError);
+    expect(() => setFrontmatterTitle("body", "two\nlines")).toThrow(FrontmatterEditError);
   });
 });

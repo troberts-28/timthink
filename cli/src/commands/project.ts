@@ -24,6 +24,7 @@ Commands:
   create <id> --title "…" [--repos a,b] [--summary "…"]
                                      Create <project> or <area>/<project> (the area is created if missing)
   status <id> [status]               Print or set the status: ${PROJECT_STATUSES.join(", ")}
+  rename <id> "<title>"              Change the project's title (its folder and id stay the same)
   link-pr <id> <pr>                  Add a PR (123, repo#123 or a PR URL); 123 means the project's first repo
   unlink-pr <id> <pr>                Detach a PR, including one found through a doc or session
   use <id>                           Bind this Claude session to the project, so it shows on the project's page
@@ -79,6 +80,11 @@ export async function runProject({ config, args, flags, io, ownSessionId }: Proj
     }
     if (subcommand === "show") {
       io.out(await showProject(config, registry, record));
+      return 0;
+    }
+    if (subcommand === "rename") {
+      await service.rename(id, args.slice(2).join(" "));
+      io.out(`${id}: renamed to "${args.slice(2).join(" ").trim()}"`);
       return 0;
     }
     if (subcommand === "use") {

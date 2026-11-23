@@ -4,7 +4,7 @@ import { ReadOnlyError } from "../readOnly.js";
 import { resolveInsideRoot } from "../safePath.js";
 import { createAnchor, locateAnchor, refreshAnchor } from "./anchor.js";
 import { writeFileAtomic } from "./atomicWrite.js";
-import { setFrontmatterStatus } from "./frontmatterStatus.js";
+import { setFrontmatterStatus, setFrontmatterTitle } from "./frontmatterEdit.js";
 import {
   type Actor,
   type AnswerInput,
@@ -246,6 +246,19 @@ export class ReviewService {
     const statusUpdate = await this.applyVerdictStatus(docPath, verdict);
     if (statusUpdate.status !== "updated") return { review, statusUpdate };
     return { review: await this.state(docPath), statusUpdate };
+  }
+
+  async setTitle(docPath: string, title: string) {
+    if (this.options.readOnly) {
+      throw new ReadOnlyError();
+    }
+    const doc = await this.readDoc(docPath);
+    const updated = setFrontmatterTitle(doc.raw, title);
+    if (updated === doc.raw) {
+      return;
+    }
+    this.options.onDocWrite?.({ docPath, before: doc.raw, after: updated, actorName: (await this.humanActor()).name });
+    await writeFileAtomic(doc.absolute, updated);
   }
 
   private async applyVerdictStatus(docPath: string, verdict: Verdict): Promise<StatusUpdate> {

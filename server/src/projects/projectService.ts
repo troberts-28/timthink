@@ -14,7 +14,8 @@ import {
 } from "./manifest.js";
 import type { ProjectRecord, ProjectRegistry } from "./registry.js";
 
-export const PROJECT_ERROR_CODES = ["invalid-id", "exists", "not-found"] as const;
+export const PROJECT_ERROR_CODES = ["invalid-id", "invalid-title", "exists", "not-found"] as const;
+export const MAX_PROJECT_TITLE_LENGTH = 200;
 
 export type ProjectErrorCode = (typeof PROJECT_ERROR_CODES)[number];
 
@@ -80,6 +81,14 @@ export class ProjectService {
     await writeFileAtomic(path.join(directory, PROJECT_MANIFEST), manifest);
     await this.options.registry.scan();
     return this.require(project.id);
+  }
+
+  rename(id: string, title: string) {
+    const trimmed = title.trim();
+    if (trimmed === "" || trimmed.length > MAX_PROJECT_TITLE_LENGTH || /[\r\n]/.test(trimmed)) {
+      throw new ProjectError("invalid-title", `A title is one line of 1 to ${MAX_PROJECT_TITLE_LENGTH} characters`);
+    }
+    return this.edit(id, () => ({ title: trimmed }));
   }
 
   setStatus(id: string, status: ProjectStatus) {

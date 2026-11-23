@@ -1,9 +1,15 @@
-import type { IndexedDoc } from "@timthink/server";
+import type { DocSummary, IndexedDoc } from "@timthink/server";
 import { ChevronRight } from "lucide-react";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { DocList } from "./DocList";
 
-export function ArchivedDocs({ docs, showLocation = false }: { docs: IndexedDoc[]; showLocation?: boolean }) {
+interface ArchivedDocsProps {
+  docs: IndexedDoc[];
+  showLocation?: boolean;
+  actionsFor?: (doc: DocSummary) => ReactNode;
+}
+
+export function ArchivedDocs({ docs, showLocation = false, actionsFor }: ArchivedDocsProps) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   if (docs.length === 0) return null;
@@ -25,7 +31,7 @@ export function ArchivedDocs({ docs, showLocation = false }: { docs: IndexedDoc[
       </button>
       {open ? (
         <div id={listId}>
-          <DocList docs={docs} showLocation={showLocation} />
+          <DocList docs={docs} showLocation={showLocation} actionsFor={actionsFor} />
         </div>
       ) : null}
     </section>

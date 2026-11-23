@@ -21,14 +21,16 @@ import { Button } from "../components/Button";
 import { DocsByKind } from "../components/DocsByKind";
 import { EmptyState } from "../components/EmptyState";
 import { PageContainer, PageHeader, SectionHeading } from "../components/PageHeader";
+import { PlanRowActions } from "../components/PlanRowActions";
 import { partitionArchived } from "../lib/archive";
 import { pluralise, relativeTime } from "../lib/format";
 import { areaHref, docHref, roundHref } from "../lib/routes";
 import { useToast } from "../lib/toast";
 import { ProjectAuthoredPage } from "../page/AuthoredPage";
 import { SessionRow } from "../plan/SessionsPanel";
+import { ProjectActions } from "./ProjectActions";
 import { ProjectPrs } from "./ProjectPrs";
-import { PublishButton, PublishedPages } from "./ProjectPublishing";
+import { PublishedPages } from "./ProjectPublishing";
 import { ProjectStatusPicker } from "./ProjectStatus";
 
 export function ProjectPage() {
@@ -58,7 +60,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
   const answeredQuestions = detail.questions.filter((question) => question.answered);
   return (
     <PageContainer>
-      <PublishButton projectId={project.id} />
+      <ProjectActions project={project} />
       <PageHeader
         eyebrow={
           detail.area ? (
@@ -136,7 +138,7 @@ function ProjectOverview({ detail }: { detail: ProjectDetail }) {
           </EmptyState>
         </div>
       ) : null}
-      <ArchivedDocs docs={archived} />
+      <ArchivedDocs docs={archived} actionsFor={(doc) => <PlanRowActions doc={doc} />} />
       {claudeThreads.length + answeredQuestions.length > 0 ? (
         <section className="mb-10">
           <SectionHeading>Waiting on Claude</SectionHeading>

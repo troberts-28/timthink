@@ -135,7 +135,7 @@ export { VercelClient, VercelError } from "./publish/vercel.js";
 export { ReadOnlyError } from "./readOnly.js";
 export { type AnchorMatch, createAnchor, locateAnchor } from "./reviews/anchor.js";
 export { writeFileAtomic } from "./reviews/atomicWrite.js";
-export { FrontmatterEditError, setFrontmatterStatus } from "./reviews/frontmatterStatus.js";
+export { FrontmatterEditError, setFrontmatterStatus, setFrontmatterTitle } from "./reviews/frontmatterEdit.js";
 export {
   type Actor,
   CLAUDE_ACTOR,

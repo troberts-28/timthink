@@ -182,7 +182,7 @@ A plan is archived when you archive it, or when its project is `shipped` or `dro
 | `timthink serve`                                | Run the hub in the foreground                                                     |
 | `timthink url <doc>`                            | Print the hub URL for a plan                                                      |
 | `timthink docs-dir [--cwd dir] [--project id]`  | Print a project's folder, or the docs folder for the current git repo (worktrees like `repo-2` map to `repo`) |
-| `timthink project list \| show \| create \| status \| link-pr \| unlink-pr \| use \| legacy-docs` | Manage projects (`timthink project --help`); `show` prints a project's overview for an agent, `use` binds the current Claude session, `legacy-docs` lists docs outside any project as JSON |
+| `timthink project list \| show \| create \| status \| rename \| link-pr \| unlink-pr \| use \| legacy-docs` | Manage projects (`timthink project --help`); `rename` changes the title only, `show` prints a project's overview for an agent, `use` binds the current Claude session, `legacy-docs` lists docs outside any project as JSON |
 | `timthink session label "<text>"`               | Name the current Claude session on its project's page                             |
 | `timthink check <doc>`                          | Check frontmatter, `question`/`mermaid`/`demo` blocks and relative links; for a `.page.tsx`, compile it, render it once and check block ids |
 | `timthink status <doc> [status]`                | Print or set a plan's status; synonyms map to the six statuses, `approved` is refused |

@@ -165,3 +165,25 @@ async function failureMessage(response: { status: number; json(): Promise<unknow
   }
   return `${fallback} (${response.status})`;
 }
+
+export async function renameProject(id: string, title: string) {
+  const token = await sessionToken();
+  const response = await client.api.project.title.$post(
+    { json: { id, title } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, "Couldn't rename the project"));
+  }
+}
+
+export async function renameDoc(docPath: string, title: string) {
+  const token = await sessionToken();
+  const response = await client.api.doc.title.$post(
+    { json: { path: docPath, title } },
+    { headers: { [TOKEN_HEADER]: token } },
+  );
+  if (!response.ok) {
+    throw new Error(await failureMessage(response, "Couldn't rename the plan"));
+  }
+}

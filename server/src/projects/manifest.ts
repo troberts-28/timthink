@@ -33,6 +33,7 @@ export interface ParsedManifest<T> {
 }
 
 export interface ManifestEdit {
+  title?: string;
   status?: ProjectStatus;
   prs?: PrRef[];
   detached?: PrRef[];
@@ -145,6 +146,9 @@ export function isProjectStatus(value: string): value is ProjectStatus {
 
 export function editProjectManifest(text: string, edit: ManifestEdit) {
   const document = parseDocument(text);
+  if (edit.title) {
+    document.set("title", edit.title);
+  }
   if (edit.status) {
     document.set("status", edit.status);
   }

@@ -10,6 +10,7 @@ import { repoSections } from "../lib/repoGroups";
 import { useRepoVisibility } from "../lib/repoVisibility";
 import { areaHref, docHref, projectEntryHref, projectHref, repoHref } from "../lib/routes";
 import { usePlanArchive } from "../plan/usePlanArchive";
+import { ArchiveProjectDialog, isArchivedProject, useProjectArchive } from "../projects/ProjectActions";
 import { ProjectStatusDot } from "../projects/ProjectStatus";
 import { PrAttentionIcon } from "../prs/PrVisuals";
 import { AttentionCount } from "./AttentionCount";
@@ -415,10 +416,6 @@ function RepoNode({ repo, selection, attention }: { repo: RepoIndex; selection: 
   );
 }
 
-function isSettledProject(project: ProjectEntry) {
-  return project.status === "shipped" || project.status === "dropped";
-}
-
 function ProjectEntryNode({
   project,
   selection,
@@ -436,8 +433,11 @@ function ProjectEntryNode({
     }
   }, [containsSelection]);
   const { active } = partitionArchived(project.docs);
+  const { archiving, setArchiving, restore, pending } = useProjectArchive(project);
+  const archived = isArchivedProject(project);
   return (
     <div>
+      {archiving ? <ArchiveProjectDialog project={project} onClose={() => setArchiving(false)} /> : null}
       <ToggleRow
         open={open}
         onToggle={() => setOpen((current) => !current)}
@@ -447,7 +447,21 @@ function ProjectEntryNode({
         icon={<ProjectStatusDot status={project.status} />}
         label={project.title}
         count={active.length}
-        dimmed={isSettledProject(project)}
+        dimmed={archived}
+        action={
+          <RowAction
+            label={archived ? "Unarchive project" : "Archive project"}
+            onClick={archived ? () => void restore() : () => setArchiving(true)}
+            disabled={pending}
+            reveal={ROW_ACTION_SHOWS}
+          >
+            {archived ? (
+              <RotateCcw className="size-3.5" strokeWidth={1.75} aria-hidden />
+            ) : (
+              <Archive className="size-3.5" strokeWidth={1.75} aria-hidden />
+            )}
+          </RowAction>
+        }
       />
       {open && active.length > 0 ? (
         <DocRows docs={active} selection={selection} indent={indent + 24} preview={PROJECT_PREVIEW} />
@@ -464,8 +478,8 @@ function AreaNode({ area, selection }: { area: AreaEntry; selection: SidebarSele
       setOpen(true);
     }
   }, [containsSelection]);
-  const live = area.projects.filter((project) => !isSettledProject(project));
-  const settled = area.projects.filter(isSettledProject);
+  const live = area.projects.filter((project) => !isArchivedProject(project));
+  const settled = area.projects.filter(isArchivedProject);
   const reference = partitionArchived(area.docs).active;
   const settledSelected = settled.some(
     (project) => selection.projectId === project.id || containsDoc(project.docs, selection.docPath),
