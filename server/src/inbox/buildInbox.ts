@@ -38,7 +38,11 @@ function questionItems(input: InboxDocInput): InboxItem[] {
   if (input.archived || !isAskingForReview) {
     return [];
   }
-  const answered = new Set((review?.answers ?? []).map((answer) => answer.questionId));
+  const draftReviews = new Set(
+    (review?.reviews ?? []).filter((entry) => entry.state === "draft").map((entry) => entry.id),
+  );
+  const sentAnswers = (review?.answers ?? []).filter((answer) => !draftReviews.has(answer.reviewId));
+  const answered = new Set(sentAnswers.map((answer) => answer.questionId));
   const { path, repo, project, title, status } = summary;
   return input.questions.flatMap((question): InboxItem[] => {
     if (!question.id || answered.has(question.id)) {

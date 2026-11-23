@@ -7,11 +7,11 @@ import { queryKeys } from "../api/queries";
 import { Button } from "../components/Button";
 import { pluralise } from "../lib/format";
 import { useToast } from "../lib/toast";
-import { copyText, reviewCommand } from "../review/handOff";
 import { useRequiredReview } from "../review/ReviewContext";
-import { byDocumentOrder, pendingCounts } from "../review/reviewModel";
+import { byDocumentOrder } from "../review/reviewModel";
 import { ThreadCard } from "../review/ThreadCard";
 import { useClaudeActivityToasts } from "../review/useClaudeActivityToasts";
+import { useSendReview } from "../review/useSendReview";
 
 const COMMENTED_ATTRIBUTE = "data-commented";
 
@@ -126,31 +126,10 @@ export function PageThreads() {
 }
 
 function SendBar() {
-  const { review, docPath, actions } = useRequiredReview();
-  const toast = useToast();
-  const [sending, setSending] = useState(false);
-  const counts = pendingCounts(review);
+  const { counts, sending, send } = useSendReview();
   if (counts.total === 0) {
     return null;
   }
-  const send = async () => {
-    setSending(true);
-    const result = await actions.submit("comment", "");
-    setSending(false);
-    if (!result) {
-      return;
-    }
-    const command = reviewCommand(docPath);
-    toast(
-      (await copyText(command)) ? (
-        <>
-          Sent. Copied <code className="font-mono text-[12.5px]">{command}</code> for Claude.
-        </>
-      ) : (
-        "Sent to Claude."
-      ),
-    );
-  };
   return (
     <div className="sticky bottom-5 z-20 mt-4 flex items-center gap-3 rounded-card border border-line bg-surface-raised py-2.5 pr-2.5 pl-4 shadow-pop">
       <span className="size-2 flex-none rounded-full bg-accent" aria-hidden />
