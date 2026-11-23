@@ -110,7 +110,7 @@ function InteractiveOptions({
   );
 }
 
-function InteractiveAnswer({
+export function InteractiveAnswer({
   question,
   review,
   context,

@@ -20,7 +20,7 @@ export function InboxQuestionRow({ item, showRepo }: { item: InboxQuestionItem; 
       chip={<span className="chip chip-accent">Unanswered</span>}
       place={place}
     >
-      <InboxQuestion question={item.question} doc={item.doc} />
+      <InboxQuestion questionId={item.questionId} question={item.question} doc={item.doc} />
     </InboxRowFrame>
   );
 }

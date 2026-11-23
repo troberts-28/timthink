@@ -73,7 +73,7 @@ describe("history, seen and inbox API", () => {
     await post("/api/seen", { path: DOC, hash });
   });
 
-  it("attributes the hub's own writes to you, and drops an answered question from the inbox", async () => {
+  it("keeps a drafted answer in the inbox until it is sent, and attributes the hub's own writes to you", async () => {
     const view = await runtime.reviews.state(DOC);
     const answered = await runtime.reviews.answer(DOC, view.version, {
       questionId: "burst-policy",
@@ -82,6 +82,7 @@ describe("history, seen and inbox API", () => {
       choiceText: null,
       note: "",
     });
+    expect(await inboxIds()).toEqual([`question:${DOC}#burst-policy`]);
     await runtime.reviews.submit(DOC, answered.version, "approve", "Looks good");
     await runtime.store.applyChanges([DOC]);
     await runtime.history.snapshotNow(DOC);
