@@ -5,7 +5,7 @@ import type { DocSummary } from "../docs/types.js";
 import { parseFrontmatter } from "../frontmatter.js";
 import { ALL_PRS_MERGED, TIMTHINK_ACTOR } from "../history/attribution.js";
 import { writeFileAtomic } from "../reviews/atomicWrite.js";
-import { setFrontmatterStatus } from "../reviews/frontmatterStatus.js";
+import { setFrontmatterStatus } from "../reviews/frontmatterEdit.js";
 import type { HubDocWrite } from "../reviews/reviewService.js";
 import { resolveInsideRoot } from "../safePath.js";
 

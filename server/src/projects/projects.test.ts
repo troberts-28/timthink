@@ -168,6 +168,37 @@ describe("projects API", () => {
     expect((await post("/api/project/status", { id: "nope", status: "paused" })).status).toBe(404);
   });
 
+  it("reindexes after the hub archives a project, though the edit already rescanned the registry", async () => {
+    const watcher = runtime.startWatching();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const statusInIndex = async () =>
+        (await index()).areas.flatMap((area) => area.projects).find((entry) => entry.id === CHECKOUT_ID)?.status;
+      expect(await statusInIndex()).toBe("active");
+      expect((await post("/api/project/status", { id: CHECKOUT_ID, status: "shipped" })).status).toBe(200);
+      await expect.poll(statusInIndex, { timeout: 3000 }).toBe("shipped");
+    } finally {
+      watcher.close();
+    }
+  });
+
+  it("renames a project and a plan by title, leaving folders and files where they are", async () => {
+    expect((await post("/api/project/title", { id: CHECKOUT_ID, title: "Checkout: v2" })).status).toBe(200);
+    expect((await post("/api/project/title", { id: CHECKOUT_ID, title: " " })).status).toBe(400);
+    const manifest = await readFile(path.join(docsRoot, CHECKOUT_ID, "project.yaml"), "utf8");
+    expect(parseProjectManifest(manifest).manifest.title).toBe("Checkout: v2");
+
+    const planPath = `${CHECKOUT_ID}/2026-11-10-checkout-v2-plan.md`;
+    expect((await post("/api/doc/title", { path: planPath, title: "Saved cards at checkout" })).status).toBe(200);
+    expect((await post("/api/doc/title", { path: `${CHECKOUT_ID}/project.yaml`, title: "Nope" })).status).toBe(404);
+    const raw = await readFile(path.join(docsRoot, planPath), "utf8");
+    expect(raw).toMatch(/^---\n(?:.*\n)*title: Saved cards at checkout\n/);
+    await runtime.store.applyChanges([planPath]);
+    expect(docIn((await project(CHECKOUT_ID)).body.project.docs, "checkout-v2-plan.md")?.title).toBe(
+      "Saved cards at checkout",
+    );
+  });
+
   it("serves a project's authored page, rebuilt when an imported file changes", async () => {
     const page = async () => {
       const response = await runtime.app.request(`${BASE}/api/project/page?id=${encodeURIComponent(CHECKOUT_ID)}`);

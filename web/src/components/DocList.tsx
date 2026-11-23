@@ -1,4 +1,5 @@
 import type { DocSummary } from "@timthink/server";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { archiveOf, isArchived } from "../lib/archive";
 import { compactDate, longDate } from "../lib/format";
@@ -9,6 +10,7 @@ import { TaskCount } from "./TaskProgress";
 interface DocListProps {
   docs: DocSummary[];
   showLocation?: boolean;
+  actionsFor?: (doc: DocSummary) => ReactNode;
 }
 
 function location(doc: DocSummary): string {
@@ -18,11 +20,17 @@ function location(doc: DocSummary): string {
   return doc.project && doc.project !== doc.repo ? `${doc.repo} / ${doc.project}` : doc.repo;
 }
 
-export function DocRow({ doc, showLocation = false }: { doc: DocSummary; showLocation?: boolean }) {
+interface DocRowProps {
+  doc: DocSummary;
+  showLocation?: boolean;
+  actions?: ReactNode;
+}
+
+export function DocRow({ doc, showLocation = false, actions }: DocRowProps) {
   const archived = isArchived(doc);
   const reason = archived ? archiveOf(doc).reason : undefined;
   return (
-    <li className="border-b border-line-soft last:border-b-0">
+    <li className="group/doc relative border-b border-line-soft last:border-b-0">
       <Link
         to={docHref(doc.path)}
         className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 px-5 py-3.5 transition-colors duration-150 hover:bg-bg/60 sm:grid-cols-[minmax(0,1fr)_auto_auto_64px]"
@@ -52,15 +60,20 @@ export function DocRow({ doc, showLocation = false }: { doc: DocSummary; showLoc
           {compactDate(doc.date)}
         </time>
       </Link>
+      {actions ? (
+        <span className="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-0.5 rounded-button bg-surface p-0.5 opacity-0 shadow-pop transition-opacity duration-150 group-hover/doc:opacity-100 group-focus-within/doc:opacity-100">
+          {actions}
+        </span>
+      ) : null}
     </li>
   );
 }
 
-export function DocList({ docs, showLocation = false }: DocListProps) {
+export function DocList({ docs, showLocation = false, actionsFor }: DocListProps) {
   return (
     <ul className="m-0 list-none overflow-hidden rounded-card border border-line bg-surface p-0">
       {docs.map((doc) => (
-        <DocRow key={doc.path} doc={doc} showLocation={showLocation} />
+        <DocRow key={doc.path} doc={doc} showLocation={showLocation} actions={actionsFor?.(doc)} />
       ))}
     </ul>
   );

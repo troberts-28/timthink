@@ -48,6 +48,7 @@ const prBody = z.object({
   action: z.enum(PR_ACTIONS),
 });
 const statusBody = z.object({ id: z.string().min(1).max(256), status: z.enum(PROJECT_STATUSES) });
+const titleBody = z.object({ id: z.string().min(1).max(256), title: z.string().max(1_000) });
 const checklistId = z.string().regex(CHECKLIST_ID_PATTERN);
 const checklistQuery = projectQuery.extend({ checklist: checklistId });
 const stepBody = checklistQuery.extend({
@@ -116,6 +117,10 @@ export function projectRoutes(deps: ProjectRouteDeps) {
     .post("/status", zValidator("json", statusBody), async (c) => {
       const { id, status } = c.req.valid("json");
       return runEdit(c, () => deps.service.setStatus(id, status));
+    })
+    .post("/title", zValidator("json", titleBody), async (c) => {
+      const { id, title } = c.req.valid("json");
+      return runEdit(c, () => deps.service.rename(id, title));
     });
 }
 

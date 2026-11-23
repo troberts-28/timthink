@@ -2,6 +2,7 @@ import type { DocKind, IndexedDoc } from "@timthink/server";
 import { pluralise } from "../lib/format";
 import { DocList } from "./DocList";
 import { SectionHeading } from "./PageHeader";
+import { PlanRowActions } from "./PlanRowActions";
 
 const KIND_ORDER: DocKind[] = ["plan", "design", "research", "decision", "handoff", "notes"];
 
@@ -25,7 +26,7 @@ function DocsOfKind({ kind, docs }: { kind: DocKind; docs: IndexedDoc[] }) {
   return (
     <section className="mb-10">
       <SectionHeading aside={pluralise(docs.length, "doc")}>{KIND_HEADINGS[kind]}</SectionHeading>
-      <DocList docs={docs} />
+      <DocList docs={docs} actionsFor={(doc) => <PlanRowActions doc={doc} />} />
     </section>
   );
 }
